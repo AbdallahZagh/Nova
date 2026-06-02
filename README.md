@@ -1,36 +1,53 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Nova (Taskflow) — Frontend
 
-## Getting Started
+Next.js frontend for [Nova](https://github.com/AbdallahZagh/Nova), a task management app with Kanban boards, a Gantt-style timeline, dashboard analytics, and a glassmorphic UI.
 
-First, run the development server:
+The Nest.js API lives in a separate **backend** repository (or `backend` branch). This repo’s **`frontend`** branch contains only the client.
+
+## Features
+
+- Dashboard metrics, activity heatmap, and urgent tasks
+- Projects CRUD with status filters
+- Kanban board (To Do, In Progress, In Review, Completed)
+- Task drawer with subtasks, due dates, and activity feed
+- Timeline view and profile page
+- JWT auth with API proxy to the backend
+
+## Tech stack
+
+Next.js (App Router), React 19, Tailwind CSS v4, Lucide Icons.
+
+## Getting started
+
+1. Install dependencies:
+
+```bash
+npm install
+```
+
+2. Copy environment variables (create `.env` from your backend URL):
+
+```env
+NEXT_PUBLIC_API_URL=
+API_PROXY_TARGET=http://localhost:8000
+```
+
+3. Run the dev server:
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Repository layout
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| Branch / repo | Contents        |
+|---------------|-----------------|
+| `frontend`    | This Next.js app |
+| `main`        | Workspace overview README |
+| Backend repo  | Nest.js API, Prisma, PostgreSQL |
 
-## Learn More
+## Deploy
 
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+See [Next.js deployment docs](https://nextjs.org/docs/app/building-your-application/deploying). Point `API_PROXY_TARGET` at your production API.
