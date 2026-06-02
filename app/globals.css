@@ -1,0 +1,110 @@
+@import "tailwindcss";
+
+/* Custom variant: use light: prefix when html.light is active */
+@custom-variant light (&:is(.light *));
+
+/* Dark defaults (also applied via inline vars on <html> at runtime) */
+:root {
+  --bg-main: #161312;
+  --bg-sidebar: #1c1816;
+  --glass-button: rgba(79, 69, 62, 0.2);
+  --glass-card: rgba(230, 106, 23, 0.05);
+  --glass-border: rgba(255, 255, 255, 0.05);
+  --accent: #e66a17;
+  --text-primary: #e8e3e0;
+  --scrollbar-track: var(--bg-sidebar);
+  --scrollbar-thumb: color-mix(in srgb, var(--text-primary) 28%, var(--bg-sidebar));
+  --scrollbar-thumb-hover: var(--accent);
+
+  --danger: #ff0000;
+  --warning: #ffff00;
+  --success: #00ff00;
+}
+
+/*
+ * Light mode — warm neutral palette, same hue family as dark.
+ *
+ * Core principle: in dark mode borders/buttons are light-on-dark,
+ * so in light mode they must flip to dark-on-light.
+ *
+ * --bg-main      warm off-white page canvas
+ * --bg-sidebar   slightly richer warm tone for the sidebar panel
+ * --glass-card   very faint dark tint — differentiates cards from the page bg
+ * --glass-border dark semi-transparent — borders are clearly visible
+ * --glass-button dark semi-transparent — buttons are slightly elevated
+ * --accent       deeper orange — enough contrast against light surfaces
+ * --text-primary near-black warm brown — maximum readability
+ */
+html.light {
+  --bg-main: #f5f1ec;
+  --bg-sidebar: #ede6db;
+  --glass-button: rgba(42, 22, 6, 0.07);
+  --glass-card: rgba(42, 22, 6, 0.05);
+  --glass-border: rgba(42, 22, 6, 0.14);
+  --accent: #c56010;
+  --text-primary: #1c1208;
+
+  /* scrollbar — must be re-declared so dark values are overridden */
+  --scrollbar-track: var(--bg-sidebar);
+  --scrollbar-thumb: rgba(42, 22, 6, 0.22);
+  --scrollbar-thumb-hover: var(--accent);
+
+  --danger: #dc2626;
+  --warning: #d97706;
+  --success: #16a34a;
+}
+
+@theme inline {
+  --color-main: var(--bg-main);
+  --color-sidebar: var(--bg-sidebar);
+  --color-glass-button: var(--glass-button);
+  --color-glass-card: var(--glass-card);
+  --color-glass: var(--glass-border);
+  --color-glass-border: var(--glass-border);
+  --color-accent: var(--accent);
+  --color-primary: var(--text-primary);
+  --color-danger: var(--danger);
+  --color-warning: var(--warning);
+  --color-success: var(--success);
+}
+
+@utility glass-card {
+  @apply bg-glass-card backdrop-blur-xl border border-glass;
+}
+
+@utility glass-header {
+  border-bottom: 1px solid var(--glass-border);
+  background-color: color-mix(in srgb, var(--glass-card) 75%, transparent);
+  -webkit-backdrop-filter: blur(20px) saturate(1.35);
+  backdrop-filter: blur(20px) saturate(1.35);
+}
+
+/* Themed scrollbars (Firefox) */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+}
+
+/* Themed scrollbars (Chrome, Safari, Edge) */
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: var(--scrollbar-track);
+}
+
+*::-webkit-scrollbar-thumb {
+  background-color: var(--scrollbar-thumb);
+  border: 2px solid var(--scrollbar-track);
+  border-radius: 9999px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background-color: var(--scrollbar-thumb-hover);
+}
+
+*::-webkit-scrollbar-corner {
+  background: var(--scrollbar-track);
+}
