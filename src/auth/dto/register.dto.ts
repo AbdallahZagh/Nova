@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsEmail, IsNotEmpty, IsOptional, IsString, MinLength } from 'class-validator';
+import { IsUsername } from '../../common/validators/is-username.decorator';
 
 export class RegisterDto {
   @ApiProperty({
@@ -24,6 +25,16 @@ export class RegisterDto {
   @IsString()
   @IsNotEmpty({ message: 'Full name is required' })
   fullName: string;
+
+  @ApiProperty({
+    example: '@abdallah_zagh',
+    description:
+      'Unique handle starting with @ — lowercase letters, numbers, and underscores only (no spaces)',
+  })
+  @IsString()
+  @IsNotEmpty({ message: 'Username is required' })
+  @IsUsername()
+  username: string;
 
   @ApiPropertyOptional({
     example: 'Senior Frontend Engineer',

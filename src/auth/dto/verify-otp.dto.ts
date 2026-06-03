@@ -19,12 +19,15 @@ export class VerifyOtpDto {
 
   @ApiProperty({
     example: 'REGISTER',
-    enum: ['REGISTER', 'FORGOT_PASSWORD'],
+    enum: ['REGISTER', 'FORGOT_PASSWORD', 'REACTIVATE'],
     description:
-      'Context in which the OTP was issued. REGISTER activates the account; FORGOT_PASSWORD clears the path to reset.',
+      'Context in which the OTP was issued.\n' +
+      '- REGISTER → activates a brand-new account\n' +
+      '- FORGOT_PASSWORD → clears the path to reset the password\n' +
+      '- REACTIVATE → restores a deactivated/archived account',
   })
-  @IsIn(['REGISTER', 'FORGOT_PASSWORD'], {
-    message: 'purpose must be REGISTER or FORGOT_PASSWORD',
+  @IsIn(['REGISTER', 'FORGOT_PASSWORD', 'REACTIVATE'], {
+    message: 'purpose must be REGISTER, FORGOT_PASSWORD, or REACTIVATE',
   })
-  purpose: 'REGISTER' | 'FORGOT_PASSWORD';
+  purpose: 'REGISTER' | 'FORGOT_PASSWORD' | 'REACTIVATE';
 }

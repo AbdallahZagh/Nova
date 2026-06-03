@@ -78,6 +78,22 @@ export class TasksService {
     return this.formatTask(task);
   }
 
+  // ─── Find one ─────────────────────────────────────────────────────────────
+
+  async findOne(id: string) {
+    const task = await (this.prisma as any).task.findUnique({
+      where: { id },
+      include: {
+        ...TASK_INCLUDE,
+        project: { select: { id: true, name: true, status: true } },
+      },
+    });
+
+    if (!task) throw new NotFoundException('Task not found');
+
+    return this.formatTask(task);
+  }
+
   // ─── List by project ──────────────────────────────────────────────────────
 
   async findByProject(projectId: string) {

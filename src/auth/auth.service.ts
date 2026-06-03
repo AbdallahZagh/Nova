@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
+import { normalizeUsername } from '../common/utils/username.util';
 import { PrismaService } from '../prisma/prisma.service';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { LoginDto } from './dto/login.dto';
@@ -46,11 +47,21 @@ export class AuthService {
       throw new ConflictException('An account with this email already exists');
     }
 
+    const username = normalizeUsername(dto.username);
+
+    const usernameTaken = await (this.prisma as any).user.findUnique({
+      where: { username },
+    });
+    if (usernameTaken) {
+      throw new ConflictException('This username is already taken');
+    }
+
     const passwordHash = await bcrypt.hash(dto.password, 10);
 
     const user = await (this.prisma as any).user.create({
       data: {
         email: dto.email,
+        username,
         passwordHash,
         fullName: dto.fullName,
         roleTitle: dto.roleTitle,
@@ -117,6 +128,20 @@ export class AuthService {
       };
     }
 
+    if (dto.purpose === 'REACTIVATE') {
+      await (this.prisma as any).user.update({
+        where: { id: user.id },
+        data: { isActive: true, isArchived: false },
+      });
+      await (this.prisma as any).otp.delete({ where: { id: otp.id } });
+
+      return {
+        message: 'Account reactivated successfully. Welcome back!',
+        verified: true,
+        accessToken: this.signToken(user.id, user.email),
+      };
+    }
+
     // FORGOT_PASSWORD — OTP intentionally kept alive for the reset-password step
     return {
       message: 'OTP verified. Proceed to reset your password.',
@@ -132,6 +157,12 @@ export class AuthService {
     });
 
     if (!user) throw new UnauthorizedException('Invalid email or password');
+
+    if (user.isArchived) {
+      throw new UnauthorizedException(
+        'This account has been deactivated. Use POST /api/auth/reactivate with your email to restore it.',
+      );
+    }
 
     if (!user.isActive) {
       throw new UnauthorizedException(
@@ -212,6 +243,67 @@ export class AuthService {
 
     return {
       message: 'Password reset successfully. You may now log in with your new password.',
+    };
+  }
+
+  // ─── Deactivate account ───────────────────────────────────────────────────
+
+  async deactivateAccount(userId: string) {
+    const user = await (this.prisma as any).user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user) throw new NotFoundException('User not found');
+
+    await (this.prisma as any).user.update({
+      where: { id: userId },
+      data: { isActive: false, isArchived: true },
+    });
+
+    return {
+      message:
+        'Your account has been deactivated. You can restore it at any time by visiting the login page and choosing "Reactivate account".',
+      action: 'CLEAR_TOKENS',
+    };
+  }
+
+  // ─── Request reactivation ─────────────────────────────────────────────────
+
+  async requestReactivation(email: string) {
+    const user = await (this.prisma as any).user.findUnique({
+      where: { email },
+    });
+
+    // Generic message — do not reveal whether the account exists
+    const genericMessage =
+      'If an archived account with that email exists, a reactivation code has been sent.';
+
+    if (!user) return { message: genericMessage };
+
+    if (!user.isArchived) {
+      // Account is active or unverified — do not expose state
+      return { message: genericMessage };
+    }
+
+    // Clear any stale REACTIVATE OTPs
+    await (this.prisma as any).otp.deleteMany({
+      where: { userId: user.id, purpose: 'REACTIVATE' },
+    });
+
+    const code = this.generateOtpCode();
+
+    await (this.prisma as any).otp.create({
+      data: {
+        userId: user.id,
+        code,
+        purpose: 'REACTIVATE',
+        expiresAt: this.otpExpiry(),
+      },
+    });
+
+    return {
+      message: genericMessage,
+      ...(process.env.NODE_ENV !== 'production' && { _devOtp: code }),
     };
   }
 

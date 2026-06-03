@@ -1,11 +1,21 @@
 import { Body, Controller, HttpCode, HttpStatus, Post } from '@nestjs/common';
-import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { ApiOperation, ApiProperty, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { IsEmail } from 'class-validator';
 import { AuthService } from './auth.service';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
+
+class ReactivateDto {
+  @ApiProperty({
+    example: 'sarah.johnson@devteam.io',
+    description: 'Email address of the archived account to restore',
+  })
+  @IsEmail({}, { message: 'Please provide a valid email address' })
+  email: string;
+}
 
 @ApiTags('Authentication')
 @Controller('api/auth')
@@ -38,11 +48,12 @@ export class AuthController {
   @ApiOperation({
     summary: 'Verify a one-time password (OTP)',
     description:
-      'Validates the 6-digit OTP against the issued code and its expiry. ' +
-      'For REGISTER purpose: activates the account. ' +
-      'For FORGOT_PASSWORD purpose: confirms identity and allows the reset-password step.',
+      'Validates the 6-digit OTP and acts based on purpose:\n\n' +
+      '- **REGISTER** — activates a new account and returns an access token\n' +
+      '- **FORGOT_PASSWORD** — confirms identity; proceed to POST /reset-password\n' +
+      '- **REACTIVATE** — restores an archived account and returns an access token',
   })
-  @ApiResponse({ status: 200, description: 'OTP verified successfully' })
+  @ApiResponse({ status: 200, description: 'OTP verified — see purpose for exact response shape' })
   @ApiResponse({ status: 400, description: 'Invalid or expired OTP code' })
   @ApiResponse({ status: 404, description: 'No account found with the provided email' })
   verifyOtp(@Body() dto: VerifyOtpDto) {
@@ -104,6 +115,29 @@ export class AuthController {
   @ApiResponse({ status: 404, description: 'No account found with this email' })
   resetPassword(@Body() dto: ResetPasswordDto) {
     return this.authService.resetPassword(dto);
+  }
+
+  // ─── Reactivate account ───────────────────────────────────────────────────
+
+  @Post('reactivate')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Request an account reactivation code',
+    description:
+      'Step 1 of the reactivation flow for archived/deactivated accounts.\n\n' +
+      'Sends a 6-digit OTP to the registered email address. ' +
+      'Once received, verify it via POST /api/auth/verify-otp with `purpose: "REACTIVATE"` ' +
+      'to restore full account access.\n\n' +
+      'The response is intentionally generic regardless of whether the account exists or is archived, ' +
+      'to prevent account enumeration.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Reactivation code issued if an archived account with that email exists',
+  })
+  @ApiResponse({ status: 400, description: 'Validation failed — invalid email format' })
+  requestReactivation(@Body() dto: ReactivateDto) {
+    return this.authService.requestReactivation(dto.email);
   }
 
   // ─── Logout ───────────────────────────────────────────────────────────────

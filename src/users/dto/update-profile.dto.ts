@@ -1,5 +1,6 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { IsOptional, IsString, IsUrl } from 'class-validator';
+import { IsUsername } from '../../common/validators/is-username.decorator';
 
 export class UpdateProfileDto {
   @ApiPropertyOptional({
@@ -9,6 +10,16 @@ export class UpdateProfileDto {
   @IsOptional()
   @IsString()
   fullName?: string;
+
+  @ApiPropertyOptional({
+    example: '@abdallah_zagh',
+    description:
+      'Unique handle starting with @ — lowercase letters, numbers, and underscores only (no spaces)',
+  })
+  @IsOptional()
+  @IsString()
+  @IsUsername()
+  username?: string;
 
   @ApiPropertyOptional({
     example: 'Senior Frontend Engineer',

@@ -1,10 +1,11 @@
-import { Body, Controller, Get, Patch, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Patch, UseGuards } from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiOperation,
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
+import { AuthService } from '../auth/auth.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { UpdateProfileDto } from './dto/update-profile.dto';
@@ -15,7 +16,10 @@ import { UsersService } from './users.service';
 @UseGuards(JwtAuthGuard)
 @Controller('api/users')
 export class UsersController {
-  constructor(private readonly usersService: UsersService) {}
+  constructor(
+    private readonly usersService: UsersService,
+    private readonly authService: AuthService,
+  ) {}
 
   @Get('me')
   @ApiOperation({
@@ -45,5 +49,23 @@ export class UsersController {
     @Body() dto: UpdateProfileDto,
   ) {
     return this.usersService.updateProfile(userId, dto);
+  }
+
+  @Delete('me')
+  @HttpCode(200)
+  @ApiOperation({
+    summary: 'Deactivate (archive) the current account',
+    description:
+      'Marks the account as archived and inactive. The user is immediately signed out. ' +
+      'All data (projects, tasks, history) is preserved. ' +
+      'To restore the account: call POST /api/auth/reactivate with your email, then verify the OTP via POST /api/auth/verify-otp with purpose "REACTIVATE".',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Account deactivated — client should clear stored tokens',
+  })
+  @ApiResponse({ status: 401, description: 'Missing or invalid Bearer token' })
+  deactivateAccount(@CurrentUser('id') userId: string) {
+    return this.authService.deactivateAccount(userId);
   }
 }

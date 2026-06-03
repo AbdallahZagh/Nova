@@ -1,4 +1,9 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { normalizeUsername } from '../common/utils/username.util';
 import { PrismaService } from '../prisma/prisma.service';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 
@@ -38,9 +43,25 @@ export class UsersService {
 
     if (!user) throw new NotFoundException('User not found');
 
+    const { username: rawUsername, ...rest } = dto;
+    const data: Record<string, unknown> = { ...rest };
+
+    if (rawUsername !== undefined) {
+      const username = normalizeUsername(rawUsername);
+      if (username !== user.username) {
+        const taken = await (this.prisma as any).user.findUnique({
+          where: { username },
+        });
+        if (taken) {
+          throw new ConflictException('This username is already taken');
+        }
+        data.username = username;
+      }
+    }
+
     const updated = await (this.prisma as any).user.update({
       where: { id: userId },
-      data: dto,
+      data,
     });
 
     const { passwordHash, ...profile } = updated;

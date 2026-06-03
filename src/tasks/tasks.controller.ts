@@ -43,6 +43,28 @@ export class TasksController {
     return this.tasksService.create(userId, dto);
   }
 
+  @Get(':id')
+  @ApiOperation({
+    summary: 'Get a single task by ID',
+    description:
+      'Returns the full task detail including subtasks checklist, assignee profile, ' +
+      'parent project, full activity log, and lastActivity.',
+  })
+  @ApiParam({
+    name: 'id',
+    example: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
+    description: 'Task UUID',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Task with subtasks, assignee, project, activities, and lastActivity',
+  })
+  @ApiResponse({ status: 401, description: 'Missing or invalid Bearer token' })
+  @ApiResponse({ status: 404, description: 'Task not found' })
+  findOne(@Param('id') id: string) {
+    return this.tasksService.findOne(id);
+  }
+
   @Get('project/:projectId')
   @ApiOperation({
     summary: 'Get all tasks for a project board',

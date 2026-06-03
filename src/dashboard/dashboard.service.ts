@@ -1,12 +1,20 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
-/** Tasks the user owns, is a member of the project for, or is assigned to. */
-function accessibleTasksWhere(userId: string) {
+/**
+ * "My tasks" — tasks that belong to the requesting user:
+ *   1. Explicitly assigned to them
+ *   2. Unassigned tasks inside projects they own or are a member of
+ *      (covers data created before the auto-assign feature was added)
+ *
+ * Tasks assigned to a *different* user are never included.
+ */
+function myTasksWhere(userId: string) {
   return {
     OR: [
       { assigneeId: userId },
       {
+        assigneeId: null,
         project: {
           OR: [
             { ownerId: userId },
@@ -33,10 +41,9 @@ export class DashboardService {
 
   async getMetrics(userId: string) {
     const today = new Date();
-    const accessible = accessibleTasksWhere(userId);
 
     const tasks = await (this.prisma as any).task.findMany({
-      where: accessible,
+      where: myTasksWhere(userId),
       select: {
         status: true,
         dueDate: true,
@@ -100,11 +107,15 @@ export class DashboardService {
 
     const tasks = await (this.prisma as any).task.findMany({
       where: {
-        ...accessibleTasksWhere(userId),
-        OR: [
-          { createdAt: { gte: oneYearAgo } },
-          { dueDate: { gte: oneYearAgo } },
-          { completedAt: { gte: oneYearAgo } },
+        AND: [
+          myTasksWhere(userId),
+          {
+            OR: [
+              { createdAt: { gte: oneYearAgo } },
+              { dueDate: { gte: oneYearAgo } },
+              { completedAt: { gte: oneYearAgo } },
+            ],
+          },
         ],
       },
       select: {
@@ -149,9 +160,13 @@ export class DashboardService {
   async getUrgentTasks(userId: string) {
     const tasks = await (this.prisma as any).task.findMany({
       where: {
-        ...accessibleTasksWhere(userId),
-        status: { not: 'Completed' },
-        priority: { in: ['High', 'Critical'] },
+        AND: [
+          myTasksWhere(userId),
+          {
+            status: { not: 'Completed' },
+            priority: { in: ['High', 'Critical'] },
+          },
+        ],
       },
       select: {
         id: true,
