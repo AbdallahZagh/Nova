@@ -29,6 +29,15 @@ function parseDueDateIso(iso: string | null | undefined): Date | null {
 
 type Subtask = Task["subtasks"][number];
 
+function dedupeSubtasks(subtasks: Subtask[]): Subtask[] {
+  const seen = new Set<string>();
+  return subtasks.filter((s) => {
+    if (seen.has(s.id)) return false;
+    seen.add(s.id);
+    return true;
+  });
+}
+
 type TaskDrawerDetailsProps = {
   projectId: string;
   task: Task;
@@ -217,15 +226,20 @@ export function TaskDrawerDetails({
   useEffect(() => {
     /* sync drawer when parent task updates after API */
     // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional reset from props
-    setDraft(task);
+    setDraft({ ...task, subtasks: dedupeSubtasks(task.subtasks) });
     setNewSubtaskLabel("");
     setLabelSnapshots(
       Object.fromEntries(task.subtasks.map((s) => [s.id, s.label])),
     );
   }, [task]);
 
-  const completedCount = draft.subtasks.filter((s) => s.done).length;
-  const totalCount = draft.subtasks.length;
+  const displaySubtasks = useMemo(
+    () => dedupeSubtasks(draft.subtasks),
+    [draft.subtasks],
+  );
+
+  const completedCount = displaySubtasks.filter((s) => s.done).length;
+  const totalCount = displaySubtasks.length;
   const progressPct =
     totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
 
@@ -332,7 +346,7 @@ export function TaskDrawerDetails({
     }
   };
 
-  const addSubtaskByLabel = async (label: string, syncDraft = true) => {
+  const addSubtaskByLabel = async (label: string) => {
     const trimmed = label.trim();
     if (!trimmed || addingSubtask) return null;
 
@@ -340,12 +354,7 @@ export function TaskDrawerDetails({
     try {
       const created = await createSubtask(projectId, task.id, trimmed);
       setLabelSnapshots((prev) => ({ ...prev, [created.id]: created.label }));
-      if (syncDraft) {
-        setDraft((prev) => ({
-          ...prev,
-          subtasks: [...prev.subtasks, created],
-        }));
-      }
+      /* draft syncs from task prop via useEffect after AppDataProvider updates */
       return created;
     } catch (err) {
       subtaskError("Could not add subtask", err);
@@ -367,13 +376,13 @@ export function TaskDrawerDetails({
   };
 
   const flushPendingSubtasks = async (): Promise<Task> => {
-    let subtasks = [...draft.subtasks];
+    let subtasks = dedupeSubtasks(draft.subtasks);
 
     const pendingNew = newSubtaskLabel.trim();
     if (pendingNew) {
-      const created = await addSubtaskByLabel(pendingNew, false);
+      const created = await addSubtaskByLabel(pendingNew);
       if (created) {
-        subtasks = [...subtasks, created];
+        subtasks = dedupeSubtasks([...subtasks, created]);
         setNewSubtaskLabel("");
       }
     }
@@ -551,9 +560,9 @@ export function TaskDrawerDetails({
           </div>
         )}
 
-        {draft.subtasks.length > 0 && (
+        {displaySubtasks.length > 0 && (
           <ul className="mt-3 space-y-1.5">
-            {draft.subtasks.map((subtask) => (
+            {displaySubtasks.map((subtask) => (
               <SubtaskRow
                 key={subtask.id}
                 subtask={subtask}

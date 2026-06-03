@@ -82,7 +82,7 @@ export function DeleteConfirmModal({
         onClick={onClose}
       />
 
-      <div className="relative w-full max-w-sm animate-in fade-in slide-in-from-bottom-4 duration-200 sm:zoom-in-95 sm:slide-in-from-bottom-0">
+      <div className="relative w-full max-w-md animate-in fade-in slide-in-from-bottom-4 duration-200 sm:zoom-in-95 sm:slide-in-from-bottom-0">
         {/* Top accent bar */}
         <div className="absolute inset-x-0 top-0 h-px rounded-t-2xl bg-linear-90 from-transparent via-red-400/60 to-transparent" />
 

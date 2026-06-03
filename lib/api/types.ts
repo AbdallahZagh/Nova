@@ -4,6 +4,7 @@ export type ApiUser = {
   email: string;
   fullName: string;
   roleTitle: string;
+  username?: string | null;
   bio?: string | null;
   avatarUrl?: string | null;
   /** Number of projects owned by the user */
@@ -34,6 +35,7 @@ export type LogoutResponse = {
 export type UpdateProfilePayload = {
   fullName?: string;
   roleTitle?: string;
+  username?: string;
   bio?: string;
   avatarUrl?: string;
 };

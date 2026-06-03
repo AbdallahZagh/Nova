@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { DEMO_EMAIL, DEMO_PASSWORD } from "@/lib/auth";
@@ -26,6 +27,15 @@ export default function LoginPage() {
 
       <GlassCard className="w-full max-w-md">
         <LoginForm />
+        <p className="mt-4 text-center text-sm text-primary/55">
+          Don&apos;t have an account?{" "}
+          <Link
+            href="/register"
+            className="font-medium text-accent underline-offset-2 hover:underline"
+          >
+            Create one
+          </Link>
+        </p>
         <p className="mt-6 rounded-xl border border-glass bg-main/50 px-4 py-3 text-xs text-primary/60">
           <span className="font-medium text-primary">Demo credentials</span>
           <br />

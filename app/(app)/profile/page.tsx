@@ -18,13 +18,23 @@ import {
 import { clearSession } from "@/app/actions/session";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { DeleteConfirmModal } from "@/components/ui/DeleteConfirmModal";
-import { Input, Textarea } from "@/components/ui/input";
+import { Input, PasswordInput, Textarea } from "@/components/ui/input";
 import { useToast } from "@/components/ui/Toast";
 import { ProfileSkeleton } from "@/components/skeletons/ProfileSkeleton";
 import { useUser } from "@/components/providers/UserProvider";
-import { logoutApi } from "@/lib/api/auth";
+import {
+  forgotPasswordApi,
+  resetPasswordApi,
+  verifyOtpApi,
+} from "@/lib/api/auth";
+import { deactivateMeApi } from "@/lib/api/users";
 import { clearAccessToken, ApiError } from "@/lib/api/client";
 import { cn } from "@/lib/cn";
+import {
+  bodyToUsername,
+  usernameToBody,
+  validateUsername,
+} from "@/lib/username";
 
 // ── OTP input ─────────────────────────────────────────────────────────────────
 
@@ -103,8 +113,10 @@ function EditProfileSection() {
     name: "",
     role: "",
     email: "",
+    usernameBody: "",
     bio: "",
   });
+  const [usernameError, setUsernameError] = useState("");
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -113,18 +125,28 @@ function EditProfileSection() {
         name: profile.name,
         role: profile.role,
         email: profile.email,
+        usernameBody: usernameToBody(profile.username),
         bio: profile.bio,
       });
+      setUsernameError("");
     }
   }, [profile]);
 
   const handleSave = async () => {
     if (!profile) return;
+    const username = bodyToUsername(form.usernameBody);
+    const usernameValidation = validateUsername(username);
+    if (usernameValidation) {
+      setUsernameError(usernameValidation);
+      return;
+    }
+    setUsernameError("");
     setSaving(true);
     try {
       await updateProfile({
         name: form.name,
         role: form.role,
+        username,
         bio: form.bio,
       });
       toast({
@@ -181,21 +203,81 @@ function EditProfileSection() {
           </div>
         </div>
 
-        <div>
-          <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-primary/60">
-            Email Address
-          </label>
-          <Input
-            type="email"
-            value={form.email}
-            readOnly
-            disabled
-            placeholder="you@company.com"
-            className="opacity-70"
-          />
-          <p className="mt-1 text-[11px] text-primary/45">
-            Email cannot be changed here.
-          </p>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div>
+            <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-primary/60">
+              Username
+            </label>
+            <div className="flex">
+              <span
+                className={cn(
+                  "flex items-center rounded-l-xl border border-r-0 border-glass bg-glass-button/60 px-3 text-sm font-medium text-primary/50",
+                  usernameError && "border-red-500/40",
+                )}
+                aria-hidden
+              >
+                @
+              </span>
+              <Input
+                value={form.usernameBody}
+                onChange={(e) => {
+                  const body = e.target.value
+                    .toLowerCase()
+                    .replace(/[^a-z0-9_]/g, "");
+                  setForm((f) => ({ ...f, usernameBody: body }));
+                  if (usernameError) setUsernameError("");
+                }}
+                onBlur={() => {
+                  const normalized = bodyToUsername(form.usernameBody);
+                  setForm((f) => ({
+                    ...f,
+                    usernameBody: normalized ? normalized.slice(1) : "",
+                  }));
+                }}
+                placeholder="abdallah_zagh"
+                autoComplete="username"
+                spellCheck={false}
+                className={cn(
+                  "rounded-l-none",
+                  usernameError && "border-red-500/40 focus:border-red-500/50",
+                )}
+                aria-invalid={Boolean(usernameError)}
+                aria-describedby={
+                  usernameError ? "username-error" : "username-hint"
+                }
+              />
+            </div>
+            {usernameError ? (
+              <p
+                id="username-error"
+                className="mt-1 text-[11px] text-red-400"
+                role="alert"
+              >
+                {usernameError}
+              </p>
+            ) : (
+              <p id="username-hint" className="mt-1 text-[11px] text-primary/45">
+                Lowercase letters, numbers, and underscores only. Saved as @
+                {form.usernameBody || "your_handle"}.
+              </p>
+            )}
+          </div>
+          <div>
+            <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-primary/60">
+              Email Address
+            </label>
+            <Input
+              type="email"
+              value={form.email}
+              readOnly
+              disabled
+              placeholder="you@company.com"
+              className="opacity-70"
+            />
+            <p className="mt-1 text-[11px] text-primary/45">
+              Email cannot be changed here.
+            </p>
+          </div>
         </div>
 
         <div>
@@ -239,33 +321,74 @@ function EditProfileSection() {
 type PasswordStep = "idle" | "sent" | "verified" | "done";
 
 function ChangePasswordSection() {
+  const { profile } = useUser();
+  const { toast } = useToast();
+
   const [step, setStep] = useState<PasswordStep>("idle");
-  const [demoCode, setDemoCode] = useState("");
   const [otp, setOtp] = useState("");
-  const [otpError, setOtpError] = useState(false);
+  const [otpError, setOtpError] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [passwordError, setPasswordError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const sendOtp = () => {
-    const code = Math.floor(100000 + Math.random() * 900000).toString();
-    setDemoCode(code);
-    setOtp("");
-    setOtpError(false);
-    setStep("sent");
-  };
+  const email = profile?.email ?? "";
 
-  const verifyOtp = () => {
-    if (otp.trim() === demoCode) {
-      setOtpError(false);
-      setStep("verified");
-    } else {
-      setOtpError(true);
+  const sendOtp = async () => {
+    if (!email) return;
+    setLoading(true);
+    try {
+      const res = await forgotPasswordApi(email);
+      setOtp("");
+      setOtpError("");
+      setStep("sent");
+      if (res._devOtp) {
+        toast({
+          variant: "success",
+          title: "OTP sent (dev mode)",
+          message: `Your code: ${res._devOtp}`,
+        });
+      } else {
+        toast({
+          variant: "success",
+          title: "Code sent",
+          message: "Check your inbox for the 6-digit code.",
+        });
+      }
+    } catch (err) {
+      toast({
+        variant: "error",
+        title: "Failed to send code",
+        message:
+          err instanceof ApiError ? err.message : "Could not send OTP.",
+      });
+    } finally {
+      setLoading(false);
     }
   };
 
-  const savePassword = () => {
+  const verifyOtp = async () => {
+    if (otp.replace(/\s/g, "").length < 6) {
+      setOtpError("Enter the full 6-digit code.");
+      return;
+    }
+    setLoading(true);
+    try {
+      await verifyOtpApi(email, otp.trim(), "FORGOT_PASSWORD");
+      setOtpError("");
+      setStep("verified");
+    } catch (err) {
+      setOtpError(
+        err instanceof ApiError
+          ? err.message
+          : "Invalid or expired code. Try again.",
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const savePassword = async () => {
     if (newPassword.length < 8) {
       setPasswordError("Password must be at least 8 characters.");
       return;
@@ -276,17 +399,27 @@ function ChangePasswordSection() {
     }
     setPasswordError("");
     setLoading(true);
-    setTimeout(() => {
-      setLoading(false);
+    try {
+      await resetPasswordApi(email, otp.trim(), newPassword);
       setStep("done");
-    }, 1000);
+      toast({
+        variant: "success",
+        title: "Password updated",
+        message: "Your password has been changed successfully.",
+      });
+    } catch (err) {
+      setPasswordError(
+        err instanceof ApiError ? err.message : "Could not update password.",
+      );
+    } finally {
+      setLoading(false);
+    }
   };
 
   const reset = () => {
     setStep("idle");
-    setDemoCode("");
     setOtp("");
-    setOtpError(false);
+    setOtpError("");
     setNewPassword("");
     setConfirmPassword("");
     setPasswordError("");
@@ -341,7 +474,11 @@ function ChangePasswordSection() {
                       : "bg-accent/20 text-accent",
                   )}
                 >
-                  {step !== "idle" ? <CheckCircle2 className="size-3.5" /> : "1"}
+                  {step !== "idle" ? (
+                    <CheckCircle2 className="size-3.5" />
+                  ) : (
+                    "1"
+                  )}
                 </div>
                 <span className="text-sm font-medium text-primary">
                   Send verification code
@@ -351,15 +488,22 @@ function ChangePasswordSection() {
                 <button
                   type="button"
                   onClick={sendOtp}
-                  className="flex items-center gap-1.5 rounded-lg bg-accent px-4 py-1.5 text-xs font-semibold text-white transition hover:opacity-90"
+                  disabled={loading}
+                  className="flex items-center gap-1.5 rounded-lg bg-accent px-4 py-1.5 text-xs font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
                 >
-                  <Mail className="size-3.5" /> Send OTP
+                  {loading ? (
+                    <Loader2 className="size-3.5 animate-spin" />
+                  ) : (
+                    <Mail className="size-3.5" />
+                  )}
+                  Send OTP
                 </button>
               ) : (
                 <button
                   type="button"
                   onClick={sendOtp}
-                  className="text-xs text-accent underline-offset-2 hover:underline"
+                  disabled={loading}
+                  className="text-xs text-accent underline-offset-2 hover:underline disabled:opacity-50"
                 >
                   Resend
                 </button>
@@ -370,10 +514,9 @@ function ChangePasswordSection() {
               <div className="mt-3 flex items-center gap-2 rounded-xl border border-accent/25 bg-accent/10 px-3 py-2">
                 <Mail className="size-3.5 shrink-0 text-accent" />
                 <p className="text-xs text-primary/70">
-                  Demo mode — your code:{" "}
-                  <span className="font-bold tracking-widest text-accent">
-                    {demoCode}
-                  </span>
+                  Code sent to{" "}
+                  <span className="font-semibold text-primary">{email}</span>
+                  {" — "}check the toast for the dev OTP.
                 </p>
               </div>
             )}
@@ -384,7 +527,7 @@ function ChangePasswordSection() {
             className={cn(
               "rounded-2xl border p-4 transition",
               step === "idle"
-                ? "border-glass/50 opacity-40"
+                ? "border-glass/50 opacity-40 pointer-events-none"
                 : step === "verified"
                   ? "border-emerald-500/30 bg-emerald-500/5"
                   : "border-glass bg-glass-button/30",
@@ -414,20 +557,19 @@ function ChangePasswordSection() {
               <OtpInput
                 value={otp}
                 onChange={setOtp}
-                disabled={step === "idle" || step === "verified"}
+                disabled={step === "idle" || step === "verified" || loading}
               />
               {otpError && (
-                <p className="text-xs text-red-400">
-                  Incorrect code. Please try again.
-                </p>
+                <p className="text-xs text-red-400">{otpError}</p>
               )}
               {step === "sent" && (
                 <button
                   type="button"
                   onClick={verifyOtp}
-                  disabled={otp.replace(/\s/g, "").length < 6}
-                  className="rounded-lg border border-glass bg-glass-button px-4 py-1.5 text-xs font-semibold text-primary transition hover:border-accent/50 hover:text-accent disabled:opacity-40"
+                  disabled={loading || otp.replace(/\s/g, "").length < 6}
+                  className="flex items-center gap-1.5 rounded-lg border border-glass bg-glass-button px-4 py-1.5 text-xs font-semibold text-primary transition hover:border-accent/50 hover:text-accent disabled:opacity-40"
                 >
+                  {loading && <Loader2 className="size-3.5 animate-spin" />}
                   Verify Code →
                 </button>
               )}
@@ -439,7 +581,7 @@ function ChangePasswordSection() {
             className={cn(
               "rounded-2xl border p-4 transition",
               step !== "verified"
-                ? "border-glass/50 opacity-40 pointer-events-none"
+                ? "pointer-events-none border-glass/50 opacity-40"
                 : "border-glass bg-glass-button/30",
             )}
           >
@@ -453,14 +595,12 @@ function ChangePasswordSection() {
             </div>
 
             <div className="space-y-3">
-              <Input
-                type="password"
+              <PasswordInput
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
                 placeholder="New password (min 8 characters)"
               />
-              <Input
-                type="password"
+              <PasswordInput
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 placeholder="Confirm new password"
@@ -503,17 +643,27 @@ export default function ProfilePage() {
 
   async function handleDeleteAccount() {
     try {
-      await logoutApi();
-    } catch {
-      /* still clear local session */
+      await deactivateMeApi();
+    } catch (err) {
+      toast({
+        variant: "error",
+        title: "Could not deactivate account",
+        message:
+          err instanceof ApiError
+            ? err.message
+            : "Something went wrong. Please try again.",
+      });
+      return;
     }
     clearAccessToken();
+    await clearSession();
     toast({
       variant: "success",
-      title: "Account session ended",
-      message: "You have been signed out.",
+      title: "Account deactivated",
+      message:
+        "Your account is archived. You can reactivate it anytime with your email.",
     });
-    await clearSession();
+    router.push("/reactivate");
   }
 
   if (loading) {
@@ -572,7 +722,12 @@ export default function ProfilePage() {
           {/* Info */}
           <div className="flex-1 text-center sm:text-left">
             <h2 className="text-xl font-bold text-primary">{profile.name}</h2>
-            <p className="mt-0.5 text-sm text-accent">{profile.role}</p>
+            {profile.username ? (
+              <p className="mt-0.5 text-sm font-medium text-accent">
+                {profile.username}
+              </p>
+            ) : null}
+            <p className="mt-0.5 text-sm text-primary/70">{profile.role}</p>
             <p className="mt-0.5 text-sm text-primary/55">{profile.email}</p>
             {profile.bio && (
               <p className="mt-2 text-sm leading-relaxed text-primary/65">
@@ -614,11 +769,11 @@ export default function ProfilePage() {
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="text-sm font-semibold text-primary">
-                Delete Account
+                Deactivate Account
               </p>
               <p className="mt-0.5 text-xs text-primary/55">
-                Permanently remove your account and all associated data. This
-                action cannot be undone.
+                Archive your account and sign out. Projects and tasks are kept.
+                Reactivate later with your email and a one-time code.
               </p>
             </div>
             <button
@@ -627,7 +782,7 @@ export default function ProfilePage() {
               className="flex shrink-0 items-center gap-2 rounded-xl border border-red-500/30 px-4 py-2 text-sm font-semibold text-red-400 light:text-red-600 transition hover:bg-red-500/10"
             >
               <Trash2 className="size-4" />
-              Delete Account
+              Deactivate
             </button>
           </div>
         </div>
@@ -638,9 +793,9 @@ export default function ProfilePage() {
         isOpen={showDelete}
         onClose={() => setShowDelete(false)}
         onConfirm={handleDeleteAccount}
-        title="Delete your account?"
-        message="All your data will be permanently removed. This action cannot be undone."
-        confirmLabel="Yes, delete my account"
+        title="Deactivate your account?"
+        message="Your account will be archived and you will be signed out. Your projects and tasks stay saved. You can reactivate anytime from the sign-in page."
+        confirmLabel="Deactivate my account"
       />
     </div>
   );

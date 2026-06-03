@@ -12,9 +12,14 @@ export function middleware(request: NextRequest) {
 
   const isAuthenticated = Boolean(request.cookies.get(AUTH_COOKIE)?.value);
   const isLoginPage = pathname === "/";
+  const isPublicPage =
+    isLoginPage ||
+    pathname === "/forgot-password" ||
+    pathname === "/register" ||
+    pathname === "/reactivate";
 
-  if (isLoginPage) {
-    if (isAuthenticated) {
+  if (isPublicPage) {
+    if (isAuthenticated && isLoginPage) {
       return NextResponse.redirect(new URL("/dashboard", request.url));
     }
     return NextResponse.next();

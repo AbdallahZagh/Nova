@@ -25,6 +25,7 @@ export type UserProfile = {
   id: string;
   name: string;
   email: string;
+  username: string;
   role: string;
   bio: string;
   avatarUrl: string | null;
@@ -46,7 +47,9 @@ type UserContextValue = {
   setProfileFromApi: (user: ApiUser) => void;
   refreshProfile: () => Promise<void>;
   updateProfile: (
-    updates: Partial<Pick<UserProfile, "name" | "role" | "bio" | "avatarUrl">>,
+    updates: Partial<
+      Pick<UserProfile, "name" | "username" | "role" | "bio" | "avatarUrl">
+    >,
   ) => Promise<void>;
 };
 
@@ -88,7 +91,9 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
   const updateProfile = useCallback(
     async (
-      updates: Partial<Pick<UserProfile, "name" | "role" | "bio" | "avatarUrl">>,
+      updates: Partial<
+        Pick<UserProfile, "name" | "username" | "role" | "bio" | "avatarUrl">
+      >,
     ) => {
       const current = profile;
       if (!current) throw new Error("No profile loaded");

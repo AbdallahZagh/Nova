@@ -11,3 +11,12 @@ export async function updateMeApi(payload: UpdateProfilePayload) {
     body: JSON.stringify(payload),
   });
 }
+
+export type DeactivateAccountResponse = { message?: string };
+
+/** Archives the current account; client should clear tokens after success. */
+export async function deactivateMeApi() {
+  return apiFetch<DeactivateAccountResponse>("/api/users/me", {
+    method: "DELETE",
+  });
+}

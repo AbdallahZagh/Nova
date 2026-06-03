@@ -13,7 +13,13 @@ import { NewTaskModal } from "@/components/tasks/NewTaskModal";
 import { TaskDrawerDetails } from "@/components/tasks/TaskDrawerDetails";
 import { ApiError } from "@/lib/api/client";
 import { cn } from "@/lib/cn";
-import { TASK_COLUMNS, type CreateTaskInput, type Task, type TaskStatus } from "@/lib/tasks";
+import {
+  TASK_COLUMNS,
+  sortTasksInStatusColumn,
+  type CreateTaskInput,
+  type Task,
+  type TaskStatus,
+} from "@/lib/tasks";
 import { projectStatusLabel, type Project } from "@/lib/projects";
 
 const statusStyles: Record<Project["status"], string> = {
@@ -63,10 +69,8 @@ export default function ProjectWorkspacePage() {
   const tasksByColumn = useMemo(() => {
     return TASK_COLUMNS.reduce(
       (acc, column) => {
-        acc[column] = [...tasks.filter((task) => task.status === column)].sort(
-          (a, b) =>
-            new Date(b.updatedAt ?? b.createdAt ?? 0).getTime() -
-            new Date(a.updatedAt ?? a.createdAt ?? 0).getTime(),
+        acc[column] = sortTasksInStatusColumn(
+          tasks.filter((task) => task.status === column),
         );
         return acc;
       },

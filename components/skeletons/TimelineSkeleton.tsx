@@ -8,7 +8,10 @@ export function TimelineSkeleton() {
           <Skeleton className="h-9 w-40" />
           <Skeleton className="mt-2 h-4 w-72" />
         </div>
-        <Skeleton className="h-10 w-48 rounded-xl" />
+        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+          <Skeleton className="h-10 w-full rounded-xl sm:w-40" />
+          <Skeleton className="h-10 w-full rounded-xl sm:w-52" />
+        </div>
       </div>
 
       <div className="overflow-hidden rounded-2xl border border-glass bg-glass-card">

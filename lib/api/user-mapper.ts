@@ -1,5 +1,6 @@
 import type { ApiUser } from "@/lib/api/types";
 import type { UserProfile } from "@/components/providers/UserProvider";
+import { normalizeUsername } from "@/lib/username";
 
 const PROJECT_COUNT_KEYS = [
   "projectCount",
@@ -53,10 +54,14 @@ function extractCounts(user: ApiUser): { projectCount: number; taskCount: number
 export function apiUserToProfile(user: ApiUser): UserProfile {
   const { projectCount, taskCount } = extractCounts(user);
 
+  const rawUsername =
+    typeof user.username === "string" ? user.username : "";
+
   return {
     id: user.id,
     name: user.fullName,
     email: user.email,
+    username: rawUsername ? normalizeUsername(rawUsername) : "",
     role: user.roleTitle,
     bio: user.bio ?? "",
     avatarUrl: user.avatarUrl ?? null,
@@ -66,12 +71,20 @@ export function apiUserToProfile(user: ApiUser): UserProfile {
 }
 
 export function profileToUpdatePayload(
-  profile: Pick<UserProfile, "name" | "role" | "bio" | "avatarUrl">,
+  profile: Pick<
+    UserProfile,
+    "name" | "username" | "role" | "bio" | "avatarUrl"
+  >,
 ) {
+  const username = profile.username
+    ? normalizeUsername(profile.username)
+    : undefined;
+
   return {
     fullName: profile.name,
     roleTitle: profile.role,
     bio: profile.bio,
+    ...(username ? { username } : {}),
     ...(profile.avatarUrl ? { avatarUrl: profile.avatarUrl } : {}),
   };
 }

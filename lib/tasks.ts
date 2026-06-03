@@ -18,6 +18,12 @@ export const TASK_STATUS_SORT_ORDER: Record<TaskStatus, number> = {
   Completed: 3,
 };
 
+export const TASK_PRIORITY_SORT_ORDER: Record<TaskPriority, number> = {
+  High: 0,
+  Medium: 1,
+  Low: 2,
+};
+
 export function formatActivityTime(raw?: string): string {
   if (!raw) return "";
   const d = new Date(raw);
@@ -40,17 +46,29 @@ export function formatActivityTime(raw?: string): string {
   });
 }
 
-export function compareTasksByStatus(a: Task, b: Task): number {
-  const byStatus =
-    TASK_STATUS_SORT_ORDER[a.status] - TASK_STATUS_SORT_ORDER[b.status];
-  if (byStatus !== 0) return byStatus;
+export function compareTasksByPriority(a: Task, b: Task): number {
+  const byPriority =
+    TASK_PRIORITY_SORT_ORDER[a.priority] - TASK_PRIORITY_SORT_ORDER[b.priority];
+  if (byPriority !== 0) return byPriority;
   const aTime = new Date(a.updatedAt ?? a.createdAt ?? 0).getTime();
   const bTime = new Date(b.updatedAt ?? b.createdAt ?? 0).getTime();
   return bTime - aTime;
 }
 
+export function compareTasksByStatus(a: Task, b: Task): number {
+  const byStatus =
+    TASK_STATUS_SORT_ORDER[a.status] - TASK_STATUS_SORT_ORDER[b.status];
+  if (byStatus !== 0) return byStatus;
+  return compareTasksByPriority(a, b);
+}
+
 export function sortTasksByStatus(tasks: Task[]): Task[] {
   return [...tasks].sort(compareTasksByStatus);
+}
+
+/** Tasks in one kanban column: High → Medium → Low, then most recently updated. */
+export function sortTasksInStatusColumn(tasks: Task[]): Task[] {
+  return [...tasks].sort(compareTasksByPriority);
 }
 
 export function sortActivitiesNewestFirst(

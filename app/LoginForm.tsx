@@ -1,11 +1,13 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { establishSession } from "@/app/actions/session";
-import { Input } from "@/components/ui/input";
+import { Input, PasswordInput } from "@/components/ui/input";
 import { useToast } from "@/components/ui/Toast";
 import { loginApi } from "@/lib/api/auth";
+import { isAccountDeactivatedError } from "@/lib/auth-errors";
 import { ApiError } from "@/lib/api/client";
 import { setAccessToken } from "@/lib/api/client";
 import { apiUserToProfile } from "@/lib/api/user-mapper";
@@ -38,6 +40,13 @@ export function LoginForm() {
       router.push("/dashboard");
       router.refresh();
     } catch (err) {
+      if (isAccountDeactivatedError(err)) {
+        const params = new URLSearchParams();
+        if (email) params.set("email", email);
+        const query = params.toString();
+        router.push(query ? `/reactivate?${query}` : "/reactivate");
+        return;
+      }
       const message =
         err instanceof ApiError
           ? err.message
@@ -71,16 +80,23 @@ export function LoginForm() {
       </div>
 
       <div>
-        <label
-          htmlFor="password"
-          className="mb-1.5 block text-sm font-medium text-primary/80"
-        >
-          Password
-        </label>
-        <Input
+        <div className="mb-1.5 flex items-center justify-between">
+          <label
+            htmlFor="password"
+            className="text-sm font-medium text-primary/80"
+          >
+            Password
+          </label>
+          <Link
+            href="/forgot-password"
+            className="text-xs text-accent/80 underline-offset-2 hover:underline"
+          >
+            Forgot password?
+          </Link>
+        </div>
+        <PasswordInput
           id="password"
           name="password"
-          type="password"
           autoComplete="current-password"
           required
           variant="soft"
