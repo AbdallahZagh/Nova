@@ -87,14 +87,18 @@ export type Task = {
   priority: TaskPriority;
   status: TaskStatus;
   assignees: {
+    id?: string;
     initials: string;
     name: string;
+    avatarUrl?: string | null;
+    roleTitle?: string;
   }[];
   /** Display label for due date */
   dueDate: string;
   /** ISO string for API PATCH/POST */
   dueDateIso?: string | null;
   assigneeId?: string;
+  assigneeIds?: string[];
   description: string;
   subtasks: { id: string; label: string; done: boolean }[];
   activity: TaskActivity[];

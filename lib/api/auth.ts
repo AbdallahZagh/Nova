@@ -1,5 +1,5 @@
 import { apiFetch } from "@/lib/api/client";
-import { bodyToUsername, normalizeUsername } from "@/lib/username";
+import { normalizeUsername } from "@/lib/username";
 import type { LoginResponse, LogoutResponse } from "@/lib/api/types";
 
 export type RegisterPayload = {
@@ -59,6 +59,20 @@ export async function forgotPasswordApi(email: string) {
 }
 
 export type OtpPurpose = "REGISTER" | "FORGOT_PASSWORD" | "REACTIVATE";
+
+export type ResendOtpResponse = {
+  message: string;
+  /** Dev-only OTP returned until email sending is integrated */
+  _devOtp?: string;
+};
+
+export async function resendOtpApi(email: string, purpose: OtpPurpose) {
+  return apiFetch<ResendOtpResponse>("/api/auth/resend-otp", {
+    method: "POST",
+    auth: false,
+    body: JSON.stringify({ email: email.trim(), purpose }),
+  });
+}
 
 export type VerifyOtpResponse = {
   message: string;

@@ -20,3 +20,34 @@ export async function deactivateMeApi() {
     method: "DELETE",
   });
 }
+
+export type SearchUser = {
+  id: string;
+  fullName: string;
+  email: string;
+  avatarUrl?: string | null;
+  roleTitle?: string;
+};
+
+type ApiSearchUser = {
+  id: string;
+  fullName?: string;
+  name?: string;
+  email: string;
+  avatarUrl?: string | null;
+  roleTitle?: string;
+};
+
+export async function searchUsersApi(query: string) {
+  const data = await apiFetch<ApiSearchUser[] | { users: ApiSearchUser[] }>(
+    `/api/users/search?q=${encodeURIComponent(query)}`,
+  );
+  const users = Array.isArray(data) ? data : (data.users ?? []);
+  return users.map((user) => ({
+    id: user.id,
+    fullName: user.fullName ?? user.name ?? user.email,
+    email: user.email,
+    avatarUrl: user.avatarUrl,
+    roleTitle: user.roleTitle,
+  }));
+}

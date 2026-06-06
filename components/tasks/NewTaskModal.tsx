@@ -10,11 +10,11 @@ import { Select } from "@/components/ui/Select";
 import { cn } from "@/lib/cn";
 import {
   TASK_STATUS_OPTIONS,
-  TEAM_MEMBERS,
   type CreateTaskInput,
   type TaskPriority,
   type TaskStatus,
 } from "@/lib/tasks";
+import type { SelectOption } from "@/components/ui/fieldVariants";
 
 type SubtaskItem = { id: string; label: string; done: boolean };
 
@@ -97,6 +97,7 @@ type NewTaskModalProps = {
   onClose: () => void;
   defaultStatus?: TaskStatus;
   onCreate: (input: CreateTaskInput) => void | Promise<void>;
+  assigneeOptions?: SelectOption[];
   submitting?: boolean;
 };
 
@@ -110,11 +111,13 @@ function NewTaskForm({
   defaultStatus,
   onClose,
   onCreate,
+  assigneeOptions,
   submitting = false,
 }: {
   defaultStatus: TaskStatus;
   onClose: () => void;
   onCreate: (input: CreateTaskInput) => void | Promise<void>;
+  assigneeOptions: SelectOption[];
   submitting?: boolean;
 }) {
   const [title, setTitle] = useState("");
@@ -128,16 +131,6 @@ function NewTaskForm({
 
   const statusOptions = useMemo(
     () => TASK_STATUS_OPTIONS,
-    [],
-  );
-
-  const assigneeOptions = useMemo(
-    () =>
-      TEAM_MEMBERS.map((member) => ({
-        value: member.id,
-        label: member.name,
-        description: member.initials,
-      })),
     [],
   );
 
@@ -383,6 +376,7 @@ export function NewTaskModal({
   onClose,
   defaultStatus = "To Do",
   onCreate,
+  assigneeOptions = [],
   submitting = false,
 }: NewTaskModalProps) {
   useEffect(() => {
@@ -425,6 +419,7 @@ export function NewTaskModal({
           defaultStatus={defaultStatus}
           onClose={onClose}
           onCreate={onCreate}
+          assigneeOptions={assigneeOptions}
           submitting={submitting}
         />
         </div>

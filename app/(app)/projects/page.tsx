@@ -7,6 +7,7 @@ import { ProjectCard } from "@/components/projects/ProjectCard";
 import { ProjectModal } from "@/components/projects/ProjectModal";
 import { useToast } from "@/components/ui/Toast";
 import { useAppData } from "@/components/providers/AppDataProvider";
+import { useUser } from "@/components/providers/UserProvider";
 import { ApiError } from "@/lib/api/client";
 import {
   projectStatusLabel,
@@ -15,11 +16,13 @@ import {
   type ProjectFormInput,
   type ProjectStatus,
 } from "@/lib/projects";
+import { canDeleteProject, getProjectMemberRole } from "@/lib/useProjectRole";
 
 type FilterStatus = "All" | ProjectStatus;
 
 export default function ProjectsPage() {
   const { toast } = useToast();
+  const { profile } = useUser();
   const {
     projects,
     projectsLoading,
@@ -181,6 +184,9 @@ export default function ProjectsPage() {
               project={project}
               onEdit={openEditModal}
               onDelete={setDeleteTarget}
+              canDelete={canDeleteProject(
+                getProjectMemberRole(project, profile?.id),
+              )}
             />
           ))}
         </div>

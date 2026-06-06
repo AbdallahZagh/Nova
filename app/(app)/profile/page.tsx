@@ -24,6 +24,7 @@ import { ProfileSkeleton } from "@/components/skeletons/ProfileSkeleton";
 import { useUser } from "@/components/providers/UserProvider";
 import {
   forgotPasswordApi,
+  resendOtpApi,
   resetPasswordApi,
   verifyOtpApi,
 } from "@/lib/api/auth";
@@ -331,8 +332,20 @@ function ChangePasswordSection() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [passwordError, setPasswordError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [otpCooldownUntil, setOtpCooldownUntil] = useState(0);
+  const [now, setNow] = useState(() => Date.now());
 
   const email = profile?.email ?? "";
+  const resendRemaining = Math.max(
+    0,
+    Math.ceil((otpCooldownUntil - now) / 1000),
+  );
+
+  useEffect(() => {
+    if (!otpCooldownUntil) return;
+    const interval = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(interval);
+  }, [otpCooldownUntil]);
 
   const sendOtp = async () => {
     if (!email) return;
@@ -342,6 +355,9 @@ function ChangePasswordSection() {
       setOtp("");
       setOtpError("");
       setStep("sent");
+      const nextNow = Date.now();
+      setOtpCooldownUntil(nextNow + 30_000);
+      setNow(nextNow);
       if (res._devOtp) {
         toast({
           variant: "success",
@@ -361,6 +377,41 @@ function ChangePasswordSection() {
         title: "Failed to send code",
         message:
           err instanceof ApiError ? err.message : "Could not send OTP.",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const resendOtp = async () => {
+    if (!email || resendRemaining > 0) return;
+    setLoading(true);
+    try {
+      const res = await resendOtpApi(email, "FORGOT_PASSWORD");
+      setOtp("");
+      setOtpError("");
+      const nextNow = Date.now();
+      setOtpCooldownUntil(nextNow + 30_000);
+      setNow(nextNow);
+      if (res._devOtp) {
+        toast({
+          variant: "success",
+          title: "OTP resent (dev mode)",
+          message: `Your code: ${res._devOtp}`,
+        });
+      } else {
+        toast({
+          variant: "success",
+          title: "Code resent",
+          message: res.message || "Check your inbox for the fresh code.",
+        });
+      }
+    } catch (err) {
+      toast({
+        variant: "error",
+        title: "Failed to resend code",
+        message:
+          err instanceof ApiError ? err.message : "Could not resend OTP.",
       });
     } finally {
       setLoading(false);
@@ -423,6 +474,7 @@ function ChangePasswordSection() {
     setNewPassword("");
     setConfirmPassword("");
     setPasswordError("");
+    setOtpCooldownUntil(0);
   };
 
   return (
@@ -501,11 +553,11 @@ function ChangePasswordSection() {
               ) : (
                 <button
                   type="button"
-                  onClick={sendOtp}
-                  disabled={loading}
+                  onClick={resendOtp}
+                  disabled={loading || resendRemaining > 0}
                   className="text-xs text-accent underline-offset-2 hover:underline disabled:opacity-50"
                 >
-                  Resend
+                  {resendRemaining > 0 ? `Resend in ${resendRemaining}s` : "Resend"}
                 </button>
               )}
             </div>

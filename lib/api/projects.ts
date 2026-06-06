@@ -2,6 +2,7 @@ import { apiFetch } from "@/lib/api/client";
 import type {
   Project,
   ProjectFormInput,
+  ProjectMemberRole,
   ProjectOwner,
   ProjectStatus,
   ProjectTeamMember,
@@ -18,9 +19,20 @@ export type ApiProjectOwner = {
 
 export type ApiProjectMember = {
   id?: string;
+  userId?: string;
   fullName?: string;
+  name?: string;
+  email?: string;
   initials?: string;
   avatarUrl?: string | null;
+  role?: string;
+  user?: {
+    id?: string;
+    fullName?: string;
+    name?: string;
+    email?: string;
+    avatarUrl?: string | null;
+  };
 };
 
 export type ApiProjectTaskSummary = {
@@ -41,6 +53,8 @@ export type ApiProject = {
   owner?: ApiProjectOwner;
   members?: ApiProjectMember[];
   teamMembers?: ApiProjectMember[];
+  project_members?: ApiProjectMember[];
+  projectMembers?: ApiProjectMember[];
   tasks?: ApiProjectTaskSummary[];
   completionPercentage?: number;
   progress?: number;
@@ -58,6 +72,14 @@ function initialsFromName(fullName: string): string {
     .join("")
     .slice(0, 2)
     .toUpperCase();
+}
+
+function normalizeMemberRole(raw?: string): ProjectMemberRole {
+  const role = raw?.trim().toUpperCase();
+  if (role === "OWNER") return "OWNER";
+  if (role === "ADMIN") return "ADMIN";
+  if (role === "VIEWER") return "VIEWER";
+  return "MEMBER";
 }
 
 function normalizeStatus(raw: string): ProjectStatus {
@@ -87,17 +109,25 @@ function mapOwner(api: ApiProjectOwner): ProjectOwner {
 }
 
 function mapMember(m: ApiProjectMember): ProjectTeamMember {
+  const user = m.user;
+  const fullName = user?.fullName ?? user?.name ?? m.fullName ?? m.name;
+  const userId = m.userId ?? user?.id ?? m.id;
   return {
+    id: m.id,
+    userId,
     initials:
       m.initials ??
-      (m.fullName ? initialsFromName(m.fullName) : "??"),
-    imageUrl: m.avatarUrl ?? undefined,
-    name: m.fullName,
+      (fullName ? initialsFromName(fullName) : "??"),
+    imageUrl: m.avatarUrl ?? user?.avatarUrl ?? undefined,
+    name: fullName,
+    email: m.email ?? user?.email,
+    role: normalizeMemberRole(m.role),
   };
 }
 
 function mapTeamMembers(api: ApiProject): ProjectTeamMember[] {
-  const list = api.members ?? api.teamMembers ?? [];
+  const list =
+    api.project_members ?? api.projectMembers ?? api.members ?? api.teamMembers ?? [];
   const members = list.map(mapMember);
   if (members.length > 0) return members;
   if (api.owner) {
@@ -106,6 +136,9 @@ function mapTeamMembers(api: ApiProject): ProjectTeamMember[] {
         initials: initialsFromName(api.owner.fullName),
         imageUrl: api.owner.avatarUrl ?? undefined,
         name: api.owner.fullName,
+        userId: api.owner.id,
+        email: api.owner.email,
+        role: "OWNER",
       },
     ];
   }
@@ -165,11 +198,31 @@ export type CreateProjectPayload = {
   name: string;
   description?: string;
   status: string;
+  members?: { userId: string; role: Exclude<ProjectMemberRole, "OWNER"> }[];
 };
 
-export type UpdateProjectPayload = Partial<CreateProjectPayload>;
+export type UpdateProjectPayload = {
+  name?: string;
+  description?: string;
+  status?: string;
+};
 
 export function projectFormToPayload(input: ProjectFormInput): CreateProjectPayload {
+  const payload: CreateProjectPayload = {
+    name: input.title.trim(),
+    description: input.description.trim() || undefined,
+    status: input.status,
+  };
+  const members = input.members?.filter((member) => member.userId.trim()) ?? [];
+  if (members.length > 0) {
+    payload.members = members;
+  }
+  return payload;
+}
+
+export function projectFormToUpdatePayload(
+  input: ProjectFormInput,
+): UpdateProjectPayload {
   return {
     name: input.title.trim(),
     description: input.description.trim() || undefined,
@@ -193,11 +246,48 @@ export async function createProjectApi(input: ProjectFormInput) {
 export async function updateProjectApi(id: string, input: ProjectFormInput) {
   const data = await apiFetch<ApiProject>(`/api/projects/${id}`, {
     method: "PATCH",
-    body: JSON.stringify(projectFormToPayload(input)),
+    body: JSON.stringify(projectFormToUpdatePayload(input)),
   });
   return apiProjectToProject(data);
 }
 
 export async function deleteProjectApi(id: string) {
   await apiFetch<void>(`/api/projects/${id}`, { method: "DELETE" });
+}
+
+export async function addProjectMembersApi(
+  projectId: string,
+  members: { userId: string; role: Exclude<ProjectMemberRole, "OWNER"> }[],
+) {
+  const validMembers = members.filter((member) => member.userId.trim());
+  if (validMembers.length === 0) return;
+  await apiFetch<void>(`/api/projects/${projectId}/members`, {
+    method: "POST",
+    body: JSON.stringify(
+      validMembers.length === 1
+        ? validMembers[0]
+        : { members: validMembers },
+    ),
+  });
+}
+
+export async function updateProjectMemberRoleApi(
+  projectId: string,
+  userId: string,
+  role: Exclude<ProjectMemberRole, "OWNER">,
+) {
+  await apiFetch<void>(
+    `/api/projects/${projectId}/members/${userId}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ role }),
+    },
+  );
+}
+
+export async function deleteProjectMemberApi(projectId: string, userId: string) {
+  await apiFetch<void>(
+    `/api/projects/${projectId}/members/${userId}`,
+    { method: "DELETE" },
+  );
 }

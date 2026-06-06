@@ -3,11 +3,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { KanbanSkeleton } from "@/components/skeletons/KanbanSkeleton";
 import { useParams, useRouter } from "next/navigation";
-import { Plus } from "lucide-react";
+import { MessageSquare, Plus } from "lucide-react";
 import { DeleteConfirmModal } from "@/components/ui/DeleteConfirmModal";
 import { SideDrawer } from "@/components/ui/SideDrawer";
 import { useToast } from "@/components/ui/Toast";
 import { useAppData } from "@/components/providers/AppDataProvider";
+import { useUser } from "@/components/providers/UserProvider";
+import { ManageTeamModal } from "@/components/projects/ManageTeamModal";
+import { ProjectSuggestionsDrawer } from "@/components/projects/ProjectSuggestionsDrawer";
 import { TaskCard } from "@/components/tasks/TaskCard";
 import { NewTaskModal } from "@/components/tasks/NewTaskModal";
 import { TaskDrawerDetails } from "@/components/tasks/TaskDrawerDetails";
@@ -21,6 +24,11 @@ import {
   type TaskStatus,
 } from "@/lib/tasks";
 import { projectStatusLabel, type Project } from "@/lib/projects";
+import {
+  canEditProjectTasks,
+  canManageProjectTeam,
+  useProjectRole,
+} from "@/lib/useProjectRole";
 
 const statusStyles: Record<Project["status"], string> = {
   Active: "border-accent/50 text-accent",
@@ -33,7 +41,11 @@ export default function ProjectWorkspacePage() {
   const params = useParams();
   const router = useRouter();
   const { toast } = useToast();
+  const { profile } = useUser();
   const projectId = typeof params.id === "string" ? params.id : "";
+  const currentRole = useProjectRole(projectId, profile?.id);
+  const canEditTasks = canEditProjectTasks(currentRole);
+  const canManageTeam = canManageProjectTeam(currentRole);
 
   const {
     getProject,
@@ -52,6 +64,18 @@ export default function ProjectWorkspacePage() {
   const project = getProject(projectId);
   const tasks = getTasks(projectId);
   const isLoading = projectDetailLoading === projectId;
+  const assigneeOptions = useMemo(
+    () =>
+      (project?.teamMembers ?? [])
+        .filter((member) => member.role !== "VIEWER")
+        .map((member) => ({
+          value: member.userId ?? member.id ?? "",
+          label: member.name ?? member.email ?? member.initials,
+          description: member.role,
+        }))
+        .filter((option) => option.value),
+    [project?.teamMembers],
+  );
 
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [isNewTaskOpen, setIsNewTaskOpen] = useState(false);
@@ -59,6 +83,8 @@ export default function ProjectWorkspacePage() {
     useState<TaskStatus>("To Do");
   const [deleteTaskId, setDeleteTaskId] = useState<string | null>(null);
   const [dragOverColumn, setDragOverColumn] = useState<TaskStatus | null>(null);
+  const [isSuggestionsOpen, setIsSuggestionsOpen] = useState(false);
+  const [isTeamOpen, setIsTeamOpen] = useState(false);
   const [creating, setCreating] = useState(false);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -297,13 +323,32 @@ export default function ProjectWorkspacePage() {
           </div>
         </div>
 
-        <button
-          type="button"
-          onClick={() => openNewTaskModal("To Do")}
-          className="rounded-xl bg-linear-90 from-accent/75 to-accent/35 px-4 py-2.5 text-sm font-semibold text-primary transition hover:opacity-90"
-        >
-          New Task
-        </button>
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            onClick={() => setIsTeamOpen(true)}
+            className="rounded-xl border border-glass bg-glass-button px-4 py-2.5 text-sm font-semibold text-primary transition hover:border-accent/40 hover:text-accent"
+          >
+            Manage Team
+          </button>
+          <button
+            type="button"
+            onClick={() => setIsSuggestionsOpen(true)}
+            className="flex items-center gap-2 rounded-xl border border-glass bg-glass-button px-4 py-2.5 text-sm font-semibold text-primary transition hover:border-accent/40 hover:text-accent"
+          >
+            <MessageSquare className="size-4" />
+            Suggestions
+          </button>
+          {canEditTasks && (
+            <button
+              type="button"
+              onClick={() => openNewTaskModal("To Do")}
+              className="rounded-xl bg-linear-90 from-accent/75 to-accent/35 px-4 py-2.5 text-sm font-semibold text-primary transition hover:opacity-90"
+            >
+              New Task
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
@@ -313,16 +358,19 @@ export default function ProjectWorkspacePage() {
             <section
               key={column}
               onDragOver={(e) => {
+                if (!canEditTasks) return;
                 e.preventDefault();
                 e.dataTransfer.dropEffect = "move";
                 if (dragOverColumn !== column) setDragOverColumn(column);
               }}
               onDragLeave={(e) => {
+                if (!canEditTasks) return;
                 if (!e.currentTarget.contains(e.relatedTarget as Node)) {
                   setDragOverColumn(null);
                 }
               }}
               onDrop={(e) => {
+                if (!canEditTasks) return;
                 e.preventDefault();
                 const taskId = e.dataTransfer.getData("taskId");
                 if (taskId) void handleStatusChange(taskId, column);
@@ -341,14 +389,16 @@ export default function ProjectWorkspacePage() {
                   <span className="rounded-full border border-glass bg-glass-card px-2 py-0.5 text-xs text-primary/60">
                     {tasksByColumn[column].length}
                   </span>
-                  <button
-                    type="button"
-                    onClick={() => openNewTaskModal(column)}
-                    aria-label={`Add task to ${column}`}
-                    className="rounded-lg border border-glass bg-glass-button p-1 text-primary/70 transition hover:text-accent"
-                  >
-                    <Plus className="size-3.5" />
-                  </button>
+                  {canEditTasks && (
+                    <button
+                      type="button"
+                      onClick={() => openNewTaskModal(column)}
+                      aria-label={`Add task to ${column}`}
+                      className="rounded-lg border border-glass bg-glass-button p-1 text-primary/70 transition hover:text-accent"
+                    >
+                      <Plus className="size-3.5" />
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -358,6 +408,7 @@ export default function ProjectWorkspacePage() {
                     key={task.id}
                     task={task}
                     onClick={() => setSelectedTaskId(task.id)}
+                    canMove={canEditTasks}
                   />
                 ))}
                 {isOver && tasksByColumn[column].length === 0 && (
@@ -384,6 +435,9 @@ export default function ProjectWorkspacePage() {
             onSave={(task) => void handleSaveTask(task)}
             onDelete={() => setDeleteTaskId(selectedTask.id)}
             saving={saving}
+            readOnly={!canEditTasks}
+            projectRole={currentRole}
+            assigneeOptions={assigneeOptions}
           />
         ) : null}
       </SideDrawer>
@@ -393,8 +447,27 @@ export default function ProjectWorkspacePage() {
         onClose={() => !creating && setIsNewTaskOpen(false)}
         defaultStatus={newTaskDefaultStatus}
         onCreate={handleCreateTask}
+        assigneeOptions={assigneeOptions}
         submitting={creating}
       />
+
+      <SideDrawer
+        isOpen={isSuggestionsOpen}
+        onClose={() => setIsSuggestionsOpen(false)}
+        title="Project Suggestions"
+      >
+        <ProjectSuggestionsDrawer projectId={projectId} />
+      </SideDrawer>
+
+      {project && (
+        <ManageTeamModal
+          isOpen={isTeamOpen}
+          onClose={() => setIsTeamOpen(false)}
+          project={project}
+          canManage={canManageTeam}
+          onChanged={() => loadProjectWorkspace(projectId)}
+        />
+      )}
 
       <DeleteConfirmModal
         isOpen={Boolean(deleteTaskId)}

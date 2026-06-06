@@ -15,6 +15,7 @@ import {
 export type ApiActivityActor = {
   id?: string;
   fullName?: string;
+  initials?: string;
   avatarUrl?: string | null;
   roleTitle?: string;
 };
@@ -66,7 +67,6 @@ export type CreateTaskPayload = {
   priority?: string;
   dueDate?: string;
   projectId: string;
-  assigneeId?: string;
   subtasks?: { title: string }[];
 };
 
@@ -77,7 +77,6 @@ export type UpdateTaskPayload = {
   priority?: string;
   dueDate?: string | null;
   completedAt?: string | null;
-  assigneeId?: string;
 };
 
 const UUID_RE =
@@ -161,6 +160,7 @@ function buildTaskActivities(api: ApiTask): TaskActivity[] {
 export function apiTaskToTask(api: ApiTask): Task {
   const assigneeList = api.assignees ?? (api.assignee ? [api.assignee] : []);
   const assignees = assigneeList.map((a) => ({
+    id: a.id,
     initials:
       a.initials ??
       (a.fullName
@@ -172,10 +172,13 @@ export function apiTaskToTask(api: ApiTask): Task {
             .toUpperCase()
         : "??"),
     name: a.fullName ?? "Unknown",
+    avatarUrl: a.avatarUrl,
+    roleTitle: a.roleTitle,
   }));
 
   const assigneeId =
     api.assigneeId ?? api.assignee?.id ?? assigneeList[0]?.id ?? undefined;
+  const assigneeIds = assigneeList.map((a) => a.id).filter(Boolean) as string[];
 
   return {
     id: api.id,
@@ -185,6 +188,7 @@ export function apiTaskToTask(api: ApiTask): Task {
     priority: normalizePriority(api.priority),
     assignees,
     assigneeId: assigneeId ?? undefined,
+    assigneeIds,
     dueDate: formatDueDateDisplay(api.dueDate),
     dueDateIso: api.dueDate ?? null,
     subtasks: (api.subtasks ?? []).map((s) => ({
@@ -216,11 +220,6 @@ export function createInputToPayload(
     payload.dueDate = input.dueDateIso;
   }
 
-  const assigneeId = input.assigneeIds[0];
-  if (assigneeId && isUuid(assigneeId)) {
-    payload.assigneeId = assigneeId;
-  }
-
   const subtaskTitles = input.subtasks
     .map((s) => s.label.trim())
     .filter(Boolean)
@@ -243,10 +242,6 @@ export function taskToUpdatePayload(task: Task): UpdateTaskPayload {
 
   if (task.dueDateIso) {
     payload.dueDate = task.dueDateIso;
-  }
-
-  if (task.assigneeId && isUuid(task.assigneeId)) {
-    payload.assigneeId = task.assigneeId;
   }
 
   if (task.status === "Completed") {
@@ -278,7 +273,9 @@ export async function createTaskApi(projectId: string, input: CreateTaskInput) {
     method: "POST",
     body: JSON.stringify(createInputToPayload(projectId, input)),
   });
-  return apiTaskToTask(data);
+  const created = apiTaskToTask(data);
+  await syncTaskAssignees(created.id, [], input.assigneeIds);
+  return getTaskApi(created.id);
 }
 
 export async function updateTaskApi(task: Task) {
@@ -286,9 +283,56 @@ export async function updateTaskApi(task: Task) {
     method: "PATCH",
     body: JSON.stringify(taskToUpdatePayload(task)),
   });
-  return apiTaskToTask(data);
+  const saved = apiTaskToTask(data);
+  await syncTaskAssignees(
+    task.id,
+    task.assignees.map((assignee) => assignee.id).filter(Boolean) as string[],
+    task.assigneeIds ?? [],
+  );
+  return getTaskApi(saved.id);
 }
 
 export async function deleteTaskApi(taskId: string) {
   await apiFetch<void>(`/api/tasks/${taskId}`, { method: "DELETE" });
+}
+
+export async function assignTasksApi(taskIds: string[], userIds: string[]) {
+  const validTaskIds = taskIds.filter(isUuid);
+  const validUserIds = userIds.filter(isUuid);
+  if (validTaskIds.length === 0 || validUserIds.length === 0) return;
+
+  await apiFetch<void>("/api/tasks/assign", {
+    method: "POST",
+    body: JSON.stringify(
+      validUserIds.length === 1
+        ? { userId: validUserIds[0], taskIds: validTaskIds }
+        : {
+            assignments: validUserIds.map((userId) => ({
+              userId,
+              taskIds: validTaskIds,
+            })),
+          },
+    ),
+  });
+}
+
+export async function unassignTaskApi(taskId: string, userId: string) {
+  if (!isUuid(taskId) || !isUuid(userId)) return;
+  await apiFetch<void>(`/api/tasks/${taskId}/assignees/${userId}`, {
+    method: "DELETE",
+  });
+}
+
+async function syncTaskAssignees(
+  taskId: string,
+  currentUserIds: string[],
+  nextUserIds: string[],
+) {
+  const current = new Set(currentUserIds.filter(isUuid));
+  const next = new Set(nextUserIds.filter(isUuid));
+  const toAdd = [...next].filter((userId) => !current.has(userId));
+  const toRemove = [...current].filter((userId) => !next.has(userId));
+
+  await assignTasksApi([taskId], toAdd);
+  await Promise.all(toRemove.map((userId) => unassignTaskApi(taskId, userId)));
 }

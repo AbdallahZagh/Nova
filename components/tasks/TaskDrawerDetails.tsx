@@ -5,12 +5,22 @@ import { Check, Loader2, Plus, Trash2, X } from "lucide-react";
 import { DatePicker, formatDueDate } from "@/components/ui/Calendar";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { Input, Textarea } from "@/components/ui/input";
+import { MultiSelect } from "@/components/ui/MultiSelect";
 import { Select } from "@/components/ui/Select";
 import { useToast } from "@/components/ui/Toast";
 import { useAppData } from "@/components/providers/AppDataProvider";
 import { ApiError } from "@/lib/api/client";
 import { isPersistedSubtaskId } from "@/lib/api/subtasks";
+import {
+  closeTaskCommentApi,
+  createTaskCommentApi,
+  listTaskCommentsApi,
+  replyTaskCommentApi,
+  type TaskComment,
+} from "@/lib/api/task-comments";
 import { cn } from "@/lib/cn";
+import type { ProjectMemberRole } from "@/lib/projects";
+import type { SelectOption } from "@/components/ui/fieldVariants";
 import {
   formatActivityTime,
   sortActivitiesNewestFirst,
@@ -44,6 +54,9 @@ type TaskDrawerDetailsProps = {
   onSave: (task: Task) => void | Promise<void>;
   onDelete: () => void;
   saving?: boolean;
+  readOnly?: boolean;
+  projectRole?: ProjectMemberRole | null;
+  assigneeOptions?: SelectOption[];
 };
 
 const PRIORITY_OPTIONS = [
@@ -84,6 +97,7 @@ function SubtaskRow({
   subtask,
   committedLabel,
   busy,
+  readOnly,
   onToggle,
   onLabelChange,
   onLabelCommit,
@@ -92,6 +106,7 @@ function SubtaskRow({
   subtask: Subtask;
   committedLabel: string;
   busy?: boolean;
+  readOnly?: boolean;
   onToggle: () => void;
   onLabelChange: (label: string) => void;
   onLabelCommit: () => void;
@@ -119,7 +134,7 @@ function SubtaskRow({
         type="button"
         aria-label={subtask.done ? "Mark incomplete" : "Mark complete"}
         onClick={onToggle}
-        disabled={busy}
+        disabled={busy || readOnly}
         className={cn(
           "flex size-5 shrink-0 items-center justify-center rounded-md border transition disabled:opacity-50",
           subtask.done
@@ -150,7 +165,7 @@ function SubtaskRow({
               cancelEditing();
             }
           }}
-          disabled={busy}
+          disabled={busy || readOnly}
           className="min-w-0 flex-1 bg-transparent text-sm text-primary outline-none disabled:opacity-50"
         />
       ) : (
@@ -158,15 +173,16 @@ function SubtaskRow({
           role="button"
           tabIndex={0}
           onClick={() => {
-            if (busy) return;
+            if (busy || readOnly) return;
             setEditing(true);
             setTimeout(() => inputRef.current?.focus(), 0);
           }}
           onKeyDown={(e) => {
-            if (e.key === "Enter" && !busy) setEditing(true);
+            if (e.key === "Enter" && !busy && !readOnly) setEditing(true);
           }}
           className={cn(
-            "min-w-0 flex-1 cursor-text select-none text-sm",
+            "min-w-0 flex-1 select-none text-sm",
+            readOnly ? "cursor-default" : "cursor-text",
             subtask.done ? "text-primary/40 line-through" : "text-primary/85",
           )}
         >
@@ -176,7 +192,7 @@ function SubtaskRow({
         </span>
       )}
 
-      {showConfirm && (
+      {showConfirm && !readOnly && (
         <button
           type="button"
           aria-label="Save subtask name"
@@ -188,18 +204,20 @@ function SubtaskRow({
         </button>
       )}
 
-      <button
-        type="button"
-        aria-label="Remove subtask"
-        onClick={onDelete}
-        disabled={busy}
-        className={cn(
-          "shrink-0 rounded p-0.5 text-primary/30 transition hover:text-red-400 disabled:opacity-30",
-          editing || showConfirm ? "opacity-100" : "opacity-0 group-hover:opacity-100",
-        )}
-      >
-        <X className="size-3.5" />
-      </button>
+      {!readOnly && (
+        <button
+          type="button"
+          aria-label="Remove subtask"
+          onClick={onDelete}
+          disabled={busy}
+          className={cn(
+            "shrink-0 rounded p-0.5 text-primary/30 transition hover:text-red-400 disabled:opacity-30",
+            editing || showConfirm ? "opacity-100" : "opacity-0 group-hover:opacity-100",
+          )}
+        >
+          <X className="size-3.5" />
+        </button>
+      )}
     </li>
   );
 }
@@ -212,13 +230,28 @@ export function TaskDrawerDetails({
   onSave,
   onDelete,
   saving = false,
+  readOnly = false,
+  projectRole = null,
+  assigneeOptions = [],
 }: TaskDrawerDetailsProps) {
   const { toast } = useToast();
   const { createSubtask, updateSubtask, deleteSubtask } = useAppData();
-  const [draft, setDraft] = useState(task);
+  const [draft, setDraft] = useState<Task>(() => ({
+    ...task,
+    assigneeIds:
+      task.assigneeIds ??
+      (task.assignees.map((assignee) => assignee.id).filter(Boolean) as string[]),
+  }));
   const [newSubtaskLabel, setNewSubtaskLabel] = useState("");
   const [addingSubtask, setAddingSubtask] = useState(false);
   const [busySubtaskId, setBusySubtaskId] = useState<string | null>(null);
+  const [comments, setComments] = useState<TaskComment[]>([]);
+  const [commentsLoading, setCommentsLoading] = useState(true);
+  const [commentContent, setCommentContent] = useState("");
+  const [commentSubmitting, setCommentSubmitting] = useState(false);
+  const [replyingId, setReplyingId] = useState<string | null>(null);
+  const [replyContent, setReplyContent] = useState("");
+  const [busyCommentId, setBusyCommentId] = useState<string | null>(null);
   const [labelSnapshots, setLabelSnapshots] = useState<Record<string, string>>(
     () => Object.fromEntries(task.subtasks.map((s) => [s.id, s.label])),
   );
@@ -226,12 +259,42 @@ export function TaskDrawerDetails({
   useEffect(() => {
     /* sync drawer when parent task updates after API */
     // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional reset from props
-    setDraft({ ...task, subtasks: dedupeSubtasks(task.subtasks) });
+    setDraft({
+      ...task,
+      assigneeIds:
+        task.assigneeIds ??
+        (task.assignees.map((assignee) => assignee.id).filter(Boolean) as string[]),
+      subtasks: dedupeSubtasks(task.subtasks),
+    });
     setNewSubtaskLabel("");
     setLabelSnapshots(
       Object.fromEntries(task.subtasks.map((s) => [s.id, s.label])),
     );
   }, [task]);
+
+  useEffect(() => {
+    let cancelled = false;
+    listTaskCommentsApi(task.id)
+      .then((list) => {
+        if (!cancelled) setComments(list);
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          toast({
+            variant: "error",
+            title: "Failed to load comments",
+            message:
+              err instanceof ApiError ? err.message : "Please try again.",
+          });
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setCommentsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [task.id, toast]);
 
   const displaySubtasks = useMemo(
     () => dedupeSubtasks(draft.subtasks),
@@ -260,7 +323,89 @@ export function TaskDrawerDetails({
     });
   };
 
+  const canAddComment =
+    projectRole === "OWNER" || projectRole === "ADMIN" || projectRole === "MEMBER";
+  const canModerateComments = projectRole === "OWNER" || projectRole === "ADMIN";
+
+  const mergeComment = (saved: TaskComment) => {
+    setComments((prev) =>
+      prev.map((comment) =>
+        comment.id === saved.id
+          ? {
+              ...comment,
+              ...saved,
+              createdBy: saved.createdBy ?? comment.createdBy,
+              taskId: saved.taskId ?? comment.taskId,
+            }
+          : comment,
+      ),
+    );
+  };
+
+  const addComment = async () => {
+    const content = commentContent.trim();
+    if (!content || !canAddComment || commentSubmitting) return;
+
+    setCommentSubmitting(true);
+    try {
+      const created = await createTaskCommentApi(task.id, content);
+      setComments((prev) => [created, ...prev]);
+      setCommentContent("");
+      toast({
+        variant: "success",
+        title: "Comment added",
+        message: "Your task comment was posted.",
+      });
+    } catch (err) {
+      subtaskError("Could not add comment", err);
+    } finally {
+      setCommentSubmitting(false);
+    }
+  };
+
+  const submitReply = async (commentId: string) => {
+    const content = replyContent.trim();
+    if (!content || !canModerateComments || busyCommentId) return;
+
+    setBusyCommentId(commentId);
+    try {
+      const saved = await replyTaskCommentApi(commentId, content);
+      mergeComment(saved);
+      setReplyingId(null);
+      setReplyContent("");
+      toast({
+        variant: "success",
+        title: "Reply added",
+        message: "The comment was answered.",
+      });
+    } catch (err) {
+      subtaskError("Could not reply to comment", err);
+    } finally {
+      setBusyCommentId(null);
+    }
+  };
+
+  const closeComment = async (commentId: string) => {
+    if (!canModerateComments || busyCommentId) return;
+
+    setBusyCommentId(commentId);
+    try {
+      const saved = await closeTaskCommentApi(commentId);
+      mergeComment(saved);
+      toast({
+        variant: "success",
+        title: "Comment closed",
+        message: "The comment is now read-only.",
+      });
+    } catch (err) {
+      subtaskError("Could not close comment", err);
+    } finally {
+      setBusyCommentId(null);
+    }
+  };
+
   const toggleSubtask = async (id: string) => {
+    if (readOnly) return;
     const sub = draft.subtasks.find((s) => s.id === id);
     if (!sub || busySubtaskId) return;
 
@@ -293,6 +438,7 @@ export function TaskDrawerDetails({
     );
 
   const commitSubtaskLabel = async (id: string, label: string) => {
+    if (readOnly) return;
     const trimmed = label.trim();
     const previous = labelSnapshots[id] ?? "";
     if (!trimmed || trimmed === previous || !isPersistedSubtaskId(id)) {
@@ -323,6 +469,7 @@ export function TaskDrawerDetails({
   };
 
   const removeSubtask = async (id: string) => {
+    if (readOnly) return;
     if (busySubtaskId) return;
 
     const previous = draft.subtasks;
@@ -347,6 +494,7 @@ export function TaskDrawerDetails({
   };
 
   const addSubtaskByLabel = async (label: string) => {
+    if (readOnly) return null;
     const trimmed = label.trim();
     if (!trimmed || addingSubtask) return null;
 
@@ -409,7 +557,7 @@ export function TaskDrawerDetails({
   };
 
   const handleSave = async () => {
-    if (!hasChanges || saving) return;
+    if (readOnly || !hasChanges || saving) return;
     try {
       const toSave = await flushPendingSubtasks();
       await onSave(toSave);
@@ -467,6 +615,7 @@ export function TaskDrawerDetails({
         variant="minimal"
         value={draft.title}
         onChange={(e) => setDraft((prev) => ({ ...prev, title: e.target.value }))}
+        disabled={readOnly}
         className="text-xl font-semibold"
         aria-label="Task title"
       />
@@ -484,6 +633,7 @@ export function TaskDrawerDetails({
             options={TASK_STATUS_OPTIONS}
             variant="minimal"
             aria-label="Task status"
+            disabled={readOnly}
           />
         </div>
         <div>
@@ -498,6 +648,7 @@ export function TaskDrawerDetails({
             options={PRIORITY_OPTIONS}
             variant="minimal"
             aria-label="Task priority"
+            disabled={readOnly}
           />
         </div>
         <div className="col-span-2">
@@ -519,7 +670,50 @@ export function TaskDrawerDetails({
             }
             placeholder="Select due date..."
             aria-label="Due date"
+            disabled={readOnly}
           />
+        </div>
+        <div className="col-span-2">
+          <label
+            htmlFor="task-drawer-assignees"
+            className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-primary/60"
+          >
+            Assigned to
+          </label>
+          {readOnly ? (
+            draft.assignees.length === 0 ? (
+              <p className="rounded-xl border border-glass bg-glass-button/40 px-3 py-2 text-sm text-primary/45">
+                No assignees
+              </p>
+            ) : (
+              <div className="flex flex-wrap gap-2 rounded-xl border border-glass bg-glass-button/40 px-3 py-2">
+                {draft.assignees.map((assignee, index) => (
+                  <span
+                    key={assignee.id ?? `${assignee.initials}-${index}`}
+                    className="inline-flex items-center gap-2 rounded-full border border-glass bg-glass-card px-2.5 py-1 text-xs font-medium text-primary/75"
+                  >
+                    <span className="flex size-5 items-center justify-center rounded-full bg-glass-button text-[9px] font-semibold text-primary">
+                      {assignee.initials}
+                    </span>
+                    {assignee.name}
+                  </span>
+                ))}
+              </div>
+            )
+          ) : (
+            <MultiSelect
+              id="task-drawer-assignees"
+              value={draft.assigneeIds ?? []}
+              onChange={(assigneeIds) =>
+                setDraft((prev) => ({ ...prev, assigneeIds }))
+              }
+              options={assigneeOptions}
+              placeholder="Select assignees..."
+              variant="glass"
+              aria-label="Task assignees"
+              disabled={assigneeOptions.length === 0}
+            />
+          )}
         </div>
       </div>
 
@@ -536,6 +730,7 @@ export function TaskDrawerDetails({
           rows={4}
           className="resize-none focus:bg-glass-button/40"
           placeholder="Add a description..."
+          disabled={readOnly}
         />
       </div>
 
@@ -568,6 +763,7 @@ export function TaskDrawerDetails({
                 subtask={subtask}
                 committedLabel={labelSnapshots[subtask.id] ?? ""}
                 busy={busySubtaskId === subtask.id}
+                readOnly={readOnly}
                 onToggle={() => void toggleSubtask(subtask.id)}
                 onLabelChange={(label) =>
                   updateSubtaskLabelLocal(subtask.id, label)
@@ -581,6 +777,7 @@ export function TaskDrawerDetails({
           </ul>
         )}
 
+        {!readOnly && (
         <div className="mt-3 flex items-center gap-2">
           <input
             value={newSubtaskLabel}
@@ -609,6 +806,173 @@ export function TaskDrawerDetails({
             )}
           </button>
         </div>
+        )}
+      </GlassCard>
+
+      <GlassCard className="p-4">
+        <div className="flex items-center justify-between">
+          <h3 className="text-xs font-medium uppercase tracking-wide text-primary/60">
+            Comments
+          </h3>
+          <span className="text-xs text-primary/40">{comments.length}</span>
+        </div>
+
+        {canAddComment && (
+          <div className="mt-3 space-y-2">
+            <Textarea
+              variant="minimal"
+              value={commentContent}
+              onChange={(e) => setCommentContent(e.target.value)}
+              rows={3}
+              placeholder="Add a task comment..."
+              className="resize-none focus:bg-glass-button/40"
+              disabled={commentSubmitting}
+            />
+            <button
+              type="button"
+              onClick={() => void addComment()}
+              disabled={!commentContent.trim() || commentSubmitting}
+              className="w-full rounded-xl bg-accent px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {commentSubmitting ? "Posting..." : "Add Comment"}
+            </button>
+          </div>
+        )}
+
+        {commentsLoading ? (
+          <div className="mt-4 space-y-2">
+            {[0, 1].map((item) => (
+              <div
+                key={item}
+                className="h-24 animate-pulse rounded-xl border border-glass bg-glass-button/40"
+              />
+            ))}
+          </div>
+        ) : comments.length === 0 ? (
+          <p className="mt-4 text-sm text-primary/50">No comments yet.</p>
+        ) : (
+          <ul className="mt-4 space-y-3">
+            {comments.map((comment) => {
+              const isClosed = comment.status === "CLOSED";
+              const isBusy = busyCommentId === comment.id;
+              const canAct = canModerateComments && !isClosed;
+              const isReplying = replyingId === comment.id;
+
+              return (
+                <li
+                  key={comment.id}
+                  className="rounded-xl border border-glass bg-glass-button/40 px-3 py-3"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-primary">
+                        {comment.createdBy?.fullName ?? "Project member"}
+                      </p>
+                      <p className="mt-0.5 text-xs text-primary/45">
+                        {comment.createdLabel || "Recently"}
+                      </p>
+                    </div>
+                    <span
+                      className={cn(
+                        "shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold",
+                        isClosed
+                          ? "border-primary/20 text-primary/45"
+                          : "border-accent/45 text-accent",
+                      )}
+                    >
+                      {comment.status}
+                    </span>
+                  </div>
+
+                  <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-primary/75">
+                    {comment.content}
+                  </p>
+
+                  {comment.replyContent && (
+                    <div className="mt-3 rounded-xl border border-accent/25 bg-accent/10 px-3 py-2.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-xs font-medium uppercase tracking-wide text-accent">
+                          Reply
+                        </p>
+                        <p className="text-[11px] text-primary/45">
+                          {comment.repliedBy?.fullName ?? "Admin"}
+                          {comment.repliedLabel ? ` - ${comment.repliedLabel}` : ""}
+                        </p>
+                      </div>
+                      <p className="mt-1.5 whitespace-pre-wrap text-sm leading-relaxed text-primary/75">
+                        {comment.replyContent}
+                      </p>
+                    </div>
+                  )}
+
+                  {isClosed && comment.closedAt && (
+                    <p className="mt-2 text-xs text-primary/40">
+                      Closed by {comment.closedBy?.fullName ?? "Admin"}
+                      {comment.closedLabel ? ` - ${comment.closedLabel}` : ""}
+                    </p>
+                  )}
+
+                  {isReplying && canAct ? (
+                    <div className="mt-3 space-y-2">
+                      <Textarea
+                        variant="minimal"
+                        value={replyContent}
+                        onChange={(e) => setReplyContent(e.target.value)}
+                        rows={3}
+                        placeholder="Write a reply..."
+                        className="resize-none focus:bg-glass-button/40"
+                        disabled={isBusy}
+                      />
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setReplyingId(null);
+                            setReplyContent("");
+                          }}
+                          disabled={isBusy}
+                          className="rounded-xl border border-glass bg-glass-button px-3 py-2 text-sm font-medium text-primary transition hover:bg-glass-button/80 disabled:opacity-50"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void submitReply(comment.id)}
+                          disabled={!replyContent.trim() || isBusy}
+                          className="flex-1 rounded-xl bg-accent px-3 py-2 text-sm font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          {isBusy ? "Replying..." : "Send Reply"}
+                        </button>
+                      </div>
+                    </div>
+                  ) : canAct ? (
+                    <div className="mt-3 flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setReplyingId(comment.id);
+                          setReplyContent(comment.replyContent ?? "");
+                        }}
+                        disabled={isBusy}
+                        className="rounded-xl border border-glass bg-glass-button px-3 py-2 text-sm font-medium text-primary transition hover:text-accent disabled:opacity-50"
+                      >
+                        Reply
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void closeComment(comment.id)}
+                        disabled={isBusy}
+                        className="rounded-xl border border-red-500/30 px-3 py-2 text-sm font-semibold text-red-400 transition hover:bg-red-500/10 disabled:opacity-50 light:border-red-500/40 light:text-red-600"
+                      >
+                        {isBusy ? "Closing..." : "Close"}
+                      </button>
+                    </div>
+                  ) : null}
+                </li>
+              );
+            })}
+          </ul>
+        )}
       </GlassCard>
 
       <GlassCard className="p-4">
@@ -653,6 +1017,7 @@ export function TaskDrawerDetails({
         )}
       </GlassCard>
 
+      {!readOnly && (
       <div className="flex gap-3">
         <button
           type="button"
@@ -671,6 +1036,7 @@ export function TaskDrawerDetails({
           {saving ? "Saving…" : "Save Changes"}
         </button>
       </div>
+      )}
     </div>
   );
 }

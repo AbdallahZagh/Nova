@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -16,6 +16,7 @@ import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { useToast } from "@/components/ui/Toast";
 import {
   forgotPasswordApi,
+  resendOtpApi,
   resetPasswordApi,
   verifyOtpApi,
 } from "@/lib/api/auth";
@@ -140,13 +141,24 @@ export default function ForgotPasswordPage() {
   const [emailError, setEmailError] = useState("");
   const [otpError, setOtpError] = useState("");
   const [passwordError, setPasswordError] = useState("");
+  const [otpCooldownUntil, setOtpCooldownUntil] = useState(0);
+  const [now, setNow] = useState(() => Date.now());
 
   const stepNum = step === "email" ? 1 : step === "otp" ? 2 : step === "password" ? 3 : 4;
+  const resendRemaining = Math.max(
+    0,
+    Math.ceil((otpCooldownUntil - now) / 1000),
+  );
+
+  useEffect(() => {
+    if (!otpCooldownUntil) return;
+    const interval = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(interval);
+  }, [otpCooldownUntil]);
 
   // ── Step 1: request OTP ──────────────────────────────────────────────────────
 
-  const handleRequestOtp = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const requestOtp = async () => {
     setEmailError("");
     setLoading(true);
     try {
@@ -164,6 +176,9 @@ export default function ForgotPasswordPage() {
           message: "Check your inbox for the 6-digit code.",
         });
       }
+      const nextNow = Date.now();
+      setOtpCooldownUntil(nextNow + 30_000);
+      setNow(nextNow);
       setStep("otp");
     } catch (err) {
       const msg =
@@ -171,6 +186,45 @@ export default function ForgotPasswordPage() {
           ? err.message
           : "Could not send reset code. Try again.";
       setEmailError(msg);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRequestOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await requestOtp();
+  };
+
+  const handleResendOtp = async () => {
+    if (resendRemaining > 0) return;
+    setEmailError("");
+    setOtpError("");
+    setLoading(true);
+    try {
+      const res = await resendOtpApi(email.trim(), "FORGOT_PASSWORD");
+      if (res._devOtp) {
+        toast({
+          variant: "success",
+          title: "OTP resent (dev mode)",
+          message: `Your code: ${res._devOtp}`,
+        });
+      } else {
+        toast({
+          variant: "success",
+          title: "Code resent",
+          message: res.message || "Check your inbox for the fresh code.",
+        });
+      }
+      const nextNow = Date.now();
+      setOtpCooldownUntil(nextNow + 30_000);
+      setNow(nextNow);
+    } catch (err) {
+      setOtpError(
+        err instanceof ApiError
+          ? err.message
+          : "Could not resend reset code. Try again.",
+      );
     } finally {
       setLoading(false);
     }
@@ -337,6 +391,17 @@ export default function ForgotPasswordPage() {
                 <Loader2 className="size-4 animate-spin" />
               ) : null}
               {loading ? "Verifying…" : "Verify code →"}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => void handleResendOtp()}
+              disabled={loading || resendRemaining > 0}
+              className="flex w-full items-center justify-center gap-1.5 text-sm font-medium text-primary/50 transition hover:text-accent disabled:cursor-not-allowed disabled:text-primary/30"
+            >
+              {resendRemaining > 0
+                ? `Resend code in ${resendRemaining}s`
+                : "Resend code"}
             </button>
 
             <button

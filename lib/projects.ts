@@ -6,11 +6,19 @@ export type ProjectStatus =
   | "Completed"
   | "Archived";
 
-export type ProjectTeamMember = {
+export type ProjectMemberRole = "OWNER" | "ADMIN" | "MEMBER" | "VIEWER";
+
+export type ProjectMember = {
+  id?: string;
+  userId?: string;
   initials: string;
   imageUrl?: string;
   name?: string;
+  email?: string;
+  role: ProjectMemberRole;
 };
+
+export type ProjectTeamMember = ProjectMember;
 
 export type ProjectOwner = {
   id: string;
@@ -43,6 +51,7 @@ export type ProjectFormInput = {
   description: string;
   status: ProjectStatus;
   contributorIds: string[];
+  members?: { userId: string; role: Exclude<ProjectMemberRole, "OWNER"> }[];
 };
 
 export const PROJECT_CONTRIBUTORS: SelectOption[] = [
@@ -64,6 +73,7 @@ const CONTRIBUTOR_INITIALS: Record<string, string> = {
 export function contributorIdsToTeamMembers(ids: string[]): ProjectTeamMember[] {
   return ids.map((id) => ({
     initials: CONTRIBUTOR_INITIALS[id] ?? id.slice(0, 2).toUpperCase(),
+    role: "MEMBER",
   }));
 }
 
@@ -85,7 +95,7 @@ export const initialProjects: Project[] = [
       "Finalize onboarding, push notification flows, and usage analytics for v1 release.",
     progress: 78,
     status: "Archived",
-    teamMembers: [{ initials: "AM" }, { initials: "LK" }, { initials: "RS" }],
+    teamMembers: [{ initials: "AM", role: "OWNER" }, { initials: "LK", role: "MEMBER" }, { initials: "RS", role: "MEMBER" }],
     contributorIds: ["1", "4"],
   },
   {
@@ -95,7 +105,7 @@ export const initialProjects: Project[] = [
       "Move legacy subscriptions to the new billing service and validate invoice parity.",
     progress: 46,
     status: "Active",
-    teamMembers: [{ initials: "DN" }, { initials: "FW" }, { initials: "QA" }],
+    teamMembers: [{ initials: "DN", role: "OWNER" }, { initials: "FW", role: "MEMBER" }, { initials: "QA", role: "VIEWER" }],
     contributorIds: ["5", "2"],
   },
   {
@@ -105,7 +115,7 @@ export const initialProjects: Project[] = [
       "Refresh IA and visual system to improve client task visibility and navigation speed.",
     progress: 34,
     status: "Archived",
-    teamMembers: [{ initials: "HM" }, { initials: "ZT" }],
+    teamMembers: [{ initials: "HM", role: "OWNER" }, { initials: "ZT", role: "MEMBER" }],
     contributorIds: ["3"],
   },
   {
@@ -115,7 +125,7 @@ export const initialProjects: Project[] = [
       "Ship workflow automations for recurring tasks, approvals, and cross-project handoffs.",
     progress: 89,
     status: "Active",
-    teamMembers: [{ initials: "KL" }, { initials: "MV" }, { initials: "JP" }],
+    teamMembers: [{ initials: "KL", role: "OWNER" }, { initials: "MV", role: "ADMIN" }, { initials: "JP", role: "MEMBER" }],
     contributorIds: ["1", "2", "3"],
   },
   {
@@ -125,7 +135,7 @@ export const initialProjects: Project[] = [
       "Complete access review, dependency scans, and remediation tracking across core services.",
     progress: 100,
     status: "Completed",
-    teamMembers: [{ initials: "SE" }, { initials: "AL" }],
+    teamMembers: [{ initials: "SE", role: "OWNER" }, { initials: "AL", role: "ADMIN" }],
     contributorIds: ["2"],
   },
   {
@@ -135,7 +145,7 @@ export const initialProjects: Project[] = [
       "Build internal documentation hub for runbooks, onboarding, and release checklists.",
     progress: 62,
     status: "Active",
-    teamMembers: [{ initials: "OP" }, { initials: "NB" }, { initials: "CS" }],
+    teamMembers: [{ initials: "OP", role: "OWNER" }, { initials: "NB", role: "MEMBER" }, { initials: "CS", role: "VIEWER" }],
     contributorIds: ["3", "4"],
   },
 ];

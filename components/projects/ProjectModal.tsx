@@ -4,10 +4,12 @@ import { useEffect, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { Input, Textarea } from "@/components/ui/input";
-import { MultiSelect } from "@/components/ui/MultiSelect";
 import { Select } from "@/components/ui/Select";
 import {
-  PROJECT_CONTRIBUTORS,
+  ProjectMemberPicker,
+  type SelectedProjectMember,
+} from "@/components/projects/ProjectMemberPicker";
+import {
   PROJECT_STATUS_OPTIONS,
   type Project,
   type ProjectFormInput,
@@ -54,6 +56,7 @@ function ProjectForm({
   const [contributorIds, setContributorIds] = useState<string[]>(
     project?.contributorIds ?? [],
   );
+  const [selectedMembers, setSelectedMembers] = useState<SelectedProjectMember[]>([]);
 
   const isEdit = mode === "edit";
 
@@ -69,7 +72,7 @@ function ProjectForm({
           </h2>
           <p className="mt-0.5 text-sm text-primary/75">
             {isEdit
-              ? "Update project details and team."
+              ? "Update project details."
               : "Set up a new workspace to organize your tasks."}
           </p>
         </div>
@@ -96,6 +99,10 @@ function ProjectForm({
               description: description.trim(),
               status,
               contributorIds,
+              members: selectedMembers.map((member) => ({
+                userId: member.user.id,
+                role: member.role,
+              })),
             });
             onClose();
           } catch {
@@ -153,23 +160,23 @@ function ProjectForm({
           />
         </div>
 
-        <div>
+        {!isEdit && (
+          <div>
           <label
             htmlFor="project-contributors"
             className="mb-2 block text-xs font-semibold uppercase tracking-wider text-primary/75"
           >
             Team Members
           </label>
-          <MultiSelect
-            id="project-contributors"
-            value={contributorIds}
-            onChange={setContributorIds}
-            options={PROJECT_CONTRIBUTORS}
-            placeholder="Select contributors..."
-            variant="glass"
-            aria-label="Team members"
+          <ProjectMemberPicker
+            value={selectedMembers}
+            onChange={(members) => {
+              setSelectedMembers(members);
+              setContributorIds(members.map((member) => member.user.id));
+            }}
           />
         </div>
+        )}
 
         <div className="flex items-center justify-end gap-3 pt-2">
           <button

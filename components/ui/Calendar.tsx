@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { useCallback, useId, useMemo, useRef, useState } from "react";
 import { CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { inputVariants } from "@/components/ui/fieldVariants";
@@ -148,6 +148,7 @@ type DatePickerProps = {
   className?: string;
   id?: string;
   "aria-label"?: string;
+  disabled?: boolean;
 };
 
 export function DatePicker({
@@ -157,6 +158,7 @@ export function DatePicker({
   className,
   id,
   "aria-label": ariaLabel,
+  disabled = false,
 }: DatePickerProps) {
   const generatedId = useId();
   const pickerId = id ?? generatedId;
@@ -171,12 +173,12 @@ export function DatePicker({
   const close = useCallback(() => setIsOpen(false), []);
   useFloatingClickOutside(isOpen, close, rootRef, menuRef);
 
-  useEffect(() => {
-    if (value) setViewDate(value);
-  }, [value]);
-
   const toggleOpen = () => {
-    if (!isOpen) precomputeStyle();
+    if (disabled) return;
+    if (!isOpen) {
+      setViewDate(value ?? new Date());
+      precomputeStyle();
+    }
     setIsOpen((open) => !open);
   };
 
@@ -190,10 +192,12 @@ export function DatePicker({
         aria-label={ariaLabel}
         aria-haspopup="dialog"
         aria-expanded={isOpen}
+        disabled={disabled}
         onClick={toggleOpen}
         className={cn(
           inputVariants.glass,
           "flex cursor-pointer items-center justify-between gap-2 text-left",
+          disabled && "cursor-not-allowed opacity-60",
         )}
       >
         <span className={cn("truncate", !value && "text-primary/40")}>

@@ -17,15 +17,17 @@ const priorityStyles: Record<Task["priority"], string> = {
 type TaskCardProps = {
   task: Task;
   onClick: () => void;
+  canMove?: boolean;
 };
 
-export function TaskCard({ task, onClick }: TaskCardProps) {
+export function TaskCard({ task, onClick, canMove = true }: TaskCardProps) {
   const [isDragging, setIsDragging] = useState(false);
 
   return (
     <div
-      draggable
+      draggable={canMove}
       onDragStart={(e) => {
+        if (!canMove) return;
         e.dataTransfer.setData("taskId", task.id);
         e.dataTransfer.effectAllowed = "move";
         setIsDragging(true);
@@ -41,7 +43,8 @@ export function TaskCard({ task, onClick }: TaskCardProps) {
         }
       }}
       className={cn(
-        "w-full cursor-grab text-left active:cursor-grabbing",
+        "w-full text-left",
+        canMove ? "cursor-grab active:cursor-grabbing" : "cursor-pointer",
         isDragging && "opacity-40",
       )}
     >
@@ -62,7 +65,9 @@ export function TaskCard({ task, onClick }: TaskCardProps) {
             {task.priority}
           </span>
 
-          <GripVertical className="size-4 shrink-0 text-primary/25" />
+          {canMove ? (
+            <GripVertical className="size-4 shrink-0 text-primary/25" />
+          ) : null}
         </div>
 
         <h3 className="mt-3 text-sm font-medium leading-snug text-primary">

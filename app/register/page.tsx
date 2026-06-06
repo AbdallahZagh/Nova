@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -13,7 +13,7 @@ import { GlassCard } from "@/components/ui/GlassCard";
 import { Input, PasswordInput } from "@/components/ui/input";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { useToast } from "@/components/ui/Toast";
-import { registerApi, verifyOtpApi } from "@/lib/api/auth";
+import { registerApi, resendOtpApi, verifyOtpApi } from "@/lib/api/auth";
 import { ApiError } from "@/lib/api/client";
 import { cn } from "@/lib/cn";
 import { bodyToUsername, validateUsername } from "@/lib/username";
@@ -132,11 +132,22 @@ export default function RegisterPage() {
   const [formError, setFormError] = useState("");
   const [usernameError, setUsernameError] = useState("");
   const [otpError, setOtpError] = useState("");
+  const [otpCooldownUntil, setOtpCooldownUntil] = useState(0);
+  const [now, setNow] = useState(() => Date.now());
 
   const stepNum = step === "details" ? 1 : step === "otp" ? 2 : 3;
+  const resendRemaining = Math.max(
+    0,
+    Math.ceil((otpCooldownUntil - now) / 1000),
+  );
 
-  const handleRegister = async (e: React.FormEvent) => {
-    e.preventDefault();
+  useEffect(() => {
+    if (!otpCooldownUntil) return;
+    const interval = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(interval);
+  }, [otpCooldownUntil]);
+
+  const requestRegisterOtp = async () => {
     setFormError("");
     setUsernameError("");
 
@@ -176,6 +187,9 @@ export default function RegisterPage() {
       }
       setOtp("");
       setOtpError("");
+      const nextNow = Date.now();
+      setOtpCooldownUntil(nextNow + 30_000);
+      setNow(nextNow);
       setStep("otp");
     } catch (err) {
       const msg =
@@ -184,6 +198,44 @@ export default function RegisterPage() {
           : "Could not create account. Try again.";
       setFormError(msg);
       toast({ variant: "error", title: "Registration failed", message: msg });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRegister = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await requestRegisterOtp();
+  };
+
+  const handleResendOtp = async () => {
+    if (resendRemaining > 0) return;
+    setOtpError("");
+    setLoading(true);
+    try {
+      const res = await resendOtpApi(email.trim(), "REGISTER");
+      if (res._devOtp) {
+        toast({
+          variant: "success",
+          title: "OTP resent (dev mode)",
+          message: `Your code: ${res._devOtp}`,
+        });
+      } else {
+        toast({
+          variant: "success",
+          title: "Code resent",
+          message: res.message || "Check your inbox for the fresh code.",
+        });
+      }
+      const nextNow = Date.now();
+      setOtpCooldownUntil(nextNow + 30_000);
+      setNow(nextNow);
+    } catch (err) {
+      setOtpError(
+        err instanceof ApiError
+          ? err.message
+          : "Could not resend verification code. Try again.",
+      );
     } finally {
       setLoading(false);
     }
@@ -409,6 +461,17 @@ export default function RegisterPage() {
                 <Loader2 className="size-4 animate-spin" />
               ) : null}
               {loading ? "Verifying…" : "Verify email →"}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => void handleResendOtp()}
+              disabled={loading || resendRemaining > 0}
+              className="flex w-full items-center justify-center gap-1.5 text-sm font-medium text-primary/50 transition hover:text-accent disabled:cursor-not-allowed disabled:text-primary/30"
+            >
+              {resendRemaining > 0
+                ? `Resend code in ${resendRemaining}s`
+                : "Resend code"}
             </button>
 
             <button

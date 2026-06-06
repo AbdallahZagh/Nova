@@ -25,9 +25,15 @@ type ProjectCardProps = {
   project: Project;
   onEdit: (project: Project) => void;
   onDelete: (project: Project) => void;
+  canDelete?: boolean;
 };
 
-export function ProjectCard({ project, onEdit, onDelete }: ProjectCardProps) {
+export function ProjectCard({
+  project,
+  onEdit,
+  onDelete,
+  canDelete = true,
+}: ProjectCardProps) {
   const progress = Math.max(0, Math.min(100, project.progress));
 
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -161,20 +167,24 @@ export function ProjectCard({ project, onEdit, onDelete }: ProjectCardProps) {
           <Pencil className="size-3.5 shrink-0" />
           Edit project
         </button>
-        <div className="my-1 h-px bg-glass-border" />
-        <button
-          type="button"
-          role="menuitem"
-          onClick={(event) => {
-            event.stopPropagation();
-            setMenuOpen(false);
-            onDelete(project);
-          }}
-          className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-sm text-red-400 light:text-red-600 transition hover:bg-red-500/10"
-        >
-          <Trash2 className="size-3.5 shrink-0" />
-          Delete project
-        </button>
+        {canDelete && (
+          <>
+            <div className="my-1 h-px bg-glass-border" />
+            <button
+              type="button"
+              role="menuitem"
+              onClick={(event) => {
+                event.stopPropagation();
+                setMenuOpen(false);
+                onDelete(project);
+              }}
+              className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-sm text-red-400 light:text-red-600 transition hover:bg-red-500/10"
+            >
+              <Trash2 className="size-3.5 shrink-0" />
+              Delete project
+            </button>
+          </>
+        )}
       </FloatingMenuPortal>
     </div>
   );
