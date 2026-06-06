@@ -10,6 +10,18 @@ datasource db {
   provider = "postgresql"
 }
 
+enum ProjectRole {
+  OWNER
+  ADMIN
+  MEMBER
+  VIEWER
+}
+
+enum TaskCommentStatus {
+  OPEN
+  CLOSED
+}
+
 // ─────────────────────────────────────────────
 // User
 // ─────────────────────────────────────────────
@@ -26,11 +38,16 @@ model User {
   bio          String?
   avatarUrl    String?
 
-  ownedProjects    Project[]
-  memberOfProjects ProjectMember[]
-  assignedTasks    Task[]
-  taskActivities   TaskActivity[]
-  otps             Otp[]
+  ownedProjects      Project[]
+  memberOfProjects   ProjectMember[]
+  assignedTasks      Task[]
+  taskAssignments    TaskAssignment[]
+  taskActivities     TaskActivity[]
+  taskComments       TaskComment[]
+  taskCommentReplies TaskComment[]       @relation("TaskCommentReplier")
+  closedTaskComments TaskComment[]       @relation("TaskCommentCloser")
+  projectSuggestions ProjectSuggestion[]
+  otps               Otp[]
 
   @@map("users")
 }
@@ -40,20 +57,37 @@ model User {
 // ─────────────────────────────────────────────
 
 model Project {
-  id          String  @id @default(uuid())
+  id          String   @id @default(uuid())
   name        String
   description String?
-  status      String  @default("Active")
+  status      String   @default("Active")
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   ownerId String
   owner   User   @relation(fields: [ownerId], references: [id], onDelete: Cascade)
 
-  tasks   Task[]
-  members ProjectMember[]
+  tasks       Task[]
+  members     ProjectMember[]
+  suggestions ProjectSuggestion[]
 
   @@map("projects")
+}
+
+model ProjectSuggestion {
+  id        String   @id @default(uuid())
+  content   String
+  status    String   @default("In Review")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  createdById String?
+  createdBy   User?   @relation(fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@map("project_suggestions")
 }
 
 // ─────────────────────────────────────────────
@@ -63,6 +97,7 @@ model Project {
 model ProjectMember {
   userId    String
   projectId String
+  role      ProjectRole @default(MEMBER)
 
   user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
@@ -94,8 +129,48 @@ model Task {
 
   subtasks       Subtask[]
   taskActivities TaskActivity[]
+  comments       TaskComment[]
+  assignments    TaskAssignment[]
 
   @@map("tasks")
+}
+
+model TaskAssignment {
+  taskId     String
+  userId     String
+  assignedAt DateTime @default(now())
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([taskId, userId])
+  @@map("task_assignments")
+}
+
+model TaskComment {
+  id        String            @id @default(uuid())
+  content   String
+  status    TaskCommentStatus @default(OPEN)
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+
+  replyContent String?
+  repliedAt    DateTime?
+  closedAt     DateTime?
+
+  taskId String
+  task   Task   @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  createdById String?
+  createdBy   User?   @relation(fields: [createdById], references: [id], onDelete: SetNull)
+
+  repliedById String?
+  repliedBy   User?   @relation("TaskCommentReplier", fields: [repliedById], references: [id], onDelete: SetNull)
+
+  closedById String?
+  closedBy   User?   @relation("TaskCommentCloser", fields: [closedById], references: [id], onDelete: SetNull)
+
+  @@map("task_comments")
 }
 
 // ─────────────────────────────────────────────

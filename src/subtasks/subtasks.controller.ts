@@ -16,6 +16,11 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import {
+  ProjectRole,
+  RequireProjectRole,
+} from '../common/decorators/require-project-role.decorator';
+import { ProjectRoleGuard } from '../common/guards/project-role.guard';
 import { CreateSubtaskDto } from './dto/create-subtask.dto';
 import { UpdateSubtaskDto } from './dto/update-subtask.dto';
 import { SubtasksService } from './subtasks.service';
@@ -28,6 +33,8 @@ export class SubtasksController {
   constructor(private readonly subtasksService: SubtasksService) {}
 
   @Post()
+  @UseGuards(ProjectRoleGuard)
+  @RequireProjectRole(ProjectRole.OWNER, ProjectRole.ADMIN, ProjectRole.MEMBER)
   @ApiOperation({
     summary: 'Add a checklist item to a task',
     description:
@@ -41,6 +48,8 @@ export class SubtasksController {
   }
 
   @Patch(':id')
+  @UseGuards(ProjectRoleGuard)
+  @RequireProjectRole(ProjectRole.OWNER, ProjectRole.ADMIN, ProjectRole.MEMBER)
   @ApiOperation({
     summary: 'Update a checklist item',
     description: 'Partially updates the subtask title and/or toggles the isCompleted flag.',
@@ -59,6 +68,8 @@ export class SubtasksController {
   }
 
   @Delete(':id')
+  @UseGuards(ProjectRoleGuard)
+  @RequireProjectRole(ProjectRole.OWNER, ProjectRole.ADMIN, ProjectRole.MEMBER)
   @HttpCode(200)
   @ApiOperation({
     summary: 'Delete a checklist item',

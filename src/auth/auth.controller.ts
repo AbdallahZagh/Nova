@@ -5,6 +5,7 @@ import { AuthService } from './auth.service';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
+import { ResendOtpDto } from './dto/resend-otp.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
 
@@ -58,6 +59,20 @@ export class AuthController {
   @ApiResponse({ status: 404, description: 'No account found with the provided email' })
   verifyOtp(@Body() dto: VerifyOtpDto) {
     return this.authService.verifyOtp(dto);
+  }
+
+  @Post('resend-otp')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Resend a fresh one-time password (OTP)',
+    description:
+      'Invalidates existing OTPs for the requested purpose, creates a fresh 6-digit code, and sends it to the account email.',
+  })
+  @ApiResponse({ status: 200, description: 'Fresh OTP issued and sent' })
+  @ApiResponse({ status: 400, description: 'Validation failed or invalid account state' })
+  @ApiResponse({ status: 404, description: 'No account found with this email' })
+  resendOtp(@Body() dto: ResendOtpDto) {
+    return this.authService.resendOtp(dto);
   }
 
   // ─── Login ────────────────────────────────────────────────────────────────

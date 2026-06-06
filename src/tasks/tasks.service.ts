@@ -1,5 +1,15 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { ProjectRole } from '../common/decorators/require-project-role.decorator';
 import { PrismaService } from '../prisma/prisma.service';
+import {
+  AssignTasksDto,
+  TaskAssignmentInputDto,
+} from './dto/assign-tasks.dto';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
 
@@ -14,9 +24,19 @@ const ASSIGNEE_SELECT = { id: true, fullName: true, avatarUrl: true, roleTitle: 
 
 const ACTIVITY_USER_SELECT = { id: true, fullName: true, avatarUrl: true, roleTitle: true };
 
+const ASSIGNABLE_PROJECT_ROLES = [
+  ProjectRole.OWNER,
+  ProjectRole.ADMIN,
+  ProjectRole.MEMBER,
+];
+
 const TASK_INCLUDE = {
   subtasks: true,
   assignee: { select: ASSIGNEE_SELECT },
+  assignments: {
+    include: { user: { select: ASSIGNEE_SELECT } },
+    orderBy: { assignedAt: 'asc' as const },
+  },
   taskActivities: {
     orderBy: { createdAt: 'desc' as const },
     include: { createdBy: { select: ACTIVITY_USER_SELECT } },
@@ -43,6 +63,7 @@ export class TasksService {
     const assigneeId = dto.assigneeId ?? userId;
 
     if (assigneeId) {
+      await this.ensureAssignableProjectMember(dto.projectId, assigneeId);
       const name = await this.resolveUserName(assigneeId);
       activities.push({
         type: 'ASSIGNEE_CHANGE',
@@ -60,6 +81,13 @@ export class TasksService {
         dueDate: dto.dueDate ? new Date(dto.dueDate) : undefined,
         projectId: dto.projectId,
         assigneeId,
+        ...(assigneeId
+          ? {
+              assignments: {
+                create: { userId: assigneeId },
+              },
+            }
+          : {}),
         ...(dto.subtasks?.length
           ? {
               subtasks: {
@@ -106,11 +134,125 @@ export class TasksService {
     return tasks.map((task: any) => this.formatTask(task));
   }
 
+  async assignTasks(actorId: string, dto: AssignTasksDto) {
+    const assignments = dto.assignments?.length
+      ? dto.assignments
+      : [{ userId: dto.userId!, taskIds: dto.taskIds! }];
+
+    this.ensureNoDuplicateTaskAssignmentPairs(assignments);
+
+    const taskIds = [...new Set(assignments.flatMap((assignment) => assignment.taskIds))];
+    const tasks = await (this.prisma as any).task.findMany({
+      where: { id: { in: taskIds } },
+      select: { id: true, projectId: true },
+    });
+    const tasksById = new Map(tasks.map((task: any) => [task.id, task]));
+
+    for (const taskId of taskIds) {
+      if (!tasksById.has(taskId)) throw new NotFoundException(`Task not found: ${taskId}`);
+    }
+
+    for (const assignment of assignments) {
+      for (const taskId of assignment.taskIds) {
+        const task = tasksById.get(taskId);
+        await this.ensureActorCanAssignTasks(task.projectId, actorId);
+        await this.ensureAssignableProjectMember(task.projectId, assignment.userId);
+      }
+    }
+
+    const updatedTasks: any[] = [];
+
+    for (const assignment of assignments) {
+      const assigneeName = await this.resolveUserName(assignment.userId);
+
+      for (const taskId of assignment.taskIds) {
+        const updated = await (this.prisma as any).task.update({
+          where: { id: taskId },
+          data: {
+            assigneeId: assignment.userId,
+            assignments: {
+              upsert: {
+                where: {
+                  taskId_userId: {
+                    taskId,
+                    userId: assignment.userId,
+                  },
+                },
+                update: {},
+                create: { userId: assignment.userId },
+              },
+            },
+            taskActivities: {
+              create: {
+                type: 'ASSIGNEE_CHANGE',
+                content: `Assigned to ${assigneeName}`,
+                createdById: actorId,
+              },
+            },
+          },
+          include: TASK_INCLUDE,
+        });
+
+        updatedTasks.push(this.formatTask(updated));
+      }
+    }
+
+    return updatedTasks;
+  }
+
+  async unassignTask(actorId: string, taskId: string, userId: string) {
+    const task = await (this.prisma as any).task.findUnique({
+      where: { id: taskId },
+      select: { id: true, projectId: true, assigneeId: true },
+    });
+    if (!task) throw new NotFoundException('Task not found');
+
+    await this.ensureActorCanAssignTasks(task.projectId, actorId);
+
+    const assignment = await (this.prisma as any).taskAssignment.findUnique({
+      where: { taskId_userId: { taskId, userId } },
+    });
+    if (!assignment) throw new NotFoundException('Task assignment not found');
+
+    await (this.prisma as any).taskAssignment.delete({
+      where: { taskId_userId: { taskId, userId } },
+    });
+
+    const nextAssignment = await (this.prisma as any).taskAssignment.findFirst({
+      where: { taskId },
+      orderBy: { assignedAt: 'asc' },
+    });
+
+    const updated = await (this.prisma as any).task.update({
+      where: { id: taskId },
+      data: {
+        assigneeId:
+          task.assigneeId === userId
+            ? (nextAssignment?.userId ?? null)
+            : task.assigneeId,
+        taskActivities: {
+          create: {
+            type: 'ASSIGNEE_CHANGE',
+            content: `Unassigned ${await this.resolveUserName(userId)}`,
+            createdById: actorId,
+          },
+        },
+      },
+      include: TASK_INCLUDE,
+    });
+
+    return this.formatTask(updated);
+  }
+
   // ─── Update ───────────────────────────────────────────────────────────────
 
   async update(userId: string, id: string, dto: UpdateTaskDto) {
     const task = await (this.prisma as any).task.findUnique({ where: { id } });
     if (!task) throw new NotFoundException('Task not found');
+
+    if (dto.assigneeId) {
+      await this.ensureAssignableProjectMember(task.projectId, dto.assigneeId);
+    }
 
     const activityLogs = await this.buildUpdateActivities(userId, task, dto);
 
@@ -131,6 +273,24 @@ export class TasksService {
       where: { id },
       data: {
         ...data,
+        ...(dto.assigneeId === null
+          ? { assignments: { deleteMany: {} } }
+          : dto.assigneeId
+            ? {
+                assignments: {
+                  upsert: {
+                    where: {
+                      taskId_userId: {
+                        taskId: id,
+                        userId: dto.assigneeId,
+                      },
+                    },
+                    update: {},
+                    create: { userId: dto.assigneeId },
+                  },
+                },
+              }
+            : {}),
         ...(activityLogs.length
           ? {
               taskActivities: {
@@ -243,6 +403,47 @@ export class TasksService {
     return user?.fullName ?? 'Unknown user';
   }
 
+  private async ensureAssignableProjectMember(projectId: string, userId: string) {
+    const membership = await (this.prisma as any).projectMember.findUnique({
+      where: { userId_projectId: { userId, projectId } },
+      select: { role: true },
+    });
+
+    if (!membership) {
+      throw new BadRequestException('Task assignee must be a member of this project');
+    }
+
+    if (!ASSIGNABLE_PROJECT_ROLES.includes(membership.role)) {
+      throw new BadRequestException('Viewers cannot be assigned tasks');
+    }
+  }
+
+  private async ensureActorCanAssignTasks(projectId: string, actorId: string) {
+    const membership = await (this.prisma as any).projectMember.findUnique({
+      where: { userId_projectId: { userId: actorId, projectId } },
+      select: { role: true },
+    });
+
+    if (!membership || !ASSIGNABLE_PROJECT_ROLES.includes(membership.role)) {
+      throw new ForbiddenException('You do not have permission to assign tasks in this project');
+    }
+  }
+
+  private ensureNoDuplicateTaskAssignmentPairs(assignments: TaskAssignmentInputDto[]) {
+    const seenPairs = new Set<string>();
+
+    for (const assignment of assignments) {
+      for (const taskId of assignment.taskIds) {
+        const pair = `${taskId}:${assignment.userId}`;
+        if (seenPairs.has(pair)) {
+          throw new BadRequestException('The same task cannot be assigned to the same user more than once in one request');
+        }
+
+        seenPairs.add(pair);
+      }
+    }
+  }
+
   // ─── Response shaping ─────────────────────────────────────────────────────
 
   private formatActivity(activity: any) {
@@ -270,12 +471,18 @@ export class TasksService {
         createdBy: null,
       } as const);
 
-    const { taskActivities, ...rest } = task;
+    const assignees = (task.assignments ?? []).map((assignment: any) => ({
+      assignedAt: assignment.assignedAt,
+      user: assignment.user,
+    }));
+
+    const { taskActivities, assignments, ...rest } = task;
 
     return {
       ...rest,
       createdAt: task.createdAt,
       updatedAt: task.updatedAt,
+      assignees,
       activities,
       lastActivity,
     };

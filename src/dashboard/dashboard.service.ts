@@ -13,6 +13,7 @@ function myTasksWhere(userId: string) {
   return {
     OR: [
       { assigneeId: userId },
+      { assignments: { some: { userId } } },
       {
         assigneeId: null,
         project: {

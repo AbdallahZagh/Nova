@@ -1,14 +1,17 @@
-import { Body, Controller, Delete, Get, HttpCode, Patch, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiOperation,
+  ApiQuery,
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
 import { AuthService } from '../auth/auth.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { MailService } from '../mail/mail.service';
 import { UpdateProfileDto } from './dto/update-profile.dto';
+import { UserSearchDto } from './dto/user-search.dto';
 import { UsersService } from './users.service';
 
 @ApiTags('Users')
@@ -19,7 +22,44 @@ export class UsersController {
   constructor(
     private readonly usersService: UsersService,
     private readonly authService: AuthService,
+    private readonly mailService: MailService,
   ) {}
+
+  @Get('search')
+  @ApiOperation({ summary: 'Search users by name or email for team invitations' })
+  @ApiQuery({ name: 'q', required: false, description: 'Search term' })
+  @ApiResponse({
+    status: 200,
+    description: 'Safe user search results',
+    schema: {
+      example: [
+        {
+          id: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
+          fullName: 'Sarah Johnson',
+          email: 'sarah.johnson@devteam.io',
+          avatarUrl: null,
+        },
+      ],
+    },
+  })
+  @ApiResponse({ status: 401, description: 'Missing or invalid Bearer token' })
+  search(@Query() dto: UserSearchDto) {
+    return this.usersService.searchUsers(dto.q);
+  }
+
+  @Post('me/test-email')
+  @HttpCode(200)
+  @ApiOperation({
+    summary: 'Send a test email to the current user',
+    description: 'Useful for checking SMTP configuration without creating a new OTP.',
+  })
+  @ApiResponse({ status: 200, description: 'Test email sent' })
+  @ApiResponse({ status: 401, description: 'Missing or invalid Bearer token' })
+  async sendTestEmail(@CurrentUser('id') userId: string) {
+    const profile = await this.usersService.getProfile(userId);
+    await this.mailService.sendTestEmail(profile.email);
+    return { message: 'Test email sent successfully' };
+  }
 
   @Get('me')
   @ApiOperation({

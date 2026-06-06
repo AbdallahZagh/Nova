@@ -18,6 +18,12 @@ import {
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
+import {
+  ProjectRole,
+  RequireProjectRole,
+} from '../common/decorators/require-project-role.decorator';
+import { ProjectRoleGuard } from '../common/guards/project-role.guard';
+import { AssignTasksDto } from './dto/assign-tasks.dto';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
 import { TasksService } from './tasks.service';
@@ -30,6 +36,8 @@ export class TasksController {
   constructor(private readonly tasksService: TasksService) {}
 
   @Post()
+  @UseGuards(ProjectRoleGuard)
+  @RequireProjectRole(ProjectRole.OWNER, ProjectRole.ADMIN, ProjectRole.MEMBER)
   @ApiOperation({
     summary: 'Create a new task card',
     description:
@@ -41,6 +49,53 @@ export class TasksController {
   @ApiResponse({ status: 401, description: 'Missing or invalid Bearer token' })
   create(@CurrentUser('id') userId: string, @Body() dto: CreateTaskDto) {
     return this.tasksService.create(userId, dto);
+  }
+
+  @Post('assign')
+  @ApiOperation({
+    summary: 'Assign multiple tasks to one or more project users',
+    description:
+      'Assigns taskIds to userId, or accepts assignments: [{ userId, taskIds }]. Assignees must be project owners, admins, or members. Viewers cannot be assigned tasks.',
+  })
+  @ApiResponse({ status: 200, description: 'Tasks assigned successfully' })
+  @ApiResponse({ status: 400, description: 'Validation failed or assignee cannot receive tasks' })
+  @ApiResponse({ status: 401, description: 'Missing or invalid Bearer token' })
+  @ApiResponse({ status: 403, description: 'You do not have permission to assign one or more tasks' })
+  @ApiResponse({ status: 404, description: 'Task not found' })
+  assignTasks(
+    @CurrentUser('id') actorId: string,
+    @Body() dto: AssignTasksDto,
+  ) {
+    return this.tasksService.assignTasks(actorId, dto);
+  }
+
+  @Delete(':taskId/assignees/:userId')
+  @HttpCode(200)
+  @ApiOperation({
+    summary: 'Remove a user assignment from a task',
+    description:
+      'Removes one assignee from one task. The actor must be an owner, admin, or member in the task project.',
+  })
+  @ApiParam({
+    name: 'taskId',
+    example: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
+    description: 'Task UUID',
+  })
+  @ApiParam({
+    name: 'userId',
+    example: 'b2c3d4e5-f6a7-8901-bcde-f12345678901',
+    description: 'Assigned user UUID to remove from this task',
+  })
+  @ApiResponse({ status: 200, description: 'Assignment removed and updated task returned' })
+  @ApiResponse({ status: 401, description: 'Missing or invalid Bearer token' })
+  @ApiResponse({ status: 403, description: 'You do not have permission to unassign this task' })
+  @ApiResponse({ status: 404, description: 'Task or assignment not found' })
+  unassignTask(
+    @CurrentUser('id') actorId: string,
+    @Param('taskId') taskId: string,
+    @Param('userId') userId: string,
+  ) {
+    return this.tasksService.unassignTask(actorId, taskId, userId);
   }
 
   @Get(':id')
@@ -87,6 +142,8 @@ export class TasksController {
   }
 
   @Patch(':id')
+  @UseGuards(ProjectRoleGuard)
+  @RequireProjectRole(ProjectRole.OWNER, ProjectRole.ADMIN, ProjectRole.MEMBER)
   @ApiOperation({
     summary: 'Update a task card',
     description:
@@ -115,6 +172,8 @@ export class TasksController {
   }
 
   @Delete(':id')
+  @UseGuards(ProjectRoleGuard)
+  @RequireProjectRole(ProjectRole.OWNER, ProjectRole.ADMIN, ProjectRole.MEMBER)
   @HttpCode(200)
   @ApiOperation({
     summary: 'Delete a task card',

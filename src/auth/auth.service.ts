@@ -8,10 +8,12 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { normalizeUsername } from '../common/utils/username.util';
+import { MailService } from '../mail/mail.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
+import { ResendOtpDto } from './dto/resend-otp.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
 
@@ -20,6 +22,7 @@ export class AuthService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
+    private readonly mailService: MailService,
   ) {}
 
   // ─── Helpers ──────────────────────────────────────────────────────────────
@@ -34,6 +37,27 @@ export class AuthService {
 
   private otpExpiry(): Date {
     return new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
+  }
+
+  private async issueOtp(userId: string, email: string, purpose: ResendOtpDto['purpose']) {
+    await (this.prisma as any).otp.deleteMany({
+      where: { userId, purpose },
+    });
+
+    const code = this.generateOtpCode();
+
+    await (this.prisma as any).otp.create({
+      data: {
+        userId,
+        code,
+        purpose,
+        expiresAt: this.otpExpiry(),
+      },
+    });
+
+    await this.mailService.sendOtpEmail(email, code, purpose);
+
+    return code;
   }
 
   // ─── Register ─────────────────────────────────────────────────────────────
@@ -69,21 +93,7 @@ export class AuthService {
       },
     });
 
-    // Clean up any leftover REGISTER OTPs for this user before creating a fresh one
-    await (this.prisma as any).otp.deleteMany({
-      where: { userId: user.id, purpose: 'REGISTER' },
-    });
-
-    const code = this.generateOtpCode();
-
-    await (this.prisma as any).otp.create({
-      data: {
-        userId: user.id,
-        code,
-        purpose: 'REGISTER',
-        expiresAt: this.otpExpiry(),
-      },
-    });
+    const code = await this.issueOtp(user.id, user.email, 'REGISTER');
 
     return {
       message:
@@ -149,6 +159,31 @@ export class AuthService {
     };
   }
 
+  async resendOtp(dto: ResendOtpDto) {
+    const user = await (this.prisma as any).user.findUnique({
+      where: { email: dto.email },
+    });
+
+    if (!user) throw new NotFoundException('No account found with this email address');
+
+    if (dto.purpose === 'REGISTER' && user.isActive) {
+      throw new BadRequestException('This account is already verified');
+    }
+
+    if (dto.purpose === 'REACTIVATE' && !user.isArchived) {
+      throw new BadRequestException('This account is not archived');
+    }
+
+    const code = await this.issueOtp(user.id, user.email, dto.purpose);
+
+    return {
+      message: 'A fresh verification code has been sent to your email address.',
+      email: user.email,
+      purpose: dto.purpose,
+      ...(process.env.NODE_ENV !== 'production' && { _devOtp: code }),
+    };
+  }
+
   // ─── Login ────────────────────────────────────────────────────────────────
 
   async login(dto: LoginDto) {
@@ -190,21 +225,7 @@ export class AuthService {
 
     if (!user) throw new NotFoundException('No account found with this email address');
 
-    // Invalidate any existing forgot-password OTPs for this user
-    await (this.prisma as any).otp.deleteMany({
-      where: { userId: user.id, purpose: 'FORGOT_PASSWORD' },
-    });
-
-    const code = this.generateOtpCode();
-
-    await (this.prisma as any).otp.create({
-      data: {
-        userId: user.id,
-        code,
-        purpose: 'FORGOT_PASSWORD',
-        expiresAt: this.otpExpiry(),
-      },
-    });
+    const code = await this.issueOtp(user.id, user.email, 'FORGOT_PASSWORD');
 
     return {
       message: 'A password reset code has been sent to your email address.',
@@ -285,21 +306,7 @@ export class AuthService {
       return { message: genericMessage };
     }
 
-    // Clear any stale REACTIVATE OTPs
-    await (this.prisma as any).otp.deleteMany({
-      where: { userId: user.id, purpose: 'REACTIVATE' },
-    });
-
-    const code = this.generateOtpCode();
-
-    await (this.prisma as any).otp.create({
-      data: {
-        userId: user.id,
-        code,
-        purpose: 'REACTIVATE',
-        expiresAt: this.otpExpiry(),
-      },
-    });
+    const code = await this.issueOtp(user.id, user.email, 'REACTIVATE');
 
     return {
       message: genericMessage,

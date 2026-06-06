@@ -55,6 +55,10 @@ export class TimelineService {
         projectId: true,
         project: { select: { id: true, name: true } },
         assignee: { select: ASSIGNEE_SELECT },
+        assignments: {
+          include: { user: { select: ASSIGNEE_SELECT } },
+          orderBy: { assignedAt: 'asc' },
+        },
       },
       orderBy: { dueDate: 'asc' },
     });
@@ -70,6 +74,10 @@ export class TimelineService {
       completedAt: task.completedAt ?? null,
       project: task.project ?? null,
       assignee: task.assignee ?? null,
+      assignees: (task.assignments ?? []).map((assignment: any) => ({
+        assignedAt: assignment.assignedAt,
+        user: assignment.user,
+      })),
       // Convenience fields for the frontend grid
       windowStart: window.start,
       windowEnd: window.end,
