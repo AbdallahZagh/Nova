@@ -124,7 +124,7 @@ export default function ProjectsPage() {
 
   return (
     <div className="mx-auto flex max-w-7xl flex-col gap-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-4"> 
         <div>
           <h1 className="text-3xl font-semibold tracking-tight text-primary">
             Projects
