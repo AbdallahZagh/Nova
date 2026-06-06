@@ -3,39 +3,44 @@ import {
   InternalServerErrorException,
   Logger,
 } from '@nestjs/common';
-import * as nodemailer from 'nodemailer';
+import { Resend } from 'resend';
 
 type OtpPurpose = 'REGISTER' | 'FORGOT_PASSWORD' | 'REACTIVATE';
 
 @Injectable()
 export class MailService {
   private readonly logger = new Logger(MailService.name);
-  private readonly transporter: nodemailer.Transporter | null;
+  private readonly resend: Resend | null;
+  private readonly from: string;
 
   constructor() {
-    this.transporter = this.createTransporter();
+    const apiKey = process.env.RESEND_API_KEY;
+    this.resend = apiKey ? new Resend(apiKey) : null;
+
+    const name = process.env.MAIL_FROM_NAME ?? 'Nova';
+    const email = process.env.MAIL_FROM_EMAIL ?? 'onboarding@resend.dev';
+    this.from = `${name} <${email}>`;
   }
 
   async sendOtpEmail(to: string, code: string, purpose: OtpPurpose) {
-    if (!this.transporter) {
+    if (!this.resend) {
       this.handleMissingConfig();
       return;
     }
 
     const subject = this.subjectForPurpose(purpose);
-    const html = this.renderOtpHtml(code, purpose);
-    const text = this.renderOtpText(code, purpose);
 
-    try {
-      await this.transporter.sendMail({
-        from: this.fromAddress(),
-        to,
-        subject,
-        text,
-        html,
-      });
-    } catch (error) {
-      this.logger.error('Failed to send OTP email', error);
+    const { error } = await this.resend.emails.send({
+      from: this.from,
+      to,
+      subject,
+      text: this.renderOtpText(code, purpose),
+      html: this.renderOtpHtml(code, purpose),
+    });
+
+    if (error) {
+      this.logger.error('Failed to send OTP email');
+      this.logger.error(error);
       throw new InternalServerErrorException(
         'Unable to send verification email. Please try again later.',
       );
@@ -43,21 +48,22 @@ export class MailService {
   }
 
   async sendProjectInviteEmail(to: string, projectName: string, role: string) {
-    if (!this.transporter) {
+    if (!this.resend) {
       this.handleMissingConfig();
       return;
     }
 
-    try {
-      await this.transporter.sendMail({
-        from: this.fromAddress(),
-        to,
-        subject: `You have been added to ${projectName}`,
-        text: this.renderProjectInviteText(projectName, role),
-        html: this.renderProjectInviteHtml(projectName, role),
-      });
-    } catch (error) {
-      this.logger.error('Failed to send project invite email', error);
+    const { error } = await this.resend.emails.send({
+      from: this.from,
+      to,
+      subject: `You have been added to ${projectName}`,
+      text: this.renderProjectInviteText(projectName, role),
+      html: this.renderProjectInviteHtml(projectName, role),
+    });
+
+    if (error) {
+      this.logger.error('Failed to send project invite email');
+      this.logger.error(error);
       throw new InternalServerErrorException(
         'Project member was added, but the invitation email could not be sent.',
       );
@@ -65,63 +71,42 @@ export class MailService {
   }
 
   async sendTestEmail(to: string) {
-    if (!this.transporter) {
+    if (!this.resend) {
       this.handleMissingConfig();
       return;
     }
 
-    try {
-      await this.transporter.sendMail({
-        from: this.fromAddress(),
-        to,
-        subject: 'Nova email test',
-        text: 'Your Nova backend email configuration is working.',
-        html: `
-          <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #111827;">
-            <h2 style="margin: 0 0 12px;">Nova email test</h2>
-            <p>Your Nova backend email configuration is working.</p>
-          </div>
-        `,
-      });
-    } catch (error) {
-      this.logger.error('Failed to send test email', error);
+    const { error } = await this.resend.emails.send({
+      from: this.from,
+      to,
+      subject: 'Nova email test',
+      text: 'Your Nova backend email configuration is working.',
+      html: `
+        <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #111827;">
+          <h2 style="margin: 0 0 12px;">Nova email test</h2>
+          <p>Your Nova backend email configuration is working.</p>
+        </div>
+      `,
+    });
+
+    if (error) {
+      this.logger.error('Failed to send test email');
+      this.logger.error(error);
       throw new InternalServerErrorException(
         'Unable to send test email. Please check the backend mail configuration.',
       );
     }
   }
 
-  private createTransporter(): nodemailer.Transporter | null {
-    const host = process.env.MAIL_HOST;
-    const port = Number(process.env.MAIL_PORT);
-    const user = process.env.MAIL_USER;
-    const pass = process.env.MAIL_PASS?.replace(/\s/g, '');
-
-    if (!host || !port || !user || !pass) return null;
-
-    return nodemailer.createTransport({
-      host,
-      port,
-      secure: process.env.MAIL_SECURE === 'true',
-      auth: { user, pass },
-    });
-  }
-
   private handleMissingConfig() {
     const message =
-      'Mail service is not configured. Set MAIL_HOST, MAIL_PORT, MAIL_USER, and MAIL_PASS.';
+      'Mail service is not configured. Set RESEND_API_KEY in your environment variables.';
 
     if (process.env.NODE_ENV === 'production') {
       throw new InternalServerErrorException(message);
     }
 
     this.logger.warn(message);
-  }
-
-  private fromAddress(): string {
-    const name = process.env.MAIL_FROM_NAME ?? 'Nova';
-    const email = process.env.MAIL_FROM_EMAIL ?? process.env.MAIL_USER;
-    return email ? `"${name}" <${email}>` : name;
   }
 
   private subjectForPurpose(purpose: OtpPurpose): string {
