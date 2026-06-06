@@ -2,11 +2,6 @@
   command = "npm run build"
   publish = ".next"
 
-# Proxy /api/* to the Render backend at the CDN level.
-# Using force = true so this takes priority over any Next.js rewrite rules.
-# Update the `to` URL if the backend host ever changes.
-[[redirects]]
-  from = "/api/*"
-  to = "https://nova-l5df.onrender.com/api/:splat"
-  status = 200
-  force = true
+[build.environment]
+  # Tells @netlify/plugin-nextjs to keep SSR / API routes as serverless functions
+  NETLIFY_NEXT_PLUGIN_SKIP = "false"
