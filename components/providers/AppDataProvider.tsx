@@ -172,34 +172,80 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     [tasksByProject],
   );
 
+  const hydrateTaskAssignees = useCallback(
+    (projectId: string, task: Task, assigneeIds: string[] = []) => {
+      const ids =
+        assigneeIds.length > 0
+          ? assigneeIds
+          : task.assigneeIds ??
+            (task.assignees.map((assignee) => assignee.id).filter(Boolean) as string[]);
+      if (ids.length === 0) return { ...task, assigneeIds: [] };
+
+      const project =
+        projectDetails[projectId] ?? projects.find((item) => item.id === projectId);
+      const members = project?.teamMembers ?? [];
+      const assignees = ids.map((id) => {
+        const existing = task.assignees.find((assignee) => assignee.id === id);
+        if (existing && existing.name !== "Unknown") return existing;
+
+        const member = members.find(
+          (item) => item.userId === id || item.id === id,
+        );
+        return {
+          id,
+          initials:
+            member?.initials ??
+            existing?.initials ??
+            (id.slice(0, 2).toUpperCase() || "??"),
+          name: member?.name ?? member?.email ?? existing?.name ?? "Unknown",
+          avatarUrl: member?.imageUrl ?? existing?.avatarUrl,
+        };
+      });
+
+      return {
+        ...task,
+        assigneeIds: ids,
+        assigneeId: ids[0],
+        assignees,
+      };
+    },
+    [projectDetails, projects],
+  );
+
   const createTask = useCallback(
     async (projectId: string, input: CreateTaskInput) => {
       const created = await createTaskApi(projectId, input);
+      const hydrated = hydrateTaskAssignees(projectId, created, input.assigneeIds);
     setTasksByProject((prev) => ({
       ...prev,
-      [projectId]: sortTasksByStatus([...(prev[projectId] ?? []), created]),
+      [projectId]: sortTasksByStatus([...(prev[projectId] ?? []), hydrated]),
     }));
       await syncProjectFromApi(projectId);
-      return created;
+      return hydrated;
     },
-    [syncProjectFromApi],
+    [hydrateTaskAssignees, syncProjectFromApi],
   );
 
   const updateTask = useCallback(
     async (projectId: string, updated: Task) => {
       const saved = await updateTaskApi(updated);
+      const hydrated = hydrateTaskAssignees(
+        projectId,
+        saved,
+        updated.assigneeIds ?? [],
+      );
     setTasksByProject((prev) => ({
       ...prev,
       [projectId]: sortTasksByStatus(
         (prev[projectId] ?? []).map((task) =>
-          task.id === saved.id ? saved : task,
+          task.id === hydrated.id ? hydrated : task,
         ),
       ),
     }));
       await syncProjectFromApi(projectId);
-      return saved;
+      return hydrated;
     },
-    [syncProjectFromApi],
+    [hydrateTaskAssignees, syncProjectFromApi],
   );
 
   const deleteTask = useCallback(
@@ -218,7 +264,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     (
       projectId: string,
       taskId: string,
-      updater: (subtasks: SubtaskItem[]) => SubtaskItem[],
+      updater: (subtasks: Task["subtasks"]) => Task["subtasks"],
     ) => {
       setTasksByProject((prev) => ({
         ...prev,

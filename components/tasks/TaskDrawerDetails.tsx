@@ -10,7 +10,10 @@ import { Select } from "@/components/ui/Select";
 import { useToast } from "@/components/ui/Toast";
 import { useAppData } from "@/components/providers/AppDataProvider";
 import { ApiError } from "@/lib/api/client";
-import { isPersistedSubtaskId } from "@/lib/api/subtasks";
+import {
+  isPersistedSubtaskId,
+  syncSubtaskAssigneesApi,
+} from "@/lib/api/subtasks";
 import {
   closeTaskCommentApi,
   createTaskCommentApi,
@@ -56,7 +59,10 @@ type TaskDrawerDetailsProps = {
   saving?: boolean;
   readOnly?: boolean;
   projectRole?: ProjectMemberRole | null;
+  canAssignTasks?: boolean;
   assigneeOptions?: SelectOption[];
+  canAssignSubtasks?: boolean;
+  subtaskAssigneeOptions?: SelectOption[];
 };
 
 const PRIORITY_OPTIONS = [
@@ -98,19 +104,31 @@ function SubtaskRow({
   committedLabel,
   busy,
   readOnly,
+  canAssignSubtasks,
+  assigneeOptions,
+  assignmentBusy,
+  assignmentChanged,
   onToggle,
   onLabelChange,
   onLabelCommit,
   onDelete,
+  onAssigneesChange,
+  onAssigneesSave,
 }: {
   subtask: Subtask;
   committedLabel: string;
   busy?: boolean;
   readOnly?: boolean;
+  canAssignSubtasks?: boolean;
+  assigneeOptions: SelectOption[];
+  assignmentBusy?: boolean;
+  assignmentChanged?: boolean;
   onToggle: () => void;
   onLabelChange: (label: string) => void;
   onLabelCommit: () => void;
   onDelete: () => void;
+  onAssigneesChange: (assigneeIds: string[]) => void;
+  onAssigneesSave: () => void;
 }) {
   const [editing, setEditing] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -129,7 +147,7 @@ function SubtaskRow({
   };
 
   return (
-    <li className="group flex items-center gap-2 rounded-xl border border-glass bg-glass-button/40 px-3 py-2 transition hover:border-glass/80">
+    <li className="group flex flex-wrap items-center gap-2 rounded-xl border border-glass bg-glass-button/40 px-3 py-2 transition hover:border-glass/80">
       <button
         type="button"
         aria-label={subtask.done ? "Mark incomplete" : "Mark complete"}
@@ -218,6 +236,50 @@ function SubtaskRow({
           <X className="size-3.5" />
         </button>
       )}
+      {canAssignSubtasks && !readOnly ? (
+        <div className="basis-full pt-1">
+          <MultiSelect
+            value={subtask.assigneeIds ?? []}
+            onChange={onAssigneesChange}
+            options={assigneeOptions}
+            placeholder="Assign subtask..."
+            variant="glass"
+            aria-label="Subtask assignees"
+            disabled={assignmentBusy || assigneeOptions.length === 0}
+          />
+          <button
+            type="button"
+            onClick={onAssigneesSave}
+            disabled={!assignmentChanged || assignmentBusy}
+            className="mt-2 w-full rounded-xl border border-accent/35 bg-accent/10 px-3 py-2 text-xs font-semibold text-accent transition hover:bg-accent/15 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {assignmentBusy ? "Saving..." : "Save Subtask Assignment"}
+          </button>
+        </div>
+      ) : (subtask.assignees?.length ?? 0) > 0 ? (
+        <div className="flex basis-full flex-wrap gap-1.5 pt-1">
+          {subtask.assignees?.map((assignee, index) => (
+            <span
+              key={assignee.id ?? `${assignee.initials}-${assignee.name}-${index}`}
+              className="inline-flex items-center gap-1.5 rounded-full border border-glass bg-glass-card px-2 py-1 text-[11px] font-medium text-primary/65"
+            >
+              <span className="flex size-4 items-center justify-center overflow-hidden rounded-full bg-glass-button text-[8px] font-semibold text-primary">
+                {assignee.avatarUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={assignee.avatarUrl}
+                    alt={assignee.name}
+                    className="size-full object-cover"
+                  />
+                ) : (
+                  assignee.initials
+                )}
+              </span>
+              {assignee.name}
+            </span>
+          ))}
+        </div>
+      ) : null}
     </li>
   );
 }
@@ -232,7 +294,10 @@ export function TaskDrawerDetails({
   saving = false,
   readOnly = false,
   projectRole = null,
+  canAssignTasks = false,
   assigneeOptions = [],
+  canAssignSubtasks = false,
+  subtaskAssigneeOptions = [],
 }: TaskDrawerDetailsProps) {
   const { toast } = useToast();
   const { createSubtask, updateSubtask, deleteSubtask } = useAppData();
@@ -245,6 +310,7 @@ export function TaskDrawerDetails({
   const [newSubtaskLabel, setNewSubtaskLabel] = useState("");
   const [addingSubtask, setAddingSubtask] = useState(false);
   const [busySubtaskId, setBusySubtaskId] = useState<string | null>(null);
+  const [busySubtaskAssignmentId, setBusySubtaskAssignmentId] = useState<string | null>(null);
   const [comments, setComments] = useState<TaskComment[]>([]);
   const [commentsLoading, setCommentsLoading] = useState(true);
   const [commentContent, setCommentContent] = useState("");
@@ -254,6 +320,13 @@ export function TaskDrawerDetails({
   const [busyCommentId, setBusyCommentId] = useState<string | null>(null);
   const [labelSnapshots, setLabelSnapshots] = useState<Record<string, string>>(
     () => Object.fromEntries(task.subtasks.map((s) => [s.id, s.label])),
+  );
+  const [subtaskAssigneeSnapshots, setSubtaskAssigneeSnapshots] = useState<
+    Record<string, string[]>
+  >(() =>
+    Object.fromEntries(
+      task.subtasks.map((s) => [s.id, s.assigneeIds ?? []]),
+    ),
   );
 
   useEffect(() => {
@@ -269,6 +342,11 @@ export function TaskDrawerDetails({
     setNewSubtaskLabel("");
     setLabelSnapshots(
       Object.fromEntries(task.subtasks.map((s) => [s.id, s.label])),
+    );
+    setSubtaskAssigneeSnapshots(
+      Object.fromEntries(
+        task.subtasks.map((s) => [s.id, s.assigneeIds ?? []]),
+      ),
     );
   }, [task]);
 
@@ -311,6 +389,17 @@ export function TaskDrawerDetails({
     if (taskSnapshot(task) !== taskSnapshot(draft)) return true;
     return hasUncommittedSubtaskLabels(draft.subtasks, labelSnapshots);
   }, [task, draft, newSubtaskLabel, labelSnapshots]);
+
+  const hasAssigneeChanges = useMemo(() => {
+    const current = [
+      ...(task.assigneeIds ??
+        (task.assignees
+          .map((assignee) => assignee.id)
+          .filter(Boolean) as string[])),
+    ].sort();
+    const next = [...(draft.assigneeIds ?? [])].sort();
+    return JSON.stringify(current) !== JSON.stringify(next);
+  }, [task.assigneeIds, task.assignees, draft.assigneeIds]);
 
   const updateSubtasksLocal = (subtasks: Subtask[]) =>
     setDraft((prev) => ({ ...prev, subtasks }));
@@ -436,6 +525,86 @@ export function TaskDrawerDetails({
     updateSubtasksLocal(
       draft.subtasks.map((s) => (s.id === id ? { ...s, label } : s)),
     );
+
+  const updateSubtaskAssigneesLocal = (id: string, assigneeIds: string[]) =>
+    updateSubtasksLocal(
+      draft.subtasks.map((s) =>
+        s.id === id
+          ? {
+              ...s,
+              assigneeIds,
+              assignees: assigneeIds.map((assigneeId) => {
+                const existing = s.assignees?.find((a) => a.id === assigneeId);
+                const option = subtaskAssigneeOptions.find(
+                  (item) => item.value === assigneeId,
+                );
+                const label = option?.label ?? existing?.name ?? "Unknown";
+                return {
+                  id: assigneeId,
+                  initials:
+                    existing?.initials ??
+                    label
+                      .split(/\s+/)
+                      .filter(Boolean)
+                      .map((part) => part[0])
+                      .join("")
+                      .slice(0, 2)
+                      .toUpperCase(),
+                  name: label,
+                  avatarUrl: existing?.avatarUrl,
+                };
+              }),
+            }
+          : s,
+      ),
+    );
+
+  const hasSubtaskAssigneeChanges = (subtask: Subtask) => {
+    const current = [...(subtaskAssigneeSnapshots[subtask.id] ?? [])].sort();
+    const next = [...(subtask.assigneeIds ?? [])].sort();
+    return JSON.stringify(current) !== JSON.stringify(next);
+  };
+
+  const saveSubtaskAssignees = async (subtask: Subtask) => {
+    if (
+      readOnly ||
+      !canAssignSubtasks ||
+      !isPersistedSubtaskId(subtask.id) ||
+      busySubtaskAssignmentId
+    ) {
+      return;
+    }
+    setBusySubtaskAssignmentId(subtask.id);
+    try {
+      const saved = await syncSubtaskAssigneesApi(
+        subtask.id,
+        subtaskAssigneeSnapshots[subtask.id] ?? [],
+        subtask.assigneeIds ?? [],
+      );
+      if (saved) {
+        updateSubtasksLocal(
+          draft.subtasks.map((item) => (item.id === saved.id ? saved : item)),
+        );
+      }
+      const savedAssigneeIds = saved?.assigneeIds ?? subtask.assigneeIds ?? [];
+      setSubtaskAssigneeSnapshots((prev) => ({
+        ...prev,
+        [subtask.id]: savedAssigneeIds,
+      }));
+      toast({
+        variant: "success",
+        title: "Subtask assignment saved",
+        message:
+          savedAssigneeIds.length === 0
+            ? "No users are assigned to this subtask."
+            : `${savedAssigneeIds.length} user${savedAssigneeIds.length === 1 ? "" : "s"} assigned.`,
+      });
+    } catch (err) {
+      subtaskError("Could not save subtask assignment", err);
+    } finally {
+      setBusySubtaskAssignmentId(null);
+    }
+  };
 
   const commitSubtaskLabel = async (id: string, label: string) => {
     if (readOnly) return;
@@ -566,6 +735,18 @@ export function TaskDrawerDetails({
     }
   };
 
+  const handleSaveAssignees = async () => {
+    if (readOnly || !hasAssigneeChanges || saving) return;
+    try {
+      await onSave({
+        ...draft,
+        assigneeIds: draft.assigneeIds ?? [],
+      });
+    } catch {
+      /* parent handler shows toast */
+    }
+  };
+
   const selectedDueDate = useMemo(
     () => parseDueDateIso(draft.dueDateIso),
     [draft.dueDateIso],
@@ -680,7 +861,7 @@ export function TaskDrawerDetails({
           >
             Assigned to
           </label>
-          {readOnly ? (
+          {readOnly || !canAssignTasks ? (
             draft.assignees.length === 0 ? (
               <p className="rounded-xl border border-glass bg-glass-button/40 px-3 py-2 text-sm text-primary/45">
                 No assignees
@@ -689,11 +870,20 @@ export function TaskDrawerDetails({
               <div className="flex flex-wrap gap-2 rounded-xl border border-glass bg-glass-button/40 px-3 py-2">
                 {draft.assignees.map((assignee, index) => (
                   <span
-                    key={assignee.id ?? `${assignee.initials}-${index}`}
+                    key={assignee.id ?? `${assignee.initials}-${assignee.name}-${index}`}
                     className="inline-flex items-center gap-2 rounded-full border border-glass bg-glass-card px-2.5 py-1 text-xs font-medium text-primary/75"
                   >
-                    <span className="flex size-5 items-center justify-center rounded-full bg-glass-button text-[9px] font-semibold text-primary">
-                      {assignee.initials}
+                    <span className="flex size-5 items-center justify-center overflow-hidden rounded-full bg-glass-button text-[9px] font-semibold text-primary">
+                      {assignee.avatarUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={assignee.avatarUrl}
+                          alt={assignee.name}
+                          className="size-full object-cover"
+                        />
+                      ) : (
+                        assignee.initials
+                      )}
                     </span>
                     {assignee.name}
                   </span>
@@ -713,6 +903,16 @@ export function TaskDrawerDetails({
               aria-label="Task assignees"
               disabled={assigneeOptions.length === 0}
             />
+          )}
+          {!readOnly && canAssignTasks && (
+            <button
+              type="button"
+              onClick={() => void handleSaveAssignees()}
+              disabled={saving || !hasAssigneeChanges}
+              className="mt-2 w-full rounded-xl border border-accent/35 bg-accent/10 px-4 py-2 text-sm font-semibold text-accent transition hover:bg-accent/15 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {saving ? "Saving..." : "Save Assignment"}
+            </button>
           )}
         </div>
       </div>
@@ -764,6 +964,10 @@ export function TaskDrawerDetails({
                 committedLabel={labelSnapshots[subtask.id] ?? ""}
                 busy={busySubtaskId === subtask.id}
                 readOnly={readOnly}
+                canAssignSubtasks={canAssignSubtasks}
+                assigneeOptions={subtaskAssigneeOptions}
+                assignmentBusy={busySubtaskAssignmentId === subtask.id}
+                assignmentChanged={hasSubtaskAssigneeChanges(subtask)}
                 onToggle={() => void toggleSubtask(subtask.id)}
                 onLabelChange={(label) =>
                   updateSubtaskLabelLocal(subtask.id, label)
@@ -772,6 +976,10 @@ export function TaskDrawerDetails({
                   void commitSubtaskLabel(subtask.id, subtask.label)
                 }
                 onDelete={() => void removeSubtask(subtask.id)}
+                onAssigneesChange={(assigneeIds) =>
+                  updateSubtaskAssigneesLocal(subtask.id, assigneeIds)
+                }
+                onAssigneesSave={() => void saveSubtaskAssignees(subtask)}
               />
             ))}
           </ul>

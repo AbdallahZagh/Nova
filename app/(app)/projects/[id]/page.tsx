@@ -25,6 +25,7 @@ import {
 } from "@/lib/tasks";
 import { projectStatusLabel, type Project } from "@/lib/projects";
 import {
+  canAssignProjectTasks,
   canEditProjectTasks,
   canManageProjectTeam,
   useProjectRole,
@@ -45,6 +46,8 @@ export default function ProjectWorkspacePage() {
   const projectId = typeof params.id === "string" ? params.id : "";
   const currentRole = useProjectRole(projectId, profile?.id);
   const canEditTasks = canEditProjectTasks(currentRole);
+  const canAssignTasks = canAssignProjectTasks(currentRole);
+  const canAssignSubtasks = canEditTasks;
   const canManageTeam = canManageProjectTeam(currentRole);
 
   const {
@@ -76,6 +79,11 @@ export default function ProjectWorkspacePage() {
         .filter((option) => option.value),
     [project?.teamMembers],
   );
+  const subtaskAssigneeOptions = useMemo(() => {
+    if (canAssignTasks) return assigneeOptions;
+    if (currentRole !== "MEMBER" || !profile?.id) return [];
+    return assigneeOptions.filter((option) => option.value === profile.id);
+  }, [assigneeOptions, canAssignTasks, currentRole, profile]);
 
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [isNewTaskOpen, setIsNewTaskOpen] = useState(false);
@@ -437,7 +445,10 @@ export default function ProjectWorkspacePage() {
             saving={saving}
             readOnly={!canEditTasks}
             projectRole={currentRole}
+            canAssignTasks={canAssignTasks}
             assigneeOptions={assigneeOptions}
+            canAssignSubtasks={canAssignSubtasks}
+            subtaskAssigneeOptions={subtaskAssigneeOptions}
           />
         ) : null}
       </SideDrawer>
@@ -447,7 +458,10 @@ export default function ProjectWorkspacePage() {
         onClose={() => !creating && setIsNewTaskOpen(false)}
         defaultStatus={newTaskDefaultStatus}
         onCreate={handleCreateTask}
+        canAssignTasks={canAssignTasks}
         assigneeOptions={assigneeOptions}
+        canAssignSubtasks={canAssignSubtasks}
+        subtaskAssigneeOptions={subtaskAssigneeOptions}
         submitting={creating}
       />
 

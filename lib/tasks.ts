@@ -100,7 +100,19 @@ export type Task = {
   assigneeId?: string;
   assigneeIds?: string[];
   description: string;
-  subtasks: { id: string; label: string; done: boolean }[];
+  subtasks: {
+    id: string;
+    label: string;
+    done: boolean;
+    assignees?: {
+      id?: string;
+      initials: string;
+      name: string;
+      avatarUrl?: string | null;
+      roleTitle?: string;
+    }[];
+    assigneeIds?: string[];
+  }[];
   activity: TaskActivity[];
   projectId?: string;
   completedAt?: string | null;
@@ -161,7 +173,12 @@ export type CreateTaskInput = {
   assigneeIds: string[];
   dueDate: string;
   dueDateIso?: string | null;
-  subtasks: { id: string; label: string; done: boolean }[];
+  subtasks: {
+    id: string;
+    label: string;
+    done: boolean;
+    assigneeIds?: string[];
+  }[];
 };
 
 export const initialProjectTasks: Task[] = [

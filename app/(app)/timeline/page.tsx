@@ -357,7 +357,7 @@ export default function TimelinePage() {
   const { toast } = useToast();
   const { projects, projectsLoading, updateTask, deleteTask } = useAppData();
   const scrollRef = useRef<HTMLDivElement>(null);
-  const rafRef = useRef<ReturnType<typeof requestAnimationFrame>>();
+  const rafRef = useRef<ReturnType<typeof requestAnimationFrame>>(0);
   const hasScrolledRef = useRef(false);
 
   const [timeFilter, setTimeFilter] = useState<TimelineFilter>("monthly");

@@ -1,4 +1,9 @@
 import { apiFetch } from "@/lib/api/client";
+import {
+  apiSubtaskToSubtask,
+  syncSubtaskAssigneesApi,
+  type ApiSubtask,
+} from "@/lib/api/subtasks";
 import type {
   CreateTaskInput,
   Task,
@@ -15,9 +20,19 @@ import {
 export type ApiActivityActor = {
   id?: string;
   fullName?: string;
+  name?: string;
+  email?: string;
   initials?: string;
   avatarUrl?: string | null;
   roleTitle?: string;
+};
+
+export type ApiTaskAssignment = {
+  assignedAt?: string;
+  userId?: string;
+  assigneeId?: string;
+  user?: ApiActivityActor | null;
+  assignee?: ApiActivityActor | null;
 };
 
 export type ApiTaskActivity = {
@@ -30,15 +45,15 @@ export type ApiTaskActivity = {
   createdBy?: ApiActivityActor | null;
 };
 
-export type ApiSubtask = {
-  id: string;
-  title?: string;
-  label?: string;
-  isCompleted?: boolean;
-  done?: boolean;
-  isDone?: boolean;
-  taskId?: string;
-};
+type ApiTaskListResponse =
+  | ApiTask[]
+  | {
+      tasks?: ApiTask[];
+      data?: ApiTask[];
+      items?: ApiTask[];
+      board?: { tasks?: ApiTask[] };
+      project?: { tasks?: ApiTask[] };
+    };
 
 export type ApiTask = {
   id: string;
@@ -53,7 +68,11 @@ export type ApiTask = {
   projectId?: string;
   assigneeId?: string | null;
   assignee?: ApiActivityActor | null;
-  assignees?: Array<ApiActivityActor>;
+  assignees?: Array<ApiActivityActor | ApiTaskAssignment>;
+  assignedUsers?: Array<ApiActivityActor>;
+  users?: Array<ApiActivityActor>;
+  assignments?: ApiTaskAssignment[];
+  taskAssignments?: ApiTaskAssignment[];
   subtasks?: ApiSubtask[];
   activity?: ApiTaskActivity[];
   activities?: ApiTaskActivity[];
@@ -84,6 +103,47 @@ const UUID_RE =
 
 function isUuid(value: string): boolean {
   return UUID_RE.test(value);
+}
+
+function initialsFromName(name: string): string {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((part) => part[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+}
+
+function assignmentToActor(assignment: ApiTaskAssignment): ApiActivityActor {
+  const actor = assignment.user ?? assignment.assignee ?? {};
+  return {
+    ...actor,
+    id: actor.id ?? assignment.userId ?? assignment.assigneeId,
+  };
+}
+
+function isTaskAssignment(value: ApiActivityActor | ApiTaskAssignment): value is ApiTaskAssignment {
+  return "user" in value || "assignee" in value || "userId" in value || "assigneeId" in value;
+}
+
+function normalizeAssigneeEntry(
+  entry: ApiActivityActor | ApiTaskAssignment,
+): ApiActivityActor {
+  return isTaskAssignment(entry) ? assignmentToActor(entry) : entry;
+}
+
+function getTaskAssigneeActors(api: ApiTask): ApiActivityActor[] {
+  if (api.assignees?.length) return api.assignees.map(normalizeAssigneeEntry);
+  if (api.assignedUsers?.length) return api.assignedUsers;
+  if (api.users?.length) return api.users;
+  if (api.taskAssignments?.length) {
+    return api.taskAssignments.map(assignmentToActor);
+  }
+  if (api.assignments?.length) {
+    return api.assignments.map(assignmentToActor);
+  }
+  return api.assignee ? [api.assignee] : [];
 }
 
 function normalizeStatus(raw: string): TaskStatus {
@@ -134,6 +194,13 @@ function buildTaskActivities(api: ApiTask): TaskActivity[] {
     .filter(isDisplayableActivity)
     .map(mapActivity);
 
+  if (api.lastActivity && isDisplayableActivity(api.lastActivity)) {
+    const last = mapActivity(api.lastActivity, entries.length);
+    if (!entries.some((entry) => entry.id === last.id)) {
+      entries.push(last);
+    }
+  }
+
   if (api.createdAt) {
     entries.push({
       id: `meta-created-${api.id}`,
@@ -158,20 +225,15 @@ function buildTaskActivities(api: ApiTask): TaskActivity[] {
 }
 
 export function apiTaskToTask(api: ApiTask): Task {
-  const assigneeList = api.assignees ?? (api.assignee ? [api.assignee] : []);
+  const assigneeList = getTaskAssigneeActors(api);
   const assignees = assigneeList.map((a) => ({
     id: a.id,
     initials:
       a.initials ??
-      (a.fullName
-        ? a.fullName
-            .split(/\s+/)
-            .map((p) => p[0])
-            .join("")
-            .slice(0, 2)
-            .toUpperCase()
+      (a.fullName || a.name || a.email
+        ? initialsFromName(a.fullName ?? a.name ?? a.email ?? "")
         : "??"),
-    name: a.fullName ?? "Unknown",
+    name: a.fullName ?? a.name ?? a.email ?? "Unknown",
     avatarUrl: a.avatarUrl,
     roleTitle: a.roleTitle,
   }));
@@ -191,11 +253,7 @@ export function apiTaskToTask(api: ApiTask): Task {
     assigneeIds,
     dueDate: formatDueDateDisplay(api.dueDate),
     dueDateIso: api.dueDate ?? null,
-    subtasks: (api.subtasks ?? []).map((s) => ({
-      id: s.id,
-      label: s.label ?? s.title ?? "",
-      done: Boolean(s.isCompleted ?? s.done ?? s.isDone),
-    })),
+    subtasks: (api.subtasks ?? []).map(apiSubtaskToSubtask),
     activity: buildTaskActivities(api),
     projectId: api.projectId,
     completedAt: api.completedAt ?? null,
@@ -256,10 +314,17 @@ export function taskToUpdatePayload(task: Task): UpdateTaskPayload {
 }
 
 export async function listTasksByProjectApi(projectId: string) {
-  const data = await apiFetch<ApiTask[] | { tasks: ApiTask[] }>(
+  const data = await apiFetch<ApiTaskListResponse>(
     `/api/tasks/project/${projectId}`,
   );
-  const list = Array.isArray(data) ? data : (data.tasks ?? []);
+  const list = Array.isArray(data)
+    ? data
+    : (data.tasks ??
+      data.data ??
+      data.items ??
+      data.board?.tasks ??
+      data.project?.tasks ??
+      []);
   return sortTasksByStatus(list.map(apiTaskToTask));
 }
 
@@ -275,6 +340,8 @@ export async function createTaskApi(projectId: string, input: CreateTaskInput) {
   });
   const created = apiTaskToTask(data);
   await syncTaskAssignees(created.id, [], input.assigneeIds);
+  const saved = await getTaskApi(created.id);
+  await syncCreatedSubtaskAssignees(saved, input);
   return getTaskApi(created.id);
 }
 
@@ -335,4 +402,19 @@ async function syncTaskAssignees(
 
   await assignTasksApi([taskId], toAdd);
   await Promise.all(toRemove.map((userId) => unassignTaskApi(taskId, userId)));
+}
+
+async function syncCreatedSubtaskAssignees(task: Task, input: CreateTaskInput) {
+  const pairs = input.subtasks
+    .map((subtask, index) => ({
+      created: task.subtasks[index],
+      assigneeIds: subtask.assigneeIds ?? [],
+    }))
+    .filter((item) => item.created && item.assigneeIds.length > 0);
+
+  await Promise.all(
+    pairs.map((item) =>
+      syncSubtaskAssigneesApi(item.created.id, [], item.assigneeIds),
+    ),
+  );
 }

@@ -282,7 +282,7 @@ function ReactivateContent() {
                 stepNum > 1 ? "bg-emerald-500/40" : "bg-glass",
               )}
             />
-            <StepDot n={2} active={step === "otp"} done={step === "done"} />
+            <StepDot n={2} active={step === "otp"} done={stepNum > 2} />
           </div>
         )}
 

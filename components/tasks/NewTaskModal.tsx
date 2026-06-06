@@ -16,24 +16,35 @@ import {
 } from "@/lib/tasks";
 import type { SelectOption } from "@/components/ui/fieldVariants";
 
-type SubtaskItem = { id: string; label: string; done: boolean };
+type SubtaskItem = {
+  id: string;
+  label: string;
+  done: boolean;
+  assigneeIds?: string[];
+};
 
 function SubtaskRow({
   subtask,
   onToggle,
   onLabelChange,
   onDelete,
+  onAssigneesChange,
+  canAssignSubtasks,
+  assigneeOptions,
 }: {
   subtask: SubtaskItem;
   onToggle: () => void;
   onLabelChange: (label: string) => void;
   onDelete: () => void;
+  onAssigneesChange: (assigneeIds: string[]) => void;
+  canAssignSubtasks: boolean;
+  assigneeOptions: SelectOption[];
 }) {
   const [editing, setEditing] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   return (
-    <li className="group flex items-center gap-2 rounded-xl border border-glass bg-glass-button/40 px-3 py-2 transition hover:border-glass/80">
+    <li className="group flex flex-wrap items-center gap-2 rounded-xl border border-glass bg-glass-button/40 px-3 py-2 transition hover:border-glass/80">
       <button
         type="button"
         aria-label={subtask.done ? "Mark incomplete" : "Mark complete"}
@@ -88,6 +99,19 @@ function SubtaskRow({
       >
         <X className="size-3.5" />
       </button>
+      {canAssignSubtasks && (
+        <div className="basis-full pt-1">
+          <MultiSelect
+            value={subtask.assigneeIds ?? []}
+            onChange={onAssigneesChange}
+            options={assigneeOptions}
+            placeholder="Assign subtask..."
+            variant="glass"
+            aria-label="Subtask assignees"
+            disabled={assigneeOptions.length === 0}
+          />
+        </div>
+      )}
     </li>
   );
 }
@@ -97,7 +121,10 @@ type NewTaskModalProps = {
   onClose: () => void;
   defaultStatus?: TaskStatus;
   onCreate: (input: CreateTaskInput) => void | Promise<void>;
+  canAssignTasks?: boolean;
   assigneeOptions?: SelectOption[];
+  canAssignSubtasks?: boolean;
+  subtaskAssigneeOptions?: SelectOption[];
   submitting?: boolean;
 };
 
@@ -111,13 +138,19 @@ function NewTaskForm({
   defaultStatus,
   onClose,
   onCreate,
+  canAssignTasks,
   assigneeOptions,
+  canAssignSubtasks,
+  subtaskAssigneeOptions,
   submitting = false,
 }: {
   defaultStatus: TaskStatus;
   onClose: () => void;
   onCreate: (input: CreateTaskInput) => void | Promise<void>;
+  canAssignTasks: boolean;
   assigneeOptions: SelectOption[];
+  canAssignSubtasks: boolean;
+  subtaskAssigneeOptions: SelectOption[];
   submitting?: boolean;
 }) {
   const [title, setTitle] = useState("");
@@ -143,7 +176,10 @@ function NewTaskForm({
   const addSubtask = () => {
     const label = newSubtaskLabel.trim();
     if (!label) return;
-    setSubtasks((prev) => [...prev, { id: `s-${Date.now()}`, label, done: false }]);
+    setSubtasks((prev) => [
+      ...prev,
+      { id: `s-${Date.now()}`, label, done: false, assigneeIds: [] },
+    ]);
     setNewSubtaskLabel("");
   };
 
@@ -189,7 +225,7 @@ function NewTaskForm({
               description: description.trim(),
               priority,
               status,
-              assigneeIds,
+              assigneeIds: canAssignTasks ? assigneeIds : [],
               dueDate: dueDate ? formatDueDate(dueDate) : "TBD",
               dueDateIso: dueDate?.toISOString() ?? null,
               subtasks,
@@ -285,23 +321,25 @@ function NewTaskForm({
           />
         </div>
 
-        <div>
-          <label
-            htmlFor="task-assign-to"
-            className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-primary/75"
-          >
-            Assign To
-          </label>
-          <MultiSelect
-            id="task-assign-to"
-            value={assigneeIds}
-            onChange={setAssigneeIds}
-            options={assigneeOptions}
-            placeholder="Select team members..."
-            variant="glass"
-            aria-label="Assign to"
-          />
-        </div>
+        {canAssignTasks && (
+          <div>
+            <label
+              htmlFor="task-assign-to"
+              className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-primary/75"
+            >
+              Assign To
+            </label>
+            <MultiSelect
+              id="task-assign-to"
+              value={assigneeIds}
+              onChange={setAssigneeIds}
+              options={assigneeOptions}
+              placeholder="Select team members..."
+              variant="glass"
+              aria-label="Assign to"
+            />
+          </div>
+        )}
 
         {/* Subtasks */}
         <div>
@@ -318,6 +356,11 @@ function NewTaskForm({
                   onToggle={() => updateSubtask(subtask.id, { done: !subtask.done })}
                   onLabelChange={(label) => updateSubtask(subtask.id, { label })}
                   onDelete={() => deleteSubtask(subtask.id)}
+                  onAssigneesChange={(assigneeIds) =>
+                    updateSubtask(subtask.id, { assigneeIds })
+                  }
+                  canAssignSubtasks={canAssignSubtasks}
+                  assigneeOptions={subtaskAssigneeOptions}
                 />
               ))}
             </ul>
@@ -376,7 +419,10 @@ export function NewTaskModal({
   onClose,
   defaultStatus = "To Do",
   onCreate,
+  canAssignTasks = false,
   assigneeOptions = [],
+  canAssignSubtasks = false,
+  subtaskAssigneeOptions = [],
   submitting = false,
 }: NewTaskModalProps) {
   useEffect(() => {
@@ -419,7 +465,10 @@ export function NewTaskModal({
           defaultStatus={defaultStatus}
           onClose={onClose}
           onCreate={onCreate}
+          canAssignTasks={canAssignTasks}
           assigneeOptions={assigneeOptions}
+          canAssignSubtasks={canAssignSubtasks}
+          subtaskAssigneeOptions={subtaskAssigneeOptions}
           submitting={submitting}
         />
         </div>

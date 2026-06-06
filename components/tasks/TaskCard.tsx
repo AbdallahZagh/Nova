@@ -103,14 +103,23 @@ export function TaskCard({ task, onClick, canMove = true }: TaskCardProps) {
               <>
                 {task.assignees.slice(0, 2).map((assignee, index) => (
                   <div
-                    key={assignee.initials + assignee.name}
+                    key={assignee.id ?? `${assignee.initials}-${assignee.name}-${index}`}
                     className={cn(
-                      "flex size-7 items-center justify-center rounded-full border border-glass bg-glass-button text-[10px] font-semibold text-primary",
+                      "flex size-7 items-center justify-center overflow-hidden rounded-full border border-glass bg-glass-button text-[10px] font-semibold text-primary",
                       index > 0 && "-ml-2",
                     )}
                     title={assignee.name}
                   >
-                    {assignee.initials}
+                    {assignee.avatarUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={assignee.avatarUrl}
+                        alt={assignee.name}
+                        className="size-full object-cover"
+                      />
+                    ) : (
+                      assignee.initials
+                    )}
                   </div>
                 ))}
                 {task.assignees.length > 2 ? (

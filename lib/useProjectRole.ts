@@ -28,6 +28,10 @@ export function canEditProjectTasks(role: ProjectMemberRole | null) {
   return role !== null && role !== "VIEWER";
 }
 
+export function canAssignProjectTasks(role: ProjectMemberRole | null) {
+  return role === "OWNER" || role === "ADMIN";
+}
+
 export function useProjectRole(projectId: string, userId: string | undefined | null) {
   const { getProject } = useAppData();
   const project = getProject(projectId);
