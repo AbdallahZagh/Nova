@@ -18,7 +18,8 @@ export class CreateProjectDto {
   name: string;
 
   @ApiPropertyOptional({
-    example: 'Full redesign of the analytics dashboard including new chart components and dark mode.',
+    example:
+      'Full redesign of the analytics dashboard including new chart components and dark mode.',
     description: 'Optional detailed description of the project scope and goals',
   })
   @IsOptional()

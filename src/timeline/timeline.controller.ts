@@ -35,14 +35,16 @@ export class TimelineController {
     name: 'projectId',
     required: false,
     example: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
-    description: 'UUID of a specific project to scope the timeline to. Omit to see all your projects.',
+    description:
+      'UUID of a specific project to scope the timeline to. Omit to see all your projects.',
   })
   @ApiQuery({
     name: 'filter',
     required: false,
     enum: ['today', 'tomorrow', 'weekly', 'monthly', 'yearly'],
     example: 'weekly',
-    description: 'Time window for the Gantt grid. Defaults to monthly (next 30 days).',
+    description:
+      'Time window for the Gantt grid. Defaults to monthly (next 30 days).',
   })
   @ApiResponse({
     status: 200,
@@ -61,7 +63,12 @@ export class TimelineController {
           dueDate: '2026-06-07T00:00:00.000Z',
           completedAt: null,
           project: { id: 'uuid', name: 'Nova Dashboard v2' },
-          assignee: { id: 'uuid', fullName: 'Jane Doe', avatarUrl: null, roleTitle: 'Designer' },
+          assignee: {
+            id: 'uuid',
+            fullName: 'Jane Doe',
+            avatarUrl: null,
+            roleTitle: 'Designer',
+          },
           windowStart: '2026-06-03T00:00:00.000Z',
           windowEnd: '2026-06-09T23:59:59.999Z',
           windowLabel: 'This week',

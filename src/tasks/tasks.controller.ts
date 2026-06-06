@@ -44,8 +44,14 @@ export class TasksController {
       'Creates a task linked to the specified project. Status defaults to "To Do" and priority to "Medium" ' +
       'when not explicitly provided. An optional subtasks array creates checklist items atomically.',
   })
-  @ApiResponse({ status: 201, description: 'Task created with subtasks and assignee included' })
-  @ApiResponse({ status: 400, description: 'Validation failed — check enum values and required fields' })
+  @ApiResponse({
+    status: 201,
+    description: 'Task created with subtasks and assignee included',
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Validation failed — check enum values and required fields',
+  })
   @ApiResponse({ status: 401, description: 'Missing or invalid Bearer token' })
   create(@CurrentUser('id') userId: string, @Body() dto: CreateTaskDto) {
     return this.tasksService.create(userId, dto);
@@ -58,14 +64,17 @@ export class TasksController {
       'Assigns taskIds to userId, or accepts assignments: [{ userId, taskIds }]. Assignees must be project owners, admins, or members. Viewers cannot be assigned tasks.',
   })
   @ApiResponse({ status: 200, description: 'Tasks assigned successfully' })
-  @ApiResponse({ status: 400, description: 'Validation failed or assignee cannot receive tasks' })
+  @ApiResponse({
+    status: 400,
+    description: 'Validation failed or assignee cannot receive tasks',
+  })
   @ApiResponse({ status: 401, description: 'Missing or invalid Bearer token' })
-  @ApiResponse({ status: 403, description: 'You do not have permission to assign one or more tasks' })
+  @ApiResponse({
+    status: 403,
+    description: 'You do not have permission to assign one or more tasks',
+  })
   @ApiResponse({ status: 404, description: 'Task not found' })
-  assignTasks(
-    @CurrentUser('id') actorId: string,
-    @Body() dto: AssignTasksDto,
-  ) {
+  assignTasks(@CurrentUser('id') actorId: string, @Body() dto: AssignTasksDto) {
     return this.tasksService.assignTasks(actorId, dto);
   }
 
@@ -86,9 +95,15 @@ export class TasksController {
     example: 'b2c3d4e5-f6a7-8901-bcde-f12345678901',
     description: 'Assigned user UUID to remove from this task',
   })
-  @ApiResponse({ status: 200, description: 'Assignment removed and updated task returned' })
+  @ApiResponse({
+    status: 200,
+    description: 'Assignment removed and updated task returned',
+  })
   @ApiResponse({ status: 401, description: 'Missing or invalid Bearer token' })
-  @ApiResponse({ status: 403, description: 'You do not have permission to unassign this task' })
+  @ApiResponse({
+    status: 403,
+    description: 'You do not have permission to unassign this task',
+  })
   @ApiResponse({ status: 404, description: 'Task or assignment not found' })
   unassignTask(
     @CurrentUser('id') actorId: string,
@@ -96,28 +111,6 @@ export class TasksController {
     @Param('userId') userId: string,
   ) {
     return this.tasksService.unassignTask(actorId, taskId, userId);
-  }
-
-  @Get(':id')
-  @ApiOperation({
-    summary: 'Get a single task by ID',
-    description:
-      'Returns the full task detail including subtasks checklist, assignee profile, ' +
-      'parent project, full activity log, and lastActivity.',
-  })
-  @ApiParam({
-    name: 'id',
-    example: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
-    description: 'Task UUID',
-  })
-  @ApiResponse({
-    status: 200,
-    description: 'Task with subtasks, assignee, project, activities, and lastActivity',
-  })
-  @ApiResponse({ status: 401, description: 'Missing or invalid Bearer token' })
-  @ApiResponse({ status: 404, description: 'Task not found' })
-  findOne(@Param('id') id: string) {
-    return this.tasksService.findOne(id);
   }
 
   @Get('project/:projectId')
@@ -139,6 +132,29 @@ export class TasksController {
   @ApiResponse({ status: 401, description: 'Missing or invalid Bearer token' })
   findByProject(@Param('projectId') projectId: string) {
     return this.tasksService.findByProject(projectId);
+  }
+
+  @Get(':id')
+  @ApiOperation({
+    summary: 'Get a single task by ID',
+    description:
+      'Returns the full task detail including subtasks checklist, assignee profile, ' +
+      'parent project, full activity log, and lastActivity.',
+  })
+  @ApiParam({
+    name: 'id',
+    example: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
+    description: 'Task UUID',
+  })
+  @ApiResponse({
+    status: 200,
+    description:
+      'Task with subtasks, assignee, project, activities, and lastActivity',
+  })
+  @ApiResponse({ status: 401, description: 'Missing or invalid Bearer token' })
+  @ApiResponse({ status: 404, description: 'Task not found' })
+  findOne(@Param('id') id: string) {
+    return this.tasksService.findOne(id);
   }
 
   @Patch(':id')

@@ -17,10 +17,7 @@ function myTasksWhere(userId: string) {
       {
         assigneeId: null,
         project: {
-          OR: [
-            { ownerId: userId },
-            { members: { some: { userId } } },
-          ],
+          OR: [{ ownerId: userId }, { members: { some: { userId } } }],
         },
       },
     ],
@@ -62,10 +59,7 @@ export class DashboardService {
     const activeProjectsCount = await (this.prisma as any).project.count({
       where: {
         status: 'Active',
-        OR: [
-          { ownerId: userId },
-          { members: { some: { userId } } },
-        ],
+        OR: [{ ownerId: userId }, { members: { some: { userId } } }],
       },
     });
 
@@ -74,15 +68,21 @@ export class DashboardService {
 
     for (const task of tasks) {
       totalSubtasks += task.subtasks.length;
-      completedSubtasks += task.subtasks.filter((s: any) => s.isCompleted).length;
+      completedSubtasks += task.subtasks.filter(
+        (s: any) => s.isCompleted,
+      ).length;
     }
 
     let productivityPercentage: number;
 
     if (totalSubtasks > 0) {
-      productivityPercentage = Math.round((completedSubtasks / totalSubtasks) * 100);
+      productivityPercentage = Math.round(
+        (completedSubtasks / totalSubtasks) * 100,
+      );
     } else if (tasks.length > 0) {
-      const doneTasks = tasks.filter((t: any) => t.status === 'Completed').length;
+      const doneTasks = tasks.filter(
+        (t: any) => t.status === 'Completed',
+      ).length;
       productivityPercentage = Math.round((doneTasks / tasks.length) * 100);
     } else {
       productivityPercentage = 0;
@@ -191,7 +191,9 @@ export class DashboardService {
         dueLabel: task.dueDate
           ? this.computeDueLabel(task.dueDate, today)
           : 'No due date',
-        _dueTime: task.dueDate ? new Date(task.dueDate).getTime() : Number.MAX_SAFE_INTEGER,
+        _dueTime: task.dueDate
+          ? new Date(task.dueDate).getTime()
+          : Number.MAX_SAFE_INTEGER,
         _weight: PRIORITY_WEIGHT[task.priority] ?? 0,
       }))
       .sort((a: any, b: any) => {

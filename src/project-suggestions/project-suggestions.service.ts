@@ -86,7 +86,8 @@ export class ProjectSuggestionsService {
       include: SUGGESTION_INCLUDE,
     });
 
-    if (!suggestion) throw new NotFoundException('Project suggestion not found');
+    if (!suggestion)
+      throw new NotFoundException('Project suggestion not found');
     return suggestion;
   }
 
@@ -106,8 +107,14 @@ export class ProjectSuggestionsService {
     return project;
   }
 
-  private async ensureSuggestionMutationAllowed(userId: string, suggestion: any) {
-    const project = await this.ensureProjectAccess(userId, suggestion.projectId);
+  private async ensureSuggestionMutationAllowed(
+    userId: string,
+    suggestion: any,
+  ) {
+    const project = await this.ensureProjectAccess(
+      userId,
+      suggestion.projectId,
+    );
     if (suggestion.createdById !== userId && project.ownerId !== userId) {
       throw new ForbiddenException(
         'Only the suggestion author or project owner can update this suggestion',

@@ -32,7 +32,8 @@ export class ProjectMemberInputDto {
 export class AddProjectMemberDto {
   @ApiPropertyOptional({
     example: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
-    description: 'UUID of the user to add to the project. Used for single-member requests.',
+    description:
+      'UUID of the user to add to the project. Used for single-member requests.',
   })
   @ValidateIf((dto: AddProjectMemberDto) => !dto.members?.length)
   @IsUUID()
@@ -42,7 +43,8 @@ export class AddProjectMemberDto {
   @ApiPropertyOptional({
     example: ProjectRole.MEMBER,
     enum: ProjectRole,
-    description: 'Role to grant inside the project. Used for single-member requests.',
+    description:
+      'Role to grant inside the project. Used for single-member requests.',
   })
   @ValidateIf((dto: AddProjectMemberDto) => !dto.members?.length)
   @IsEnum(ProjectRole)

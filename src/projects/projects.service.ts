@@ -95,7 +95,24 @@ export class ProjectsService {
         },
         tasks: {
           include: {
-            subtasks: true,
+            subtasks: {
+              include: {
+                assignments: {
+                  include: {
+                    user: {
+                      select: {
+                        id: true,
+                        fullName: true,
+                        email: true,
+                        avatarUrl: true,
+                        roleTitle: true,
+                      },
+                    },
+                  },
+                  orderBy: { assignedAt: 'asc' },
+                },
+              },
+            },
             assignee: { select: { id: true, fullName: true, avatarUrl: true } },
             assignments: {
               include: {
@@ -129,7 +146,9 @@ export class ProjectsService {
   // ─── Update ───────────────────────────────────────────────────────────────
 
   async update(userId: string, id: string, dto: UpdateProjectDto) {
-    const project = await (this.prisma as any).project.findUnique({ where: { id } });
+    const project = await (this.prisma as any).project.findUnique({
+      where: { id },
+    });
     if (!project) throw new NotFoundException('Project not found');
 
     const updated = await (this.prisma as any).project.update({
@@ -150,7 +169,9 @@ export class ProjectsService {
   // ─── Delete ───────────────────────────────────────────────────────────────
 
   async remove(userId: string, id: string) {
-    const project = await (this.prisma as any).project.findUnique({ where: { id } });
+    const project = await (this.prisma as any).project.findUnique({
+      where: { id },
+    });
     if (!project) throw new NotFoundException('Project not found');
 
     await (this.prisma as any).project.delete({ where: { id } });
@@ -159,7 +180,11 @@ export class ProjectsService {
 
   // â”€â”€â”€ Members â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-  async addMember(actorId: string, projectId: string, dto: AddProjectMemberDto) {
+  async addMember(
+    actorId: string,
+    projectId: string,
+    dto: AddProjectMemberDto,
+  ) {
     const project = await this.findProjectOrFail(projectId);
     const membersToAdd = dto.members?.length
       ? dto.members
@@ -236,7 +261,7 @@ export class ProjectsService {
    * Matches dashboard productivity logic at the project level.
    */
   private computeProgress(tasks: any[]) {
-    let totalTasks = tasks.length;
+    const totalTasks = tasks.length;
     let completedTasks = 0;
     let totalSubtasks = 0;
     let completedSubtasks = 0;
@@ -251,7 +276,9 @@ export class ProjectsService {
 
     let completionPercentage = 0;
     if (totalSubtasks > 0) {
-      completionPercentage = Math.round((completedSubtasks / totalSubtasks) * 100);
+      completionPercentage = Math.round(
+        (completedSubtasks / totalSubtasks) * 100,
+      );
     } else if (totalTasks > 0) {
       completionPercentage = Math.round((completedTasks / totalTasks) * 100);
     }
@@ -275,8 +302,20 @@ export class ProjectsService {
         assignedAt: assignment.assignedAt,
         user: assignment.user,
       }));
-      const { assignments, ...rest } = task;
-      return { ...rest, assignees };
+      const subtasks = (task.subtasks ?? []).map((subtask: any) => {
+        if (!subtask.assignments) return subtask;
+
+        const subtaskAssignees = subtask.assignments.map((assignment: any) => ({
+          assignedAt: assignment.assignedAt,
+          user: assignment.user,
+        }));
+        const subtaskRest = { ...subtask };
+        delete subtaskRest.assignments;
+        return { ...subtaskRest, assignees: subtaskAssignees };
+      });
+      const rest = { ...task };
+      delete rest.assignments;
+      return { ...rest, subtasks, assignees };
     });
 
     return {
@@ -318,7 +357,9 @@ export class ProjectsService {
     const uniqueUserIds = new Set(userIds);
 
     if (uniqueUserIds.size !== userIds.length) {
-      throw new ConflictException('Duplicate users cannot be added in the same request');
+      throw new ConflictException(
+        'Duplicate users cannot be added in the same request',
+      );
     }
   }
 

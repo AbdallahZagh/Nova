@@ -48,7 +48,8 @@ export class UpdateTaskDto {
 
   @ApiPropertyOptional({
     example: '2026-06-01T12:00:00.000Z',
-    description: 'Explicit completion timestamp (auto-set when status changes to Completed if omitted)',
+    description:
+      'Explicit completion timestamp (auto-set when status changes to Completed if omitted)',
   })
   @IsOptional()
   @IsDateString()

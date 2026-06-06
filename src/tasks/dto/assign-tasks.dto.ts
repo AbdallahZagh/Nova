@@ -35,7 +35,8 @@ export class TaskAssignmentInputDto {
 export class AssignTasksDto {
   @ApiPropertyOptional({
     example: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
-    description: 'UUID of the project user to assign tasks to. Used for single-user requests.',
+    description:
+      'UUID of the project user to assign tasks to. Used for single-user requests.',
   })
   @ValidateIf((dto: AssignTasksDto) => !dto.assignments?.length)
   @IsUUID()
@@ -43,7 +44,8 @@ export class AssignTasksDto {
   userId?: string;
 
   @ApiPropertyOptional({
-    description: 'Task UUIDs to assign to userId. Used for single-user requests.',
+    description:
+      'Task UUIDs to assign to userId. Used for single-user requests.',
     example: [
       'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
       'b2c3d4e5-f6a7-8901-bcde-f12345678901',

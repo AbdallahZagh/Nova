@@ -32,7 +32,8 @@ export enum TaskPriority {
 export class SubtaskItemDto {
   @ApiProperty({
     example: 'Setup database index keys',
-    description: 'Checklist item title. isCompleted is always initialised to false.',
+    description:
+      'Checklist item title. isCompleted is always initialised to false.',
   })
   @IsString()
   @IsNotEmpty()
@@ -49,7 +50,8 @@ export class CreateTaskDto {
   title: string;
 
   @ApiPropertyOptional({
-    example: 'Review all colour, spacing, and typography tokens and align with Figma variables.',
+    example:
+      'Review all colour, spacing, and typography tokens and align with Figma variables.',
     description: 'Detailed task description shown in the task detail panel',
   })
   @IsOptional()

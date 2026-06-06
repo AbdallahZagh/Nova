@@ -1,5 +1,10 @@
 import { Body, Controller, HttpCode, HttpStatus, Post } from '@nestjs/common';
-import { ApiOperation, ApiProperty, ApiResponse, ApiTags } from '@nestjs/swagger';
+import {
+  ApiOperation,
+  ApiProperty,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
 import { IsEmail } from 'class-validator';
 import { AuthService } from './auth.service';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
@@ -36,8 +41,14 @@ export class AuthController {
     status: 201,
     description: 'Account created — OTP issued to the registered email address',
   })
-  @ApiResponse({ status: 400, description: 'Validation failed — check request body fields' })
-  @ApiResponse({ status: 409, description: 'An account with this email already exists' })
+  @ApiResponse({
+    status: 400,
+    description: 'Validation failed — check request body fields',
+  })
+  @ApiResponse({
+    status: 409,
+    description: 'An account with this email already exists',
+  })
   register(@Body() dto: RegisterDto) {
     return this.authService.register(dto);
   }
@@ -54,9 +65,15 @@ export class AuthController {
       '- **FORGOT_PASSWORD** — confirms identity; proceed to POST /reset-password\n' +
       '- **REACTIVATE** — restores an archived account and returns an access token',
   })
-  @ApiResponse({ status: 200, description: 'OTP verified — see purpose for exact response shape' })
+  @ApiResponse({
+    status: 200,
+    description: 'OTP verified — see purpose for exact response shape',
+  })
   @ApiResponse({ status: 400, description: 'Invalid or expired OTP code' })
-  @ApiResponse({ status: 404, description: 'No account found with the provided email' })
+  @ApiResponse({
+    status: 404,
+    description: 'No account found with the provided email',
+  })
   verifyOtp(@Body() dto: VerifyOtpDto) {
     return this.authService.verifyOtp(dto);
   }
@@ -69,7 +86,10 @@ export class AuthController {
       'Invalidates existing OTPs for the requested purpose, creates a fresh 6-digit code, and sends it to the account email.',
   })
   @ApiResponse({ status: 200, description: 'Fresh OTP issued and sent' })
-  @ApiResponse({ status: 400, description: 'Validation failed or invalid account state' })
+  @ApiResponse({
+    status: 400,
+    description: 'Validation failed or invalid account state',
+  })
   @ApiResponse({ status: 404, description: 'No account found with this email' })
   resendOtp(@Body() dto: ResendOtpDto) {
     return this.authService.resendOtp(dto);
@@ -91,7 +111,10 @@ export class AuthController {
     description: 'Login successful — returns accessToken and user profile',
   })
   @ApiResponse({ status: 400, description: 'Validation failed' })
-  @ApiResponse({ status: 401, description: 'Invalid credentials or account not yet verified' })
+  @ApiResponse({
+    status: 401,
+    description: 'Invalid credentials or account not yet verified',
+  })
   login(@Body() dto: LoginDto) {
     return this.authService.login(dto);
   }
@@ -125,8 +148,14 @@ export class AuthController {
       'writes it to the user record, and permanently deletes the consumed OTP ' +
       'to prevent replay attacks.',
   })
-  @ApiResponse({ status: 200, description: 'Password updated — user may now log in' })
-  @ApiResponse({ status: 400, description: 'Invalid, expired, or already-used reset code' })
+  @ApiResponse({
+    status: 200,
+    description: 'Password updated — user may now log in',
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Invalid, expired, or already-used reset code',
+  })
   @ApiResponse({ status: 404, description: 'No account found with this email' })
   resetPassword(@Body() dto: ResetPasswordDto) {
     return this.authService.resetPassword(dto);
@@ -148,9 +177,13 @@ export class AuthController {
   })
   @ApiResponse({
     status: 200,
-    description: 'Reactivation code issued if an archived account with that email exists',
+    description:
+      'Reactivation code issued if an archived account with that email exists',
   })
-  @ApiResponse({ status: 400, description: 'Validation failed — invalid email format' })
+  @ApiResponse({
+    status: 400,
+    description: 'Validation failed — invalid email format',
+  })
   requestReactivation(@Body() dto: ReactivateDto) {
     return this.authService.requestReactivation(dto.email);
   }

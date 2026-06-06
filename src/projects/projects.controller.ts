@@ -76,9 +76,15 @@ export class ProjectsController {
     example: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
     description: 'Project UUID',
   })
-  @ApiResponse({ status: 200, description: 'Project details with tasks and members' })
+  @ApiResponse({
+    status: 200,
+    description: 'Project details with tasks and members',
+  })
   @ApiResponse({ status: 401, description: 'Missing or invalid Bearer token' })
-  @ApiResponse({ status: 403, description: 'You do not have access to this project' })
+  @ApiResponse({
+    status: 403,
+    description: 'You do not have access to this project',
+  })
   @ApiResponse({ status: 404, description: 'Project not found' })
   findOne(@CurrentUser('id') userId: string, @Param('id') id: string) {
     return this.projectsService.findOne(userId, id);
@@ -89,7 +95,8 @@ export class ProjectsController {
   @RequireProjectRole(ProjectRole.OWNER, ProjectRole.ADMIN)
   @ApiOperation({
     summary: 'Update project details',
-    description: 'Partially updates project fields. Owners and admins may make changes.',
+    description:
+      'Partially updates project fields. Owners and admins may make changes.',
   })
   @ApiParam({
     name: 'id',
@@ -99,7 +106,10 @@ export class ProjectsController {
   @ApiResponse({ status: 200, description: 'Project updated' })
   @ApiResponse({ status: 400, description: 'Validation failed' })
   @ApiResponse({ status: 401, description: 'Missing or invalid Bearer token' })
-  @ApiResponse({ status: 403, description: 'Only the project owner can update' })
+  @ApiResponse({
+    status: 403,
+    description: 'Only the project owner can update',
+  })
   @ApiResponse({ status: 404, description: 'Project not found' })
   update(
     @CurrentUser('id') userId: string,
@@ -125,7 +135,10 @@ export class ProjectsController {
   })
   @ApiResponse({ status: 200, description: 'Project deleted' })
   @ApiResponse({ status: 401, description: 'Missing or invalid Bearer token' })
-  @ApiResponse({ status: 403, description: 'Only the project owner can delete' })
+  @ApiResponse({
+    status: 403,
+    description: 'Only the project owner can delete',
+  })
   @ApiResponse({ status: 404, description: 'Project not found' })
   remove(@CurrentUser('id') userId: string, @Param('id') id: string) {
     return this.projectsService.remove(userId, id);
@@ -147,7 +160,10 @@ export class ProjectsController {
   @ApiResponse({ status: 201, description: 'Project member or members added' })
   @ApiResponse({ status: 400, description: 'Validation failed' })
   @ApiResponse({ status: 401, description: 'Missing or invalid Bearer token' })
-  @ApiResponse({ status: 403, description: 'You do not have permission to manage members' })
+  @ApiResponse({
+    status: 403,
+    description: 'You do not have permission to manage members',
+  })
   @ApiResponse({ status: 404, description: 'Project or user not found' })
   addMember(
     @CurrentUser('id') actorId: string,
@@ -178,7 +194,10 @@ export class ProjectsController {
   @ApiResponse({ status: 200, description: 'Project member role updated' })
   @ApiResponse({ status: 400, description: 'Validation failed' })
   @ApiResponse({ status: 401, description: 'Missing or invalid Bearer token' })
-  @ApiResponse({ status: 403, description: 'You do not have permission to update this member' })
+  @ApiResponse({
+    status: 403,
+    description: 'You do not have permission to update this member',
+  })
   @ApiResponse({ status: 404, description: 'Project member not found' })
   updateMember(
     @CurrentUser('id') actorId: string,
@@ -209,7 +228,10 @@ export class ProjectsController {
   })
   @ApiResponse({ status: 200, description: 'Project member removed' })
   @ApiResponse({ status: 401, description: 'Missing or invalid Bearer token' })
-  @ApiResponse({ status: 403, description: 'You do not have permission to remove this member' })
+  @ApiResponse({
+    status: 403,
+    description: 'You do not have permission to remove this member',
+  })
   @ApiResponse({ status: 404, description: 'Project member not found' })
   removeMember(
     @CurrentUser('id') actorId: string,

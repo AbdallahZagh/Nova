@@ -6,10 +6,7 @@ import {
 } from '@nestjs/common';
 import { ProjectRole } from '../common/decorators/require-project-role.decorator';
 import { PrismaService } from '../prisma/prisma.service';
-import {
-  AssignTasksDto,
-  TaskAssignmentInputDto,
-} from './dto/assign-tasks.dto';
+import { AssignTasksDto, TaskAssignmentInputDto } from './dto/assign-tasks.dto';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
 
@@ -17,12 +14,22 @@ const STATUS_MESSAGES: Record<string, string> = {
   'To Do': 'Moved back to To Do',
   'In Progress': 'Moved to In Progress',
   'In Review': 'Submitted for review',
-  'Completed': 'Marked as Completed',
+  Completed: 'Marked as Completed',
 };
 
-const ASSIGNEE_SELECT = { id: true, fullName: true, avatarUrl: true, roleTitle: true };
+const ASSIGNEE_SELECT = {
+  id: true,
+  fullName: true,
+  avatarUrl: true,
+  roleTitle: true,
+};
 
-const ACTIVITY_USER_SELECT = { id: true, fullName: true, avatarUrl: true, roleTitle: true };
+const ACTIVITY_USER_SELECT = {
+  id: true,
+  fullName: true,
+  avatarUrl: true,
+  roleTitle: true,
+};
 
 const ASSIGNABLE_PROJECT_ROLES = [
   ProjectRole.OWNER,
@@ -31,7 +38,14 @@ const ASSIGNABLE_PROJECT_ROLES = [
 ];
 
 const TASK_INCLUDE = {
-  subtasks: true,
+  subtasks: {
+    include: {
+      assignments: {
+        include: { user: { select: ASSIGNEE_SELECT } },
+        orderBy: { assignedAt: 'asc' as const },
+      },
+    },
+  },
   assignee: { select: ASSIGNEE_SELECT },
   assignments: {
     include: { user: { select: ASSIGNEE_SELECT } },
@@ -141,7 +155,9 @@ export class TasksService {
 
     this.ensureNoDuplicateTaskAssignmentPairs(assignments);
 
-    const taskIds = [...new Set(assignments.flatMap((assignment) => assignment.taskIds))];
+    const taskIds = [
+      ...new Set(assignments.flatMap((assignment) => assignment.taskIds)),
+    ];
     const tasks = await (this.prisma as any).task.findMany({
       where: { id: { in: taskIds } },
       select: { id: true, projectId: true },
@@ -149,14 +165,18 @@ export class TasksService {
     const tasksById = new Map(tasks.map((task: any) => [task.id, task]));
 
     for (const taskId of taskIds) {
-      if (!tasksById.has(taskId)) throw new NotFoundException(`Task not found: ${taskId}`);
+      if (!tasksById.has(taskId))
+        throw new NotFoundException(`Task not found: ${taskId}`);
     }
 
     for (const assignment of assignments) {
       for (const taskId of assignment.taskIds) {
         const task = tasksById.get(taskId);
         await this.ensureActorCanAssignTasks(task.projectId, actorId);
-        await this.ensureAssignableProjectMember(task.projectId, assignment.userId);
+        await this.ensureAssignableProjectMember(
+          task.projectId,
+          assignment.userId,
+        );
       }
     }
 
@@ -197,7 +217,11 @@ export class TasksService {
       }
     }
 
-    return updatedTasks;
+    return {
+      message: 'Task assignments saved successfully',
+      count: updatedTasks.length,
+      data: updatedTasks,
+    };
   }
 
   async unassignTask(actorId: string, taskId: string, userId: string) {
@@ -241,7 +265,10 @@ export class TasksService {
       include: TASK_INCLUDE,
     });
 
-    return this.formatTask(updated);
+    return {
+      message: 'Task assignment removed successfully',
+      data: this.formatTask(updated),
+    };
   }
 
   // ─── Update ───────────────────────────────────────────────────────────────
@@ -263,9 +290,14 @@ export class TasksService {
     if (dto.priority !== undefined) data.priority = dto.priority;
     if (dto.assigneeId !== undefined) data.assigneeId = dto.assigneeId;
     if (dto.dueDate !== undefined) data.dueDate = new Date(dto.dueDate);
-    if (dto.completedAt !== undefined) data.completedAt = new Date(dto.completedAt);
+    if (dto.completedAt !== undefined)
+      data.completedAt = new Date(dto.completedAt);
 
-    if (dto.status === 'Completed' && task.status !== 'Completed' && dto.completedAt === undefined) {
+    if (
+      dto.status === 'Completed' &&
+      task.status !== 'Completed' &&
+      dto.completedAt === undefined
+    ) {
       data.completedAt = new Date();
     }
 
@@ -331,7 +363,8 @@ export class TasksService {
     if (dto.status !== undefined && dto.status !== before.status) {
       logs.push({
         type: 'STATUS_CHANGE',
-        content: STATUS_MESSAGES[dto.status] ?? `Status changed to ${dto.status}`,
+        content:
+          STATUS_MESSAGES[dto.status] ?? `Status changed to ${dto.status}`,
         createdById: userId,
       });
     }
@@ -372,7 +405,10 @@ export class TasksService {
       });
     }
 
-    if (dto.description !== undefined && dto.description !== before.description) {
+    if (
+      dto.description !== undefined &&
+      dto.description !== before.description
+    ) {
       logs.push({
         type: 'DESCRIPTION_CHANGE',
         content: 'Description updated',
@@ -381,12 +417,16 @@ export class TasksService {
     }
 
     if (dto.dueDate !== undefined) {
-      const prev = before.dueDate ? new Date(before.dueDate).toISOString().split('T')[0] : null;
+      const prev = before.dueDate
+        ? new Date(before.dueDate).toISOString().split('T')[0]
+        : null;
       const next = new Date(dto.dueDate).toISOString().split('T')[0];
       if (prev !== next) {
         logs.push({
           type: 'DUE_DATE_CHANGE',
-          content: prev ? `Due date changed from ${prev} to ${next}` : `Due date set to ${next}`,
+          content: prev
+            ? `Due date changed from ${prev} to ${next}`
+            : `Due date set to ${next}`,
           createdById: userId,
         });
       }
@@ -403,14 +443,19 @@ export class TasksService {
     return user?.fullName ?? 'Unknown user';
   }
 
-  private async ensureAssignableProjectMember(projectId: string, userId: string) {
+  private async ensureAssignableProjectMember(
+    projectId: string,
+    userId: string,
+  ) {
     const membership = await (this.prisma as any).projectMember.findUnique({
       where: { userId_projectId: { userId, projectId } },
       select: { role: true },
     });
 
     if (!membership) {
-      throw new BadRequestException('Task assignee must be a member of this project');
+      throw new BadRequestException(
+        'Task assignee must be a member of this project',
+      );
     }
 
     if (!ASSIGNABLE_PROJECT_ROLES.includes(membership.role)) {
@@ -425,18 +470,24 @@ export class TasksService {
     });
 
     if (!membership || !ASSIGNABLE_PROJECT_ROLES.includes(membership.role)) {
-      throw new ForbiddenException('You do not have permission to assign tasks in this project');
+      throw new ForbiddenException(
+        'You do not have permission to assign tasks in this project',
+      );
     }
   }
 
-  private ensureNoDuplicateTaskAssignmentPairs(assignments: TaskAssignmentInputDto[]) {
+  private ensureNoDuplicateTaskAssignmentPairs(
+    assignments: TaskAssignmentInputDto[],
+  ) {
     const seenPairs = new Set<string>();
 
     for (const assignment of assignments) {
       for (const taskId of assignment.taskIds) {
         const pair = `${taskId}:${assignment.userId}`;
         if (seenPairs.has(pair)) {
-          throw new BadRequestException('The same task cannot be assigned to the same user more than once in one request');
+          throw new BadRequestException(
+            'The same task cannot be assigned to the same user more than once in one request',
+          );
         }
 
         seenPairs.add(pair);
@@ -475,16 +526,34 @@ export class TasksService {
       assignedAt: assignment.assignedAt,
       user: assignment.user,
     }));
+    const subtasks = (task.subtasks ?? []).map((subtask: any) =>
+      this.formatSubtask(subtask),
+    );
 
-    const { taskActivities, assignments, ...rest } = task;
+    const rest = { ...task };
+    delete rest.taskActivities;
+    delete rest.assignments;
+    delete rest.subtasks;
 
     return {
       ...rest,
       createdAt: task.createdAt,
       updatedAt: task.updatedAt,
+      subtasks,
       assignees,
       activities,
       lastActivity,
     };
+  }
+
+  private formatSubtask(subtask: any) {
+    const assignees = (subtask.assignments ?? []).map((assignment: any) => ({
+      assignedAt: assignment.assignedAt,
+      user: assignment.user,
+    }));
+    const rest = { ...subtask };
+    delete rest.assignments;
+
+    return { ...rest, assignees };
   }
 }

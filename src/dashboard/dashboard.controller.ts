@@ -51,7 +51,8 @@ export class DashboardController {
 
   @Get('activity')
   @ApiOperation({
-    summary: 'Fetch chronological task activity for the GitHub-style heatmap calendar',
+    summary:
+      'Fetch chronological task activity for the GitHub-style heatmap calendar',
     description:
       'Returns all tasks assigned to the user from the trailing 12-month window, ' +
       'grouped into an ISO date-keyed map (`YYYY-MM-DD → task[]`).\n\n' +
@@ -108,7 +109,8 @@ export class DashboardController {
   })
   @ApiResponse({
     status: 200,
-    description: 'Array of up to 6 urgent task objects ordered by soonest due date',
+    description:
+      'Array of up to 6 urgent task objects ordered by soonest due date',
     type: [UrgentTaskResponseDto],
   })
   @ApiResponse({ status: 401, description: 'Missing or invalid Bearer token' })

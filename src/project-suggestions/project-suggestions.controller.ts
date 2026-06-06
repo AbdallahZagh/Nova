@@ -40,7 +40,10 @@ export class ProjectSuggestionsController {
   @ApiResponse({ status: 201, description: 'Project suggestion created' })
   @ApiResponse({ status: 400, description: 'Validation failed' })
   @ApiResponse({ status: 401, description: 'Missing or invalid Bearer token' })
-  @ApiResponse({ status: 403, description: 'You do not have access to this project' })
+  @ApiResponse({
+    status: 403,
+    description: 'You do not have access to this project',
+  })
   @ApiResponse({ status: 404, description: 'Project not found' })
   create(
     @CurrentUser('id') userId: string,
@@ -62,7 +65,10 @@ export class ProjectSuggestionsController {
   })
   @ApiResponse({ status: 200, description: 'Project suggestions returned' })
   @ApiResponse({ status: 401, description: 'Missing or invalid Bearer token' })
-  @ApiResponse({ status: 403, description: 'You do not have access to this project' })
+  @ApiResponse({
+    status: 403,
+    description: 'You do not have access to this project',
+  })
   @ApiResponse({ status: 404, description: 'Project not found' })
   findByProject(
     @CurrentUser('id') userId: string,
@@ -83,7 +89,10 @@ export class ProjectSuggestionsController {
   })
   @ApiResponse({ status: 200, description: 'Project suggestion returned' })
   @ApiResponse({ status: 401, description: 'Missing or invalid Bearer token' })
-  @ApiResponse({ status: 403, description: 'You do not have access to this project' })
+  @ApiResponse({
+    status: 403,
+    description: 'You do not have access to this project',
+  })
   @ApiResponse({ status: 404, description: 'Project suggestion not found' })
   findOne(@CurrentUser('id') userId: string, @Param('id') id: string) {
     return this.projectSuggestionsService.findOne(userId, id);

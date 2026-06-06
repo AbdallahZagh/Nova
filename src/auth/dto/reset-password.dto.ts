@@ -11,7 +11,8 @@ export class ResetPasswordDto {
 
   @ApiProperty({
     example: '482910',
-    description: '6-digit OTP code previously issued via the forgot-password flow',
+    description:
+      '6-digit OTP code previously issued via the forgot-password flow',
   })
   @IsString()
   @Length(6, 6, { message: 'Reset code must be exactly 6 digits' })

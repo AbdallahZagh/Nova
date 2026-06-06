@@ -1,7 +1,12 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
-export type TimelineFilter = 'today' | 'tomorrow' | 'weekly' | 'monthly' | 'yearly';
+export type TimelineFilter =
+  | 'today'
+  | 'tomorrow'
+  | 'weekly'
+  | 'monthly'
+  | 'yearly';
 
 const ASSIGNEE_SELECT = {
   id: true,
@@ -18,7 +23,11 @@ export class TimelineService {
    * Returns tasks for a project (or all accessible projects) that have a dueDate,
    * filtered to the requested time window, shaped for Gantt pill rendering.
    */
-  async getProjectTimeline(userId: string, projectId?: string, filter?: string) {
+  async getProjectTimeline(
+    userId: string,
+    projectId?: string,
+    filter?: string,
+  ) {
     const window = this.resolveWindow(filter);
 
     const where: Record<string, any> = {
@@ -34,10 +43,7 @@ export class TimelineService {
     } else {
       // No specific project — return tasks across all projects the user owns or is a member of
       where.project = {
-        OR: [
-          { ownerId: userId },
-          { members: { some: { userId } } },
-        ],
+        OR: [{ ownerId: userId }, { members: { some: { userId } } }],
       };
     }
 
@@ -87,11 +93,21 @@ export class TimelineService {
 
   // ─── Time window helpers ───────────────────────────────────────────────────
 
-  private resolveWindow(filter?: string): { start: Date; end: Date; label: string } {
+  private resolveWindow(filter?: string): {
+    start: Date;
+    end: Date;
+    label: string;
+  } {
     const now = new Date();
     const tod = this.startOfDay(now);
 
-    const VALID: TimelineFilter[] = ['today', 'tomorrow', 'weekly', 'monthly', 'yearly'];
+    const VALID: TimelineFilter[] = [
+      'today',
+      'tomorrow',
+      'weekly',
+      'monthly',
+      'yearly',
+    ];
     const f = (filter ?? 'monthly') as TimelineFilter;
 
     if (filter && !VALID.includes(f)) {
@@ -141,11 +157,27 @@ export class TimelineService {
   }
 
   private startOfDay(date: Date): Date {
-    return new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, 0, 0, 0);
+    return new Date(
+      date.getFullYear(),
+      date.getMonth(),
+      date.getDate(),
+      0,
+      0,
+      0,
+      0,
+    );
   }
 
   private endOfDay(date: Date): Date {
-    return new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59, 999);
+    return new Date(
+      date.getFullYear(),
+      date.getMonth(),
+      date.getDate(),
+      23,
+      59,
+      59,
+      999,
+    );
   }
 
   private addDays(date: Date, days: number): Date {

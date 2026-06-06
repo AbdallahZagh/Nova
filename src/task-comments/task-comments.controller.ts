@@ -44,21 +44,27 @@ export class TaskCommentsController {
   @ApiResponse({ status: 201, description: 'Task comment created' })
   @ApiResponse({ status: 400, description: 'Validation failed' })
   @ApiResponse({ status: 401, description: 'Missing or invalid Bearer token' })
-  @ApiResponse({ status: 403, description: 'You do not have permission to comment on this task' })
+  @ApiResponse({
+    status: 403,
+    description: 'You do not have permission to comment on this task',
+  })
   @ApiResponse({ status: 404, description: 'Task not found' })
-  create(
-    @CurrentUser('id') userId: string,
-    @Body() dto: CreateTaskCommentDto,
-  ) {
+  create(@CurrentUser('id') userId: string, @Body() dto: CreateTaskCommentDto) {
     return this.taskCommentsService.create(userId, dto);
   }
 
   @Get('task/:taskId')
   @UseGuards(ProjectRoleGuard)
-  @RequireProjectRole(ProjectRole.OWNER, ProjectRole.ADMIN, ProjectRole.MEMBER, ProjectRole.VIEWER)
+  @RequireProjectRole(
+    ProjectRole.OWNER,
+    ProjectRole.ADMIN,
+    ProjectRole.MEMBER,
+    ProjectRole.VIEWER,
+  )
   @ApiOperation({
     summary: 'List comments for a task',
-    description: 'Returns all comments for a task, including admin replies and close metadata.',
+    description:
+      'Returns all comments for a task, including admin replies and close metadata.',
   })
   @ApiParam({
     name: 'taskId',
@@ -67,7 +73,10 @@ export class TaskCommentsController {
   })
   @ApiResponse({ status: 200, description: 'Task comments returned' })
   @ApiResponse({ status: 401, description: 'Missing or invalid Bearer token' })
-  @ApiResponse({ status: 403, description: 'You do not have access to this task' })
+  @ApiResponse({
+    status: 403,
+    description: 'You do not have access to this task',
+  })
   @ApiResponse({ status: 404, description: 'Task not found' })
   findByTask(@Param('taskId') taskId: string) {
     return this.taskCommentsService.findByTask(taskId);
@@ -87,9 +96,15 @@ export class TaskCommentsController {
     description: 'Task comment UUID',
   })
   @ApiResponse({ status: 200, description: 'Task comment replied to' })
-  @ApiResponse({ status: 400, description: 'Comment is closed or validation failed' })
+  @ApiResponse({
+    status: 400,
+    description: 'Comment is closed or validation failed',
+  })
   @ApiResponse({ status: 401, description: 'Missing or invalid Bearer token' })
-  @ApiResponse({ status: 403, description: 'Only project owners or admins can reply' })
+  @ApiResponse({
+    status: 403,
+    description: 'Only project owners or admins can reply',
+  })
   @ApiResponse({ status: 404, description: 'Task comment not found' })
   reply(
     @Param('id') id: string,
@@ -116,7 +131,10 @@ export class TaskCommentsController {
   @ApiResponse({ status: 200, description: 'Task comment closed' })
   @ApiResponse({ status: 400, description: 'Comment is already closed' })
   @ApiResponse({ status: 401, description: 'Missing or invalid Bearer token' })
-  @ApiResponse({ status: 403, description: 'Only project owners or admins can close' })
+  @ApiResponse({
+    status: 403,
+    description: 'Only project owners or admins can close',
+  })
   @ApiResponse({ status: 404, description: 'Task comment not found' })
   close(@Param('id') id: string, @CurrentUser('id') userId: string) {
     return this.taskCommentsService.close(id, userId);

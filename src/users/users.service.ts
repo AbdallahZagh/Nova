@@ -46,18 +46,12 @@ export class UsersService {
     const [projectsCount, tasksCount] = await Promise.all([
       (this.prisma as any).project.count({
         where: {
-          OR: [
-            { ownerId: userId },
-            { members: { some: { userId } } },
-          ],
+          OR: [{ ownerId: userId }, { members: { some: { userId } } }],
         },
       }),
       (this.prisma as any).task.count({
         where: {
-          OR: [
-            { assigneeId: userId },
-            { assignments: { some: { userId } } },
-          ],
+          OR: [{ assigneeId: userId }, { assignments: { some: { userId } } }],
         },
       }),
     ]);

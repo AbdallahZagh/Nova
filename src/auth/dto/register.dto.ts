@@ -1,5 +1,11 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEmail, IsNotEmpty, IsOptional, IsString, MinLength } from 'class-validator';
+import {
+  IsEmail,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  MinLength,
+} from 'class-validator';
 import { IsUsername } from '../../common/validators/is-username.decorator';
 
 export class RegisterDto {
@@ -12,7 +18,8 @@ export class RegisterDto {
 
   @ApiProperty({
     example: 'SecureP@ss123',
-    description: 'Account password — minimum 8 characters. Store only the hash, never plaintext.',
+    description:
+      'Account password — minimum 8 characters. Store only the hash, never plaintext.',
   })
   @IsString()
   @MinLength(8, { message: 'Password must be at least 8 characters long' })
@@ -20,7 +27,8 @@ export class RegisterDto {
 
   @ApiProperty({
     example: 'Sarah Johnson',
-    description: 'User full name shown across project boards and activity feeds',
+    description:
+      'User full name shown across project boards and activity feeds',
   })
   @IsString()
   @IsNotEmpty({ message: 'Full name is required' })
@@ -38,7 +46,8 @@ export class RegisterDto {
 
   @ApiPropertyOptional({
     example: 'Senior Frontend Engineer',
-    description: 'Professional title displayed on the user card (e.g. Lead Backend, Product Designer)',
+    description:
+      'Professional title displayed on the user card (e.g. Lead Backend, Product Designer)',
   })
   @IsOptional()
   @IsString()
