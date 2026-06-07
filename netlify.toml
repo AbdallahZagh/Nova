@@ -5,3 +5,4 @@
 [build.environment]
   # Tells @netlify/plugin-nextjs to keep SSR / API routes as serverless functions
   NETLIFY_NEXT_PLUGIN_SKIP = "false"
+  API_PROXY_TARGET = "https://nova-l5df.onrender.com"

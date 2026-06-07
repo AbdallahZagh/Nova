@@ -1,8 +1,11 @@
 import { type NextRequest, NextResponse } from "next/server";
 
 const BACKEND = (
-  process.env.API_PROXY_TARGET ?? "http://localhost:4000"
+  process.env.API_PROXY_TARGET ?? "https://nova-l5df.onrender.com"
 ).replace(/\/$/, "");
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 async function proxy(req: NextRequest): Promise<NextResponse> {
   const url = new URL(req.url);
