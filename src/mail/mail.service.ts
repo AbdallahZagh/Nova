@@ -32,6 +32,7 @@ export class MailService {
             host,
             port,
             secure,
+            family: 4,
             auth: { user, pass },
             connectionTimeout: 10000,
             greetingTimeout: 10000,
