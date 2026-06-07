@@ -116,7 +116,8 @@ export class UsersController {
     summary: 'Deactivate (archive) the current account',
     description:
       'Marks the account as archived and inactive. The user is immediately signed out. ' +
-      'All data (projects, tasks, history) is preserved. Account restoration is handled through Supabase/support.',
+      'All data (projects, tasks, history) is preserved. ' +
+      'To restore the account: call POST /api/auth/reactivate with your email, then verify the OTP via POST /api/auth/verify-otp with purpose "REACTIVATE".',
   })
   @ApiResponse({
     status: 200,

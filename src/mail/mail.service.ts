@@ -6,14 +6,12 @@ type OtpPurpose = 'REGISTER' | 'FORGOT_PASSWORD' | 'REACTIVATE';
 export class MailService {
   private readonly logger = new Logger(MailService.name);
   private readonly apiKey: string | null;
-  private readonly secretKey: string | null;
   private readonly fromName: string;
   private readonly fromEmail: string;
 
   constructor() {
-    this.apiKey    = process.env.MAILJET_API_KEY    ?? null;
-    this.secretKey = process.env.MAILJET_SECRET_KEY ?? null;
-    this.fromName  = process.env.MAIL_FROM_NAME  ?? 'Nova';
+    this.apiKey = process.env.RESEND_API_KEY ?? null;
+    this.fromName = process.env.MAIL_FROM_NAME ?? 'Nova';
     this.fromEmail = process.env.MAIL_FROM_EMAIL ?? '';
   }
 
@@ -53,8 +51,6 @@ export class MailService {
     });
   }
 
-  // ─── Internal ─────────────────────────────────────────────────────────────
-
   private async send({
     to,
     subject,
@@ -70,37 +66,29 @@ export class MailService {
     errorLabel: string;
     fatal?: boolean;
   }) {
-    if (!this.apiKey || !this.secretKey || !this.fromEmail) {
+    if (!this.apiKey || !this.fromEmail) {
       this.handleMissingConfig(fatal);
       return;
     }
 
-    const payload = {
-      Messages: [
-        {
-          From: { Email: this.fromEmail, Name: this.fromName },
-          To: [{ Email: to }],
-          Subject: subject,
-          HTMLPart: html,
-          TextPart: text,
-        },
-      ],
-    };
-
-    const credentials = Buffer.from(`${this.apiKey}:${this.secretKey}`).toString('base64');
-
     let res: Response;
     try {
-      res = await fetch('https://api.mailjet.com/v3.1/send', {
+      res = await fetch('https://api.resend.com/emails', {
         method: 'POST',
         headers: {
-          Authorization: `Basic ${credentials}`,
+          Authorization: `Bearer ${this.apiKey}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({
+          from: `${this.fromName} <${this.fromEmail}>`,
+          to,
+          subject,
+          html,
+          text,
+        }),
       });
     } catch (err) {
-      this.logger.error(`Failed to reach Mailjet API (${errorLabel} email)`, err);
+      this.logger.error(`Failed to reach Resend API (${errorLabel} email)`, err);
       if (fatal) {
         throw new InternalServerErrorException(
           'Unable to send email. Please try again later.',
@@ -111,7 +99,7 @@ export class MailService {
 
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
-      this.logger.error(`Mailjet rejected ${errorLabel} email (${res.status})`, body);
+      this.logger.error(`Resend rejected ${errorLabel} email (${res.status})`, body);
       if (fatal) {
         throw new InternalServerErrorException(
           'Unable to send email. Please try again later.',
@@ -122,7 +110,7 @@ export class MailService {
 
   private handleMissingConfig(fatal: boolean) {
     const message =
-      'Mail service is not configured. Set MAILJET_API_KEY, MAILJET_SECRET_KEY, and MAIL_FROM_EMAIL.';
+      'Mail service is not configured. Set RESEND_API_KEY and MAIL_FROM_EMAIL.';
     if (fatal && process.env.NODE_ENV === 'production') {
       throw new InternalServerErrorException(message);
     }
@@ -131,17 +119,23 @@ export class MailService {
 
   private subjectForPurpose(purpose: OtpPurpose): string {
     switch (purpose) {
-      case 'REGISTER':        return 'Verify your Nova account';
-      case 'FORGOT_PASSWORD': return 'Reset your Nova password';
-      case 'REACTIVATE':      return 'Reactivate your Nova account';
+      case 'REGISTER':
+        return 'Verify your Nova account';
+      case 'FORGOT_PASSWORD':
+        return 'Reset your Nova password';
+      case 'REACTIVATE':
+        return 'Reactivate your Nova account';
     }
   }
 
   private introForPurpose(purpose: OtpPurpose): string {
     switch (purpose) {
-      case 'REGISTER':        return 'Use this code to verify your Nova account.';
-      case 'FORGOT_PASSWORD': return 'Use this code to reset your Nova password.';
-      case 'REACTIVATE':      return 'Use this code to reactivate your Nova account.';
+      case 'REGISTER':
+        return 'Use this code to verify your Nova account.';
+      case 'FORGOT_PASSWORD':
+        return 'Use this code to reset your Nova password.';
+      case 'REACTIVATE':
+        return 'Use this code to reactivate your Nova account.';
     }
   }
 
