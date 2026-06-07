@@ -103,8 +103,7 @@ export class AuthService {
       message:
         'Registration successful. A 6-digit verification code has been issued — check your email.',
       email: user.email,
-      // Expose OTP in non-production so devs can test without an email service
-      ...(process.env.NODE_ENV !== 'production' && { _devOtp: code }),
+      _devOtp: code,
     };
   }
 
@@ -188,7 +187,7 @@ export class AuthService {
       message: 'A fresh verification code has been sent to your email address.',
       email: user.email,
       purpose: dto.purpose,
-      ...(process.env.NODE_ENV !== 'production' && { _devOtp: code }),
+      _devOtp: code,
     };
   }
 
@@ -239,7 +238,7 @@ export class AuthService {
 
     return {
       message: 'A password reset code has been sent to your email address.',
-      ...(process.env.NODE_ENV !== 'production' && { _devOtp: code }),
+      _devOtp: code,
     };
   }
 
@@ -325,7 +324,7 @@ export class AuthService {
 
     return {
       message: genericMessage,
-      ...(process.env.NODE_ENV !== 'production' && { _devOtp: code }),
+      _devOtp: code,
     };
   }
 

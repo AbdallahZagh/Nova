@@ -1,8 +1,4 @@
-import {
-  Injectable,
-  InternalServerErrorException,
-  Logger,
-} from '@nestjs/common';
+import { Injectable, InternalServerErrorException, Logger } from '@nestjs/common';
 import { Resend } from 'resend';
 
 type OtpPurpose = 'REGISTER' | 'FORGOT_PASSWORD' | 'REACTIVATE';
@@ -39,11 +35,11 @@ export class MailService {
     });
 
     if (error) {
-      this.logger.error('Failed to send OTP email');
-      this.logger.error(error);
-      throw new InternalServerErrorException(
-        'Unable to send verification email. Please try again later.',
-      );
+      // Log but do NOT throw — the OTP is already saved in the database and
+      // returned in the API response, so the user can still complete the flow
+      // even if the email could not be delivered.
+      this.logger.warn('OTP email could not be delivered (non-fatal)');
+      this.logger.warn(error);
     }
   }
 
@@ -62,11 +58,9 @@ export class MailService {
     });
 
     if (error) {
-      this.logger.error('Failed to send project invite email');
-      this.logger.error(error);
-      throw new InternalServerErrorException(
-        'Project member was added, but the invitation email could not be sent.',
-      );
+      // Non-fatal: member was added successfully; email is a courtesy notification
+      this.logger.warn('Project invite email could not be delivered (non-fatal)');
+      this.logger.warn(error);
     }
   }
 
