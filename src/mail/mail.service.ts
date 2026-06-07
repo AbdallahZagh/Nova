@@ -33,6 +33,9 @@ export class MailService {
             port,
             secure,
             auth: { user, pass },
+            connectionTimeout: 10000,
+            greetingTimeout: 10000,
+            socketTimeout: 15000,
           })
         : null;
   }
