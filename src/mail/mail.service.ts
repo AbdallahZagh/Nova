@@ -4,20 +4,37 @@ import {
   InternalServerErrorException,
   Logger,
 } from '@nestjs/common';
+import nodemailer from 'nodemailer';
+import type { Transporter } from 'nodemailer';
 
 type OtpPurpose = 'REGISTER' | 'FORGOT_PASSWORD' | 'REACTIVATE';
 
 @Injectable()
 export class MailService {
   private readonly logger = new Logger(MailService.name);
-  private readonly apiKey: string | null;
+  private readonly transporter: Transporter | null;
   private readonly fromName: string;
   private readonly fromEmail: string;
 
   constructor() {
-    this.apiKey = process.env.RESEND_API_KEY ?? null;
+    const host = process.env.MAIL_HOST;
+    const port = Number(process.env.MAIL_PORT ?? 465);
+    const secure = process.env.MAIL_SECURE !== 'false';
+    const user = process.env.MAIL_USER;
+    const pass = process.env.MAIL_PASS;
+
     this.fromName = process.env.MAIL_FROM_NAME ?? 'Nova';
-    this.fromEmail = process.env.MAIL_FROM_EMAIL ?? '';
+    this.fromEmail = process.env.MAIL_FROM_EMAIL ?? user ?? '';
+
+    this.transporter =
+      host && user && pass
+        ? nodemailer.createTransport({
+            host,
+            port,
+            secure,
+            auth: { user, pass },
+          })
+        : null;
   }
 
   async sendOtpEmail(to: string, code: string, purpose: OtpPurpose) {
@@ -71,72 +88,38 @@ export class MailService {
     errorLabel: string;
     fatal?: boolean;
   }) {
-    if (!this.apiKey || !this.fromEmail) {
+    if (!this.transporter || !this.fromEmail) {
       this.handleMissingConfig(fatal);
       return;
     }
 
-    let res: Response;
     try {
-      res = await fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${this.apiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          from: `${this.fromName} <${this.fromEmail}>`,
-          to,
-          subject,
-          html,
-          text,
-        }),
+      await this.transporter.sendMail({
+        from: `"${this.fromName}" <${this.fromEmail}>`,
+        to,
+        subject,
+        html,
+        text,
       });
     } catch (err) {
-      this.logger.error(`Failed to reach Resend API (${errorLabel} email)`, err);
+      this.logger.error(`Failed to send ${errorLabel} email via SMTP`, err);
       if (fatal) {
-        throw new InternalServerErrorException(
-          'Unable to send email. Please try again later.',
-        );
-      }
-      return;
-    }
-
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      this.logger.error(`Resend rejected ${errorLabel} email (${res.status})`, body);
-      if (fatal) {
-        throw new BadGatewayException(this.formatProviderError(res.status, body));
+        throw new BadGatewayException(this.formatSmtpError(err));
       }
     }
   }
 
-  private formatProviderError(status: number, body: unknown) {
-    const fallback = `Email provider rejected the request with status ${status}.`;
+  private formatSmtpError(err: unknown) {
+    if (err instanceof Error && err.message) {
+      return `SMTP email failed: ${err.message}`;
+    }
 
-    if (!body || typeof body !== 'object') return fallback;
-
-    const error = body as {
-      message?: unknown;
-      name?: unknown;
-      error?: unknown;
-    };
-    const message =
-      typeof error.message === 'string'
-        ? error.message
-        : typeof error.error === 'string'
-          ? error.error
-          : null;
-    const name = typeof error.name === 'string' ? error.name : null;
-
-    if (!message && !name) return fallback;
-
-    return [name, message].filter(Boolean).join(': ');
+    return 'SMTP email failed. Please check MAIL_HOST, MAIL_USER, and MAIL_PASS.';
   }
 
   private handleMissingConfig(fatal: boolean) {
     const message =
-      'Mail service is not configured. Set RESEND_API_KEY and MAIL_FROM_EMAIL.';
+      'Mail service is not configured. Set MAIL_HOST, MAIL_PORT, MAIL_SECURE, MAIL_USER, MAIL_PASS, and MAIL_FROM_EMAIL.';
     if (fatal && process.env.NODE_ENV === 'production') {
       throw new InternalServerErrorException(message);
     }
@@ -185,7 +168,7 @@ export class MailService {
     return `You have been added to the Nova project "${projectName}" with the role ${role}.\n\nLog in to Nova to view the project.`;
   }
 
-  private renderProjectInviteHtml(projectName: string, role: string): string {
+  private renderProjectInviteHtml(projectName: string, role: string) {
     const p = this.escapeHtml(projectName);
     const r = this.escapeHtml(role);
     return `
@@ -198,7 +181,7 @@ export class MailService {
     `;
   }
 
-  private escapeHtml(value: string): string {
+  private escapeHtml(value: string) {
     return value
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
