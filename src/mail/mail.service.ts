@@ -1,4 +1,9 @@
-import { Injectable, InternalServerErrorException, Logger } from '@nestjs/common';
+import {
+  BadGatewayException,
+  Injectable,
+  InternalServerErrorException,
+  Logger,
+} from '@nestjs/common';
 
 type OtpPurpose = 'REGISTER' | 'FORGOT_PASSWORD' | 'REACTIVATE';
 
@@ -101,11 +106,32 @@ export class MailService {
       const body = await res.json().catch(() => ({}));
       this.logger.error(`Resend rejected ${errorLabel} email (${res.status})`, body);
       if (fatal) {
-        throw new InternalServerErrorException(
-          'Unable to send email. Please try again later.',
-        );
+        throw new BadGatewayException(this.formatProviderError(res.status, body));
       }
     }
+  }
+
+  private formatProviderError(status: number, body: unknown) {
+    const fallback = `Email provider rejected the request with status ${status}.`;
+
+    if (!body || typeof body !== 'object') return fallback;
+
+    const error = body as {
+      message?: unknown;
+      name?: unknown;
+      error?: unknown;
+    };
+    const message =
+      typeof error.message === 'string'
+        ? error.message
+        : typeof error.error === 'string'
+          ? error.error
+          : null;
+    const name = typeof error.name === 'string' ? error.name : null;
+
+    if (!message && !name) return fallback;
+
+    return [name, message].filter(Boolean).join(': ');
   }
 
   private handleMissingConfig(fatal: boolean) {
