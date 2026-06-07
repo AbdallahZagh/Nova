@@ -19,28 +19,27 @@ export function apiUrl(path: string): string {
   return API_BASE ? `${API_BASE}${normalized}` : normalized;
 }
 
-export const ACCESS_TOKEN_KEY = "taskflow-access-token";
-
-export function getAccessToken(): string | null {
+/** Read the active Supabase session token — works client-side only. */
+export async function getAccessToken(): Promise<string | null> {
   if (typeof window === "undefined") return null;
   try {
-    return localStorage.getItem(ACCESS_TOKEN_KEY);
+    const { createClient } = await import("@/lib/supabase/client");
+    const supabase = createClient();
+    const { data } = await supabase.auth.getSession();
+    return data.session?.access_token ?? null;
   } catch {
     return null;
   }
 }
 
-export function setAccessToken(token: string): void {
-  try {
-    localStorage.setItem(ACCESS_TOKEN_KEY, token);
-  } catch {}
-}
+/** @deprecated Supabase manages its own session — kept for backward compatibility. */
+export function setAccessToken(_token: string): void {}
 
-export function clearAccessToken(): void {
-  try {
-    localStorage.removeItem(ACCESS_TOKEN_KEY);
-  } catch {}
-}
+/** @deprecated Supabase manages its own session — kept for backward compatibility. */
+export function clearAccessToken(): void {}
+
+/** Legacy key — no longer used; kept so existing imports don't break. */
+export const ACCESS_TOKEN_KEY = "taskflow-access-token";
 
 function parseErrorMessage(status: number, body: ApiErrorBody): string {
   if (body.message) return body.message;
@@ -67,7 +66,7 @@ export async function apiFetch<T>(
   }
 
   if (auth) {
-    const token = getAccessToken();
+    const token = await getAccessToken();
     if (token) headers.set("Authorization", `Bearer ${token}`);
   }
 

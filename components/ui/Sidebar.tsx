@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { useState } from "react";
 import {
   FolderKanban,
@@ -12,8 +12,6 @@ import {
 } from "lucide-react";
 import { clearSession } from "@/app/actions/session";
 import { useToast } from "@/components/ui/Toast";
-import { logoutApi } from "@/lib/api/auth";
-import { clearAccessToken } from "@/lib/api/client";
 import { cn } from "@/lib/cn";
 import Image from "next/image";
 
@@ -30,7 +28,6 @@ type SidebarProps = {
 
 export function Sidebar({ mobileOpen = false, onClose }: SidebarProps) {
   const pathname = usePathname();
-  const router = useRouter();
   const { toast } = useToast();
   const [loggingOut, setLoggingOut] = useState(false);
 
@@ -38,23 +35,10 @@ export function Sidebar({ mobileOpen = false, onClose }: SidebarProps) {
     if (loggingOut) return;
     setLoggingOut(true);
     try {
-      await logoutApi();
-      toast({
-        variant: "success",
-        title: "Signed out",
-        message: "You have been logged out successfully.",
-      });
-    } catch {
-      toast({
-        variant: "info",
-        title: "Signed out locally",
-        message: "Session cleared on this device.",
-      });
-    } finally {
-      clearAccessToken();
-      setLoggingOut(false);
-      router.refresh();
       await clearSession();
+    } catch {
+      toast({ variant: "error", title: "Sign out failed", message: "Please try again." });
+      setLoggingOut(false);
     }
   }
 

@@ -1,112 +1,17 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import {
-  ArrowLeft,
-  CheckCircle2,
-  KeyRound,
-  Loader2,
-  Mail,
-} from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { CheckCircle2, KeyRound, Loader2, Mail } from "lucide-react";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { Input, PasswordInput } from "@/components/ui/input";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { useToast } from "@/components/ui/Toast";
-import {
-  forgotPasswordApi,
-  resendOtpApi,
-  resetPasswordApi,
-  verifyOtpApi,
-} from "@/lib/api/auth";
-import { ApiError } from "@/lib/api/client";
+import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/cn";
 
-// ── OTP input ─────────────────────────────────────────────────────────────────
-
-function OtpInput({
-  value,
-  onChange,
-  disabled,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  disabled?: boolean;
-}) {
-  const refs = Array.from({ length: 6 }, () =>
-    useRef<HTMLInputElement>(null),
-  );
-
-  const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement>,
-    idx: number,
-  ) => {
-    const digit = e.target.value.replace(/\D/g, "").slice(-1);
-    const chars = value.padEnd(6, " ").split("");
-    chars[idx] = digit || " ";
-    const next = chars.join("").trimEnd();
-    onChange(next);
-    if (digit && idx < 5) refs[idx + 1].current?.focus();
-  };
-
-  const handleKey = (
-    e: React.KeyboardEvent<HTMLInputElement>,
-    idx: number,
-  ) => {
-    if (e.key === "Backspace" && !value[idx] && idx > 0) {
-      refs[idx - 1].current?.focus();
-    }
-  };
-
-  const handlePaste = (e: React.ClipboardEvent) => {
-    const pasted = e.clipboardData
-      .getData("text")
-      .replace(/\D/g, "")
-      .slice(0, 6);
-    if (pasted) {
-      onChange(pasted);
-      refs[Math.min(pasted.length, 5)].current?.focus();
-    }
-    e.preventDefault();
-  };
-
-  return (
-    <div className="flex justify-center gap-2">
-      {Array.from({ length: 6 }).map((_, idx) => (
-        <input
-          key={idx}
-          ref={refs[idx]}
-          type="text"
-          inputMode="numeric"
-          maxLength={1}
-          value={value[idx] ?? ""}
-          onChange={(e) => handleChange(e, idx)}
-          onKeyDown={(e) => handleKey(e, idx)}
-          onPaste={handlePaste}
-          disabled={disabled}
-          className={cn(
-            "size-12 rounded-xl border border-glass bg-glass-button text-center text-lg font-bold text-primary outline-none transition",
-            "focus:border-accent focus:ring-2 focus:ring-accent/20",
-            "disabled:opacity-50",
-          )}
-        />
-      ))}
-    </div>
-  );
-}
-
-// ── Step indicator ─────────────────────────────────────────────────────────────
-
-function StepDot({
-  n,
-  active,
-  done,
-}: {
-  n: number;
-  active: boolean;
-  done: boolean;
-}) {
+function StepDot({ n, active, done }: { n: number; active: boolean; done: boolean }) {
   return (
     <div
       className={cn(
@@ -123,142 +28,80 @@ function StepDot({
   );
 }
 
-// ── Page ─────────────────────────────────────────────────────────────────────
+type Step = "email" | "sent" | "password" | "done";
 
-type Step = "email" | "otp" | "password" | "done";
-
-export default function ForgotPasswordPage() {
+function ForgotPasswordContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { toast } = useToast();
 
-  const [step, setStep] = useState<Step>("email");
-  const [email, setEmail] = useState("");
-  const [otp, setOtp] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-
-  const [loading, setLoading] = useState(false);
-  const [emailError, setEmailError] = useState("");
-  const [otpError, setOtpError] = useState("");
-  const [passwordError, setPasswordError] = useState("");
-  const [otpCooldownUntil, setOtpCooldownUntil] = useState(0);
-  const [now, setNow] = useState(() => Date.now());
-
-  const stepNum = step === "email" ? 1 : step === "otp" ? 2 : step === "password" ? 3 : 4;
-  const resendRemaining = Math.max(
-    0,
-    Math.ceil((otpCooldownUntil - now) / 1000),
+  // When Supabase redirects back after the reset link is clicked,
+  // the callback route adds ?step=reset so we know to show the password form.
+  const [step, setStep] = useState<Step>(
+    searchParams.get("step") === "reset" ? "password" : "email",
   );
 
+  const [email, setEmail] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [emailError, setEmailError] = useState("");
+  const [passwordError, setPasswordError] = useState("");
+
+  const stepNum = step === "email" ? 1 : step === "sent" ? 1 : step === "password" ? 2 : 3;
+
+  // Listen for the PASSWORD_RECOVERY event from Supabase (fires when the
+  // recovery token is active in this tab after the callback redirect).
   useEffect(() => {
-    if (!otpCooldownUntil) return;
-    const interval = window.setInterval(() => setNow(Date.now()), 1000);
-    return () => window.clearInterval(interval);
-  }, [otpCooldownUntil]);
+    const supabase = createClient();
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === "PASSWORD_RECOVERY") {
+        setStep("password");
+      }
+    });
+    return () => subscription.unsubscribe();
+  }, []);
 
-  // ── Step 1: request OTP ──────────────────────────────────────────────────────
+  // ── Step 1: send reset email ─────────────────────────────────────────────
 
-  const requestOtp = async () => {
+  const handleSendReset = async (e: React.FormEvent) => {
+    e.preventDefault();
     setEmailError("");
     setLoading(true);
     try {
-      const res = await forgotPasswordApi(email.trim());
-      if (res._devOtp) {
-        toast({
-          variant: "success",
-          title: "OTP sent (dev mode)",
-          message: `Your code: ${res._devOtp}`,
-        });
-      } else {
-        toast({
-          variant: "success",
-          title: "Email sent",
-          message: "Check your inbox for the 6-digit code.",
-        });
-      }
-      const nextNow = Date.now();
-      setOtpCooldownUntil(nextNow + 30_000);
-      setNow(nextNow);
-      setStep("otp");
-    } catch (err) {
-      const msg =
-        err instanceof ApiError
-          ? err.message
-          : "Could not send reset code. Try again.";
-      setEmailError(msg);
-    } finally {
-      setLoading(false);
-    }
-  };
+      const supabase = createClient();
+      const redirectTo =
+        `${window.location.origin}/auth/callback?next=/forgot-password%3Fstep%3Dreset`;
 
-  const handleRequestOtp = async (e: React.FormEvent) => {
-    e.preventDefault();
-    await requestOtp();
-  };
-
-  const handleResendOtp = async () => {
-    if (resendRemaining > 0) return;
-    setEmailError("");
-    setOtpError("");
-    setLoading(true);
-    try {
-      const res = await resendOtpApi(email.trim(), "FORGOT_PASSWORD");
-      if (res._devOtp) {
-        toast({
-          variant: "success",
-          title: "OTP resent (dev mode)",
-          message: `Your code: ${res._devOtp}`,
-        });
-      } else {
-        toast({
-          variant: "success",
-          title: "Code resent",
-          message: res.message || "Check your inbox for the fresh code.",
-        });
-      }
-      const nextNow = Date.now();
-      setOtpCooldownUntil(nextNow + 30_000);
-      setNow(nextNow);
-    } catch (err) {
-      setOtpError(
-        err instanceof ApiError
-          ? err.message
-          : "Could not resend reset code. Try again.",
+      const { error } = await supabase.auth.resetPasswordForEmail(
+        email.trim(),
+        { redirectTo },
       );
+
+      if (error) {
+        setEmailError(error.message);
+        return;
+      }
+
+      toast({
+        variant: "success",
+        title: "Reset link sent",
+        message: "Check your email and click the link to reset your password.",
+      });
+      setStep("sent");
+    } catch {
+      setEmailError("Could not send reset link. Try again.");
     } finally {
       setLoading(false);
     }
   };
 
-  // ── Step 2: verify OTP ───────────────────────────────────────────────────────
-
-  const handleVerifyOtp = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setOtpError("");
-    if (otp.replace(/\s/g, "").length < 6) {
-      setOtpError("Enter the full 6-digit code.");
-      return;
-    }
-    setLoading(true);
-    try {
-      await verifyOtpApi(email.trim(), otp.trim(), "FORGOT_PASSWORD");
-      setStep("password");
-    } catch (err) {
-      setOtpError(
-        err instanceof ApiError
-          ? err.message
-          : "Invalid or expired code. Try again.",
-      );
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // ── Step 3: set new password ─────────────────────────────────────────────────
+  // ── Step 2: set new password (user arrived via reset link) ───────────────
 
   const handleResetPassword = async (e: React.FormEvent) => {
     e.preventDefault();
     setPasswordError("");
+
     if (newPassword.length < 8) {
       setPasswordError("Password must be at least 8 characters.");
       return;
@@ -267,16 +110,22 @@ export default function ForgotPasswordPage() {
       setPasswordError("Passwords do not match.");
       return;
     }
+
     setLoading(true);
     try {
-      await resetPasswordApi(email.trim(), otp.trim(), newPassword);
+      const supabase = createClient();
+      const { error } = await supabase.auth.updateUser({ password: newPassword });
+
+      if (error) {
+        setPasswordError(error.message);
+        return;
+      }
+
+      await supabase.auth.signOut();
       setStep("done");
-    } catch (err) {
-      setPasswordError(
-        err instanceof ApiError
-          ? err.message
-          : "Could not reset password. Try again.",
-      );
+      toast({ variant: "success", title: "Password updated", message: "You can now sign in with your new password." });
+    } catch {
+      setPasswordError("Could not update password. Try again.");
     } finally {
       setLoading(false);
     }
@@ -296,39 +145,27 @@ export default function ForgotPasswordPage() {
           Reset password
         </h1>
         <p className="mt-2 text-sm text-primary/60">
-          We'll send a one-time code to your email
+          {step === "password"
+            ? "Choose a new password for your account"
+            : "We'll send a reset link to your email"}
         </p>
       </div>
 
       <GlassCard className="w-full max-w-md space-y-6">
-        {/* Step indicator */}
-        {step !== "done" && (
+        {step !== "done" && step !== "sent" && (
           <div className="flex items-center justify-center gap-3">
             <StepDot n={1} active={step === "email"} done={stepNum > 1} />
-            <div
-              className={cn(
-                "h-px w-10 transition",
-                stepNum > 1 ? "bg-emerald-500/40" : "bg-glass",
-              )}
-            />
-            <StepDot n={2} active={step === "otp"} done={stepNum > 2} />
-            <div
-              className={cn(
-                "h-px w-10 transition",
-                stepNum > 2 ? "bg-emerald-500/40" : "bg-glass",
-              )}
-            />
-            <StepDot n={3} active={step === "password"} done={false} />
+            <div className={cn("h-px w-10 transition", stepNum > 1 ? "bg-emerald-500/40" : "bg-glass")} />
+            <StepDot n={2} active={step === "password"} done={false} />
           </div>
         )}
 
         {/* ── Step 1: Email ── */}
         {step === "email" && (
-          <form onSubmit={handleRequestOtp} className="space-y-4">
+          <form onSubmit={handleSendReset} className="space-y-4">
             <div>
               <p className="mb-4 text-sm text-primary/60">
-                Enter the email address for your account and we'll send you a
-                reset code.
+                Enter your account email and we'll send you a reset link.
               </p>
               <label className="mb-1.5 block text-sm font-medium text-primary/80">
                 Email address
@@ -354,68 +191,37 @@ export default function ForgotPasswordPage() {
               disabled={loading || !email.trim()}
               className="flex w-full items-center justify-center gap-2 rounded-xl bg-accent px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
             >
-              {loading ? (
-                <Loader2 className="size-4 animate-spin" />
-              ) : (
-                <Mail className="size-4" />
-              )}
-              {loading ? "Sending…" : "Send reset code"}
+              {loading ? <Loader2 className="size-4 animate-spin" /> : <Mail className="size-4" />}
+              {loading ? "Sending…" : "Send reset link"}
             </button>
           </form>
         )}
 
-        {/* ── Step 2: OTP ── */}
-        {step === "otp" && (
-          <form onSubmit={handleVerifyOtp} className="space-y-5">
-            <div className="text-center">
-              <p className="text-sm text-primary/60">
-                Enter the 6-digit code sent to
-              </p>
-              <p className="mt-0.5 font-semibold text-primary">{email}</p>
+        {/* ── Sent confirmation ── */}
+        {step === "sent" && (
+          <div className="space-y-4 text-center">
+            <div className="flex size-16 mx-auto items-center justify-center rounded-2xl bg-accent/15">
+              <Mail className="size-8 text-accent" />
             </div>
-
-            <OtpInput value={otp} onChange={setOtp} disabled={loading} />
-
-            {otpError && (
-              <p className="text-center text-xs text-red-400" role="alert">
-                {otpError}
+            <div>
+              <p className="font-semibold text-primary">Check your inbox</p>
+              <p className="mt-1 text-sm text-primary/55">
+                We sent a reset link to{" "}
+                <span className="font-medium text-primary">{email}</span>.
+                Click it to set a new password.
               </p>
-            )}
-
-            <button
-              type="submit"
-              disabled={loading || otp.replace(/\s/g, "").length < 6}
-              className="flex w-full items-center justify-center gap-2 rounded-xl bg-accent px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
-            >
-              {loading ? (
-                <Loader2 className="size-4 animate-spin" />
-              ) : null}
-              {loading ? "Verifying…" : "Verify code →"}
-            </button>
-
-            <button
-              type="button"
-              onClick={() => void handleResendOtp()}
-              disabled={loading || resendRemaining > 0}
-              className="flex w-full items-center justify-center gap-1.5 text-sm font-medium text-primary/50 transition hover:text-accent disabled:cursor-not-allowed disabled:text-primary/30"
-            >
-              {resendRemaining > 0
-                ? `Resend code in ${resendRemaining}s`
-                : "Resend code"}
-            </button>
-
+            </div>
             <button
               type="button"
               onClick={() => setStep("email")}
-              className="flex w-full items-center justify-center gap-1.5 text-sm text-primary/50 transition hover:text-accent"
+              className="text-sm text-accent underline-offset-2 hover:underline"
             >
-              <ArrowLeft className="size-3.5" />
-              Change email
+              Use a different email
             </button>
-          </form>
+          </div>
         )}
 
-        {/* ── Step 3: New password ── */}
+        {/* ── Step 2: New password ── */}
         {step === "password" && (
           <form onSubmit={handleResetPassword} className="space-y-4">
             <div>
@@ -462,11 +268,7 @@ export default function ForgotPasswordPage() {
               disabled={loading || !newPassword || !confirmPassword}
               className="flex w-full items-center justify-center gap-2 rounded-xl bg-accent px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
             >
-              {loading ? (
-                <Loader2 className="size-4 animate-spin" />
-              ) : (
-                <KeyRound className="size-4" />
-              )}
+              {loading ? <Loader2 className="size-4 animate-spin" /> : <KeyRound className="size-4" />}
               {loading ? "Saving…" : "Set new password"}
             </button>
           </form>
@@ -479,9 +281,7 @@ export default function ForgotPasswordPage() {
               <CheckCircle2 className="size-8 text-emerald-400" />
             </div>
             <div>
-              <p className="text-lg font-semibold text-primary">
-                Password updated!
-              </p>
+              <p className="text-lg font-semibold text-primary">Password updated!</p>
               <p className="mt-1 text-sm text-primary/55">
                 You can now sign in with your new password.
               </p>
@@ -496,18 +296,22 @@ export default function ForgotPasswordPage() {
           </div>
         )}
 
-        {/* Back to sign in link */}
         {step !== "done" && (
           <div className="border-t border-glass pt-4 text-center">
-            <Link
-              href="/"
-              className="text-sm text-primary/50 transition hover:text-accent"
-            >
+            <Link href="/" className="text-sm text-primary/50 transition hover:text-accent">
               ← Back to sign in
             </Link>
           </div>
         )}
       </GlassCard>
     </div>
+  );
+}
+
+export default function ForgotPasswordPage() {
+  return (
+    <Suspense>
+      <ForgotPasswordContent />
+    </Suspense>
   );
 }

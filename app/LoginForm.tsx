@@ -1,22 +1,30 @@
 "use client";
 
-import { useState } from "react";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { establishSession } from "@/app/actions/session";
+import { Suspense, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { GoogleSignInButton } from "@/components/auth/GoogleSignInButton";
 import { Input, PasswordInput } from "@/components/ui/input";
 import { useToast } from "@/components/ui/Toast";
-import { loginApi } from "@/lib/api/auth";
-import { isAccountDeactivatedError } from "@/lib/auth-errors";
 import { ApiError } from "@/lib/api/client";
-import { setAccessToken } from "@/lib/api/client";
-import { apiUserToProfile } from "@/lib/api/user-mapper";
+import { createClient } from "@/lib/supabase/client";
 
-export function LoginForm() {
+function LoginFormContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { toast } = useToast();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | undefined>();
+
+  useEffect(() => {
+    if (searchParams.get("error") === "auth_callback") {
+      setError("Google sign-in failed. Please try again.");
+      toast({
+        variant: "error",
+        title: "Sign in failed",
+        message: "Could not complete Google sign-in.",
+      });
+    }
+  }, [searchParams, toast]);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -29,24 +37,23 @@ export function LoginForm() {
     const password = String(formData.get("password") ?? "");
 
     try {
-      const { accessToken, user } = await loginApi(email, password);
-      setAccessToken(accessToken);
-      await establishSession();
-      toast({
-        variant: "success",
-        title: "Welcome back",
-        message: `Signed in as ${apiUserToProfile(user).name}`,
+      const supabase = createClient();
+      const { error: authError } = await supabase.auth.signInWithPassword({
+        email,
+        password,
       });
+
+      if (authError) {
+        const message = authError.message ?? "Unable to sign in. Check your credentials.";
+        setError(message);
+        toast({ variant: "error", title: "Sign in failed", message });
+        return;
+      }
+
+      toast({ variant: "success", title: "Welcome back" });
       router.push("/dashboard");
       router.refresh();
     } catch (err) {
-      if (isAccountDeactivatedError(err)) {
-        const params = new URLSearchParams();
-        if (email) params.set("email", email);
-        const query = params.toString();
-        router.push(query ? `/reactivate?${query}` : "/reactivate");
-        return;
-      }
       const message =
         err instanceof ApiError
           ? err.message
@@ -59,7 +66,16 @@ export function LoginForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <div className="space-y-4">
+      <GoogleSignInButton />
+
+      <div className="flex items-center gap-3">
+        <div className="h-px flex-1 bg-glass" />
+        <span className="text-xs text-primary/45">or</span>
+        <div className="h-px flex-1 bg-glass" />
+      </div>
+
+      <form onSubmit={handleSubmit} className="space-y-4">
       <div>
         <label
           htmlFor="email"
@@ -87,12 +103,12 @@ export function LoginForm() {
           >
             Password
           </label>
-          <Link
+          <a
             href="/forgot-password"
             className="text-xs text-accent/80 underline-offset-2 hover:underline"
           >
             Forgot password?
-          </Link>
+          </a>
         </div>
         <PasswordInput
           id="password"
@@ -116,8 +132,17 @@ export function LoginForm() {
         disabled={pending}
         className="w-full rounded-xl bg-accent px-4 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-60"
       >
-        {pending ? "Signing in…" : "Sign in"}
+        {pending ? "Signing in…" : "Sign in with email"}
       </button>
     </form>
+    </div>
+  );
+}
+
+export function LoginForm() {
+  return (
+    <Suspense>
+      <LoginFormContent />
+    </Suspense>
   );
 }

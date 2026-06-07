@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
@@ -8,7 +8,6 @@ import {
   CheckCircle2,
   KeyRound,
   Loader2,
-  Mail,
   RefreshCw,
   Save,
   ShieldAlert,
@@ -22,88 +21,15 @@ import { Input, PasswordInput, Textarea } from "@/components/ui/input";
 import { useToast } from "@/components/ui/Toast";
 import { ProfileSkeleton } from "@/components/skeletons/ProfileSkeleton";
 import { useUser } from "@/components/providers/UserProvider";
-import {
-  forgotPasswordApi,
-  resendOtpApi,
-  resetPasswordApi,
-  verifyOtpApi,
-} from "@/lib/api/auth";
+import { createClient } from "@/lib/supabase/client";
 import { deactivateMeApi } from "@/lib/api/users";
-import { clearAccessToken, ApiError } from "@/lib/api/client";
+import { ApiError } from "@/lib/api/client";
 import { cn } from "@/lib/cn";
 import {
   bodyToUsername,
   usernameToBody,
   validateUsername,
 } from "@/lib/username";
-
-// ── OTP input ─────────────────────────────────────────────────────────────────
-
-function OtpInput({
-  value,
-  onChange,
-  disabled,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  disabled?: boolean;
-}) {
-  const refs = Array.from({ length: 6 }, () => useRef<HTMLInputElement>(null));
-
-  const handleKey = (
-    e: React.KeyboardEvent<HTMLInputElement>,
-    idx: number,
-  ) => {
-    if (e.key === "Backspace" && !value[idx] && idx > 0) {
-      refs[idx - 1].current?.focus();
-    }
-  };
-
-  const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement>,
-    idx: number,
-  ) => {
-    const digit = e.target.value.replace(/\D/g, "").slice(-1);
-    const chars = value.padEnd(6, " ").split("");
-    chars[idx] = digit || " ";
-    const next = chars.join("").trimEnd();
-    onChange(next);
-    if (digit && idx < 5) refs[idx + 1].current?.focus();
-  };
-
-  const handlePaste = (e: React.ClipboardEvent) => {
-    const pasted = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, 6);
-    if (pasted) {
-      onChange(pasted);
-      refs[Math.min(pasted.length, 5)].current?.focus();
-    }
-    e.preventDefault();
-  };
-
-  return (
-    <div className="flex gap-2">
-      {Array.from({ length: 6 }).map((_, idx) => (
-        <input
-          key={idx}
-          ref={refs[idx]}
-          type="text"
-          inputMode="numeric"
-          maxLength={1}
-          value={value[idx] ?? ""}
-          onChange={(e) => handleChange(e, idx)}
-          onKeyDown={(e) => handleKey(e, idx)}
-          onPaste={handlePaste}
-          disabled={disabled}
-          className={cn(
-            "size-11 rounded-xl border border-glass bg-glass-button text-center text-lg font-bold text-primary outline-none transition",
-            "focus:border-accent focus:ring-2 focus:ring-accent/20",
-            "disabled:opacity-50",
-          )}
-        />
-      ))}
-    </div>
-  );
-}
 
 // ── Section: Edit Profile ─────────────────────────────────────────────────────
 
@@ -319,125 +245,16 @@ function EditProfileSection() {
 
 // ── Section: Change Password ──────────────────────────────────────────────────
 
-type PasswordStep = "idle" | "sent" | "verified" | "done";
+type PasswordStep = "idle" | "done";
 
 function ChangePasswordSection() {
-  const { profile } = useUser();
   const { toast } = useToast();
 
   const [step, setStep] = useState<PasswordStep>("idle");
-  const [otp, setOtp] = useState("");
-  const [otpError, setOtpError] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [passwordError, setPasswordError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [otpCooldownUntil, setOtpCooldownUntil] = useState(0);
-  const [now, setNow] = useState(() => Date.now());
-
-  const email = profile?.email ?? "";
-  const resendRemaining = Math.max(
-    0,
-    Math.ceil((otpCooldownUntil - now) / 1000),
-  );
-
-  useEffect(() => {
-    if (!otpCooldownUntil) return;
-    const interval = window.setInterval(() => setNow(Date.now()), 1000);
-    return () => window.clearInterval(interval);
-  }, [otpCooldownUntil]);
-
-  const sendOtp = async () => {
-    if (!email) return;
-    setLoading(true);
-    try {
-      const res = await forgotPasswordApi(email);
-      setOtp("");
-      setOtpError("");
-      setStep("sent");
-      const nextNow = Date.now();
-      setOtpCooldownUntil(nextNow + 30_000);
-      setNow(nextNow);
-      if (res._devOtp) {
-        toast({
-          variant: "success",
-          title: "OTP sent (dev mode)",
-          message: `Your code: ${res._devOtp}`,
-        });
-      } else {
-        toast({
-          variant: "success",
-          title: "Code sent",
-          message: "Check your inbox for the 6-digit code.",
-        });
-      }
-    } catch (err) {
-      toast({
-        variant: "error",
-        title: "Failed to send code",
-        message:
-          err instanceof ApiError ? err.message : "Could not send OTP.",
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const resendOtp = async () => {
-    if (!email || resendRemaining > 0) return;
-    setLoading(true);
-    try {
-      const res = await resendOtpApi(email, "FORGOT_PASSWORD");
-      setOtp("");
-      setOtpError("");
-      const nextNow = Date.now();
-      setOtpCooldownUntil(nextNow + 30_000);
-      setNow(nextNow);
-      if (res._devOtp) {
-        toast({
-          variant: "success",
-          title: "OTP resent (dev mode)",
-          message: `Your code: ${res._devOtp}`,
-        });
-      } else {
-        toast({
-          variant: "success",
-          title: "Code resent",
-          message: res.message || "Check your inbox for the fresh code.",
-        });
-      }
-    } catch (err) {
-      toast({
-        variant: "error",
-        title: "Failed to resend code",
-        message:
-          err instanceof ApiError ? err.message : "Could not resend OTP.",
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const verifyOtp = async () => {
-    if (otp.replace(/\s/g, "").length < 6) {
-      setOtpError("Enter the full 6-digit code.");
-      return;
-    }
-    setLoading(true);
-    try {
-      await verifyOtpApi(email, otp.trim(), "FORGOT_PASSWORD");
-      setOtpError("");
-      setStep("verified");
-    } catch (err) {
-      setOtpError(
-        err instanceof ApiError
-          ? err.message
-          : "Invalid or expired code. Try again.",
-      );
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const savePassword = async () => {
     if (newPassword.length < 8) {
@@ -451,17 +268,16 @@ function ChangePasswordSection() {
     setPasswordError("");
     setLoading(true);
     try {
-      await resetPasswordApi(email, otp.trim(), newPassword);
+      const supabase = createClient();
+      const { error } = await supabase.auth.updateUser({ password: newPassword });
+      if (error) {
+        setPasswordError(error.message);
+        return;
+      }
       setStep("done");
-      toast({
-        variant: "success",
-        title: "Password updated",
-        message: "Your password has been changed successfully.",
-      });
-    } catch (err) {
-      setPasswordError(
-        err instanceof ApiError ? err.message : "Could not update password.",
-      );
+      toast({ variant: "success", title: "Password updated", message: "Your password has been changed successfully." });
+    } catch {
+      setPasswordError("Could not update password. Try again.");
     } finally {
       setLoading(false);
     }
@@ -469,12 +285,9 @@ function ChangePasswordSection() {
 
   const reset = () => {
     setStep("idle");
-    setOtp("");
-    setOtpError("");
     setNewPassword("");
     setConfirmPassword("");
     setPasswordError("");
-    setOtpCooldownUntil(0);
   };
 
   return (
@@ -506,175 +319,36 @@ function ChangePasswordSection() {
           </button>
         </div>
       ) : (
-        <div className="space-y-5">
-          {/* Step 1 — Request OTP */}
-          <div
-            className={cn(
-              "rounded-2xl border p-4 transition",
-              step === "idle"
-                ? "border-glass bg-glass-button/30"
-                : "border-emerald-500/30 bg-emerald-500/5",
-            )}
+        <div className="space-y-3">
+          <p className="text-sm text-primary/60">
+            You&apos;re signed in with Supabase — just enter a new password below.
+          </p>
+          <PasswordInput
+            value={newPassword}
+            onChange={(e) => setNewPassword(e.target.value)}
+            placeholder="New password (min 8 characters)"
+          />
+          <PasswordInput
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            placeholder="Confirm new password"
+          />
+          {passwordError && (
+            <p className="text-xs text-red-400">{passwordError}</p>
+          )}
+          <button
+            type="button"
+            onClick={savePassword}
+            disabled={loading || !newPassword || !confirmPassword}
+            className="flex items-center gap-2 rounded-xl bg-accent px-5 py-2 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
           >
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div
-                  className={cn(
-                    "flex size-6 items-center justify-center rounded-full text-xs font-bold",
-                    step !== "idle"
-                      ? "bg-emerald-500/20 text-emerald-400"
-                      : "bg-accent/20 text-accent",
-                  )}
-                >
-                  {step !== "idle" ? (
-                    <CheckCircle2 className="size-3.5" />
-                  ) : (
-                    "1"
-                  )}
-                </div>
-                <span className="text-sm font-medium text-primary">
-                  Send verification code
-                </span>
-              </div>
-              {step === "idle" ? (
-                <button
-                  type="button"
-                  onClick={sendOtp}
-                  disabled={loading}
-                  className="flex items-center gap-1.5 rounded-lg bg-accent px-4 py-1.5 text-xs font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
-                >
-                  {loading ? (
-                    <Loader2 className="size-3.5 animate-spin" />
-                  ) : (
-                    <Mail className="size-3.5" />
-                  )}
-                  Send OTP
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={resendOtp}
-                  disabled={loading || resendRemaining > 0}
-                  className="text-xs text-accent underline-offset-2 hover:underline disabled:opacity-50"
-                >
-                  {resendRemaining > 0 ? `Resend in ${resendRemaining}s` : "Resend"}
-                </button>
-              )}
-            </div>
-
-            {step !== "idle" && (
-              <div className="mt-3 flex items-center gap-2 rounded-xl border border-accent/25 bg-accent/10 px-3 py-2">
-                <Mail className="size-3.5 shrink-0 text-accent" />
-                <p className="text-xs text-primary/70">
-                  Code sent to{" "}
-                  <span className="font-semibold text-primary">{email}</span>
-                  {" — "}check the toast for the dev OTP.
-                </p>
-              </div>
+            {loading ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <KeyRound className="size-4" />
             )}
-          </div>
-
-          {/* Step 2 — Enter OTP */}
-          <div
-            className={cn(
-              "rounded-2xl border p-4 transition",
-              step === "idle"
-                ? "border-glass/50 opacity-40 pointer-events-none"
-                : step === "verified"
-                  ? "border-emerald-500/30 bg-emerald-500/5"
-                  : "border-glass bg-glass-button/30",
-            )}
-          >
-            <div className="mb-3 flex items-center gap-2">
-              <div
-                className={cn(
-                  "flex size-6 items-center justify-center rounded-full text-xs font-bold",
-                  step === "verified"
-                    ? "bg-emerald-500/20 text-emerald-400"
-                    : "bg-accent/20 text-accent",
-                )}
-              >
-                {step === "verified" ? (
-                  <CheckCircle2 className="size-3.5" />
-                ) : (
-                  "2"
-                )}
-              </div>
-              <span className="text-sm font-medium text-primary">
-                Enter the 6-digit code
-              </span>
-            </div>
-
-            <div className="space-y-3">
-              <OtpInput
-                value={otp}
-                onChange={setOtp}
-                disabled={step === "idle" || step === "verified" || loading}
-              />
-              {otpError && (
-                <p className="text-xs text-red-400">{otpError}</p>
-              )}
-              {step === "sent" && (
-                <button
-                  type="button"
-                  onClick={verifyOtp}
-                  disabled={loading || otp.replace(/\s/g, "").length < 6}
-                  className="flex items-center gap-1.5 rounded-lg border border-glass bg-glass-button px-4 py-1.5 text-xs font-semibold text-primary transition hover:border-accent/50 hover:text-accent disabled:opacity-40"
-                >
-                  {loading && <Loader2 className="size-3.5 animate-spin" />}
-                  Verify Code →
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* Step 3 — New Password */}
-          <div
-            className={cn(
-              "rounded-2xl border p-4 transition",
-              step !== "verified"
-                ? "pointer-events-none border-glass/50 opacity-40"
-                : "border-glass bg-glass-button/30",
-            )}
-          >
-            <div className="mb-3 flex items-center gap-2">
-              <div className="flex size-6 items-center justify-center rounded-full bg-accent/20 text-xs font-bold text-accent">
-                3
-              </div>
-              <span className="text-sm font-medium text-primary">
-                Set new password
-              </span>
-            </div>
-
-            <div className="space-y-3">
-              <PasswordInput
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                placeholder="New password (min 8 characters)"
-              />
-              <PasswordInput
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                placeholder="Confirm new password"
-              />
-              {passwordError && (
-                <p className="text-xs text-red-400">{passwordError}</p>
-              )}
-              <button
-                type="button"
-                onClick={savePassword}
-                disabled={loading || !newPassword || !confirmPassword}
-                className="flex items-center gap-2 rounded-xl bg-accent px-5 py-2 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
-              >
-                {loading ? (
-                  <Loader2 className="size-4 animate-spin" />
-                ) : (
-                  <KeyRound className="size-4" />
-                )}
-                Update Password
-              </button>
-            </div>
-          </div>
+            Update Password
+          </button>
         </div>
       )}
     </GlassCard>
@@ -707,15 +381,7 @@ export default function ProfilePage() {
       });
       return;
     }
-    clearAccessToken();
     await clearSession();
-    toast({
-      variant: "success",
-      title: "Account deactivated",
-      message:
-        "Your account is archived. You can reactivate it anytime with your email.",
-    });
-    router.push("/reactivate");
   }
 
   if (loading) {

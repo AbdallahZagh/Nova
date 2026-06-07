@@ -1,26 +1,17 @@
 "use server";
 
-import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { AUTH_COOKIE } from "@/lib/auth";
+import { createClient } from "@/lib/supabase/server";
 
-const SESSION_MAX_AGE = 60 * 60 * 24 * 7;
+/**
+ * @deprecated Supabase sets its own session cookies automatically.
+ * Kept so existing call sites don't break — this is a no-op.
+ */
+export async function establishSession() {}
 
-/** Mark the browser session as authenticated (middleware gate). */
-export async function establishSession() {
-  const cookieStore = await cookies();
-  cookieStore.set(AUTH_COOKIE, "authenticated", {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    path: "/",
-    maxAge: SESSION_MAX_AGE,
-  });
-}
-
-/** Clear session cookie and redirect to login. */
+/** Sign out from Supabase and redirect to login. */
 export async function clearSession() {
-  const cookieStore = await cookies();
-  cookieStore.delete(AUTH_COOKIE);
+  const supabase = await createClient();
+  await supabase.auth.signOut();
   redirect("/");
 }
