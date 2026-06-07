@@ -1,90 +1,95 @@
-import type { ApiErrorBody } from "@/lib/api/types";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "";
 
-export class ApiError extends Error {
-  status: number;
-  body?: ApiErrorBody;
-
-  constructor(status: number, message: string, body?: ApiErrorBody) {
-    super(message);
-    this.name = "ApiError";
-    this.status = status;
-    this.body = body;
-  }
-}
-
-const API_BASE = (process.env.NEXT_PUBLIC_API_URL ?? "").replace(/\/$/, "");
+export const ACCESS_TOKEN_KEY = "taskflow-access-token";
 
 export function apiUrl(path: string): string {
-  const normalized = path.startsWith("/") ? path : `/${path}`;
-  return API_BASE ? `${API_BASE}${normalized}` : normalized;
+  if (path.startsWith("http")) return path;
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  if (!API_BASE) return normalizedPath;
+  return `${API_BASE.replace(/\/$/, "")}${normalizedPath}`;
 }
 
-/** Read the active Supabase session token — works client-side only. */
-export async function getAccessToken(): Promise<string | null> {
+export function getAccessToken(): string | null {
   if (typeof window === "undefined") return null;
+
   try {
-    const { createClient } = await import("@/lib/supabase/client");
-    const supabase = createClient();
-    const { data } = await supabase.auth.getSession();
-    return data.session?.access_token ?? null;
+    return localStorage.getItem(ACCESS_TOKEN_KEY);
   } catch {
     return null;
   }
 }
 
-/** @deprecated Supabase manages its own session — kept for backward compatibility. */
-export function setAccessToken(_token: string): void {}
+export function setAccessToken(token: string): void {
+  if (typeof window === "undefined") return;
 
-/** @deprecated Supabase manages its own session — kept for backward compatibility. */
-export function clearAccessToken(): void {}
-
-/** Legacy key — no longer used; kept so existing imports don't break. */
-export const ACCESS_TOKEN_KEY = "taskflow-access-token";
-
-function parseErrorMessage(status: number, body: ApiErrorBody): string {
-  if (body.message) return body.message;
-  if (body.error) return body.error;
-  if (body.errors) {
-    const first = Object.values(body.errors).flat()[0];
-    if (first) return first;
+  try {
+    localStorage.setItem(ACCESS_TOKEN_KEY, token);
+  } catch {
+    // Ignore storage failures so auth flows can still surface API errors.
   }
-  if (status === 401) return "Unauthorized. Please sign in again.";
-  if (status === 400) return "Invalid request. Please check your input.";
-  if (status === 404) return "Resource not found.";
-  return `Request failed (${status})`;
 }
 
-export async function apiFetch<T>(
-  path: string,
-  options: RequestInit & { auth?: boolean } = {},
-): Promise<T> {
-  const { auth = true, headers: initHeaders, ...rest } = options;
-  const headers = new Headers(initHeaders);
+export function clearAccessToken(): void {
+  if (typeof window === "undefined") return;
 
-  if (!headers.has("Content-Type") && rest.body) {
+  try {
+    localStorage.removeItem(ACCESS_TOKEN_KEY);
+  } catch {
+    // Ignore storage failures during logout.
+  }
+}
+
+export class ApiError extends Error {
+  status: number;
+  details?: unknown;
+
+  constructor(message: string, status: number, details?: unknown) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+    this.details = details;
+  }
+}
+
+type ApiFetchOptions = RequestInit & {
+  auth?: boolean;
+};
+
+export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): Promise<T> {
+  const { auth = true, headers: providedHeaders, body, ...rest } = options;
+  const headers = new Headers(providedHeaders);
+
+  if (body && !(body instanceof FormData) && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
   }
 
   if (auth) {
-    const token = await getAccessToken();
-    if (token) headers.set("Authorization", `Bearer ${token}`);
-  }
-
-  const res = await fetch(apiUrl(path), { ...rest, headers });
-  const text = await res.text();
-  let body: ApiErrorBody = {};
-  if (text) {
-    try {
-      body = JSON.parse(text) as ApiErrorBody;
-    } catch {
-      body = { message: text };
+    const token = getAccessToken();
+    if (token) {
+      headers.set("Authorization", `Bearer ${token}`);
     }
   }
 
-  if (!res.ok) {
-    throw new ApiError(res.status, parseErrorMessage(res.status, body), body);
+  const response = await fetch(apiUrl(path), {
+    ...rest,
+    headers,
+    body,
+  });
+
+  const contentType = response.headers.get("Content-Type");
+  const isJson = contentType?.includes("application/json");
+  const payload = isJson ? await response.json().catch(() => null) : await response.text();
+
+  if (!response.ok) {
+    const message =
+      typeof payload === "object" && payload && "message" in payload
+        ? Array.isArray((payload as { message: unknown }).message)
+          ? ((payload as { message: string[] }).message).join(", ")
+          : String((payload as { message: unknown }).message)
+        : `Request failed with status ${response.status}`;
+
+    throw new ApiError(message, response.status, payload);
   }
 
-  if (!text) return {} as T;
-  return JSON.parse(text) as T;
+  return payload as T;
 }

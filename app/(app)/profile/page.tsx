@@ -21,7 +21,12 @@ import { Input, PasswordInput, Textarea } from "@/components/ui/input";
 import { useToast } from "@/components/ui/Toast";
 import { ProfileSkeleton } from "@/components/skeletons/ProfileSkeleton";
 import { useUser } from "@/components/providers/UserProvider";
-import { createClient } from "@/lib/supabase/client";
+import {
+  forgotPasswordApi,
+  resendOtpApi,
+  resetPasswordApi,
+  verifyOtpApi,
+} from "@/lib/api/auth";
 import { deactivateMeApi } from "@/lib/api/users";
 import { ApiError } from "@/lib/api/client";
 import { cn } from "@/lib/cn";
@@ -245,18 +250,104 @@ function EditProfileSection() {
 
 // ── Section: Change Password ──────────────────────────────────────────────────
 
-type PasswordStep = "idle" | "done";
+type PasswordStep = "idle" | "sent" | "verified" | "done";
 
 function ChangePasswordSection() {
+  const { profile } = useUser();
   const { toast } = useToast();
 
   const [step, setStep] = useState<PasswordStep>("idle");
+  const [otp, setOtp] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [otpError, setOtpError] = useState("");
   const [passwordError, setPasswordError] = useState("");
+  const [cooldown, setCooldown] = useState(0);
   const [loading, setLoading] = useState(false);
 
+  useEffect(() => {
+    if (!cooldown) return;
+    const timer = window.setInterval(() => {
+      setCooldown((current) => Math.max(0, current - 1));
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [cooldown]);
+
+  const requestOtp = async () => {
+    if (!profile?.email) return;
+    setOtpError("");
+    setPasswordError("");
+    setLoading(true);
+    try {
+      const response = await forgotPasswordApi(profile.email);
+      setOtp("");
+      setCooldown(30);
+      setStep("sent");
+      toast({
+        variant: "success",
+        title: "OTP sent",
+        message: response._devOtp
+          ? `Dev OTP: ${response._devOtp}`
+          : "Check your email for the verification code.",
+      });
+    } catch (err) {
+      const message =
+        err instanceof ApiError ? err.message : "Could not send OTP. Try again.";
+      setOtpError(message);
+      toast({ variant: "error", title: "OTP failed", message });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const resendOtp = async () => {
+    if (!profile?.email || cooldown || loading) return;
+    setOtpError("");
+    setLoading(true);
+    try {
+      const response = await resendOtpApi(profile.email, "FORGOT_PASSWORD");
+      setCooldown(30);
+      toast({
+        variant: "success",
+        title: "OTP resent",
+        message: response._devOtp
+          ? `Dev OTP: ${response._devOtp}`
+          : "A fresh code was sent to your email.",
+      });
+    } catch (err) {
+      const message =
+        err instanceof ApiError ? err.message : "Could not resend OTP. Try again.";
+      setOtpError(message);
+      toast({ variant: "error", title: "Resend failed", message });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const verifyOtp = async () => {
+    if (!profile?.email) return;
+    if (otp.length !== 6) {
+      setOtpError("Enter the 6-digit OTP.");
+      return;
+    }
+    setOtpError("");
+    setLoading(true);
+    try {
+      await verifyOtpApi(profile.email, otp, "FORGOT_PASSWORD");
+      setStep("verified");
+      toast({ variant: "success", title: "OTP verified" });
+    } catch (err) {
+      const message =
+        err instanceof ApiError ? err.message : "Could not verify OTP. Try again.";
+      setOtpError(message);
+      toast({ variant: "error", title: "Verification failed", message });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const savePassword = async () => {
+    if (!profile?.email) return;
     if (newPassword.length < 8) {
       setPasswordError("Password must be at least 8 characters.");
       return;
@@ -268,16 +359,15 @@ function ChangePasswordSection() {
     setPasswordError("");
     setLoading(true);
     try {
-      const supabase = createClient();
-      const { error } = await supabase.auth.updateUser({ password: newPassword });
-      if (error) {
-        setPasswordError(error.message);
-        return;
-      }
+      await resetPasswordApi(profile.email, otp, newPassword);
       setStep("done");
       toast({ variant: "success", title: "Password updated", message: "Your password has been changed successfully." });
-    } catch {
-      setPasswordError("Could not update password. Try again.");
+    } catch (err) {
+      const message =
+        err instanceof ApiError
+          ? err.message
+          : "Could not update password. Try again.";
+      setPasswordError(message);
     } finally {
       setLoading(false);
     }
@@ -285,9 +375,12 @@ function ChangePasswordSection() {
 
   const reset = () => {
     setStep("idle");
+    setOtp("");
     setNewPassword("");
     setConfirmPassword("");
+    setOtpError("");
     setPasswordError("");
+    setCooldown(0);
   };
 
   return (
@@ -318,10 +411,62 @@ function ChangePasswordSection() {
             <RefreshCw className="size-3.5" /> Change again
           </button>
         </div>
+      ) : step === "idle" ? (
+        <div className="space-y-3">
+          <p className="text-sm text-primary/60">
+            We&apos;ll send an OTP to your account email before changing your password.
+          </p>
+          {otpError && <p className="text-xs text-red-400">{otpError}</p>}
+          <button
+            type="button"
+            onClick={requestOtp}
+            disabled={loading || !profile?.email}
+            className="flex items-center gap-2 rounded-xl bg-accent px-5 py-2 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
+          >
+            {loading ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <KeyRound className="size-4" />
+            )}
+            Send OTP
+          </button>
+        </div>
+      ) : step === "sent" ? (
+        <div className="space-y-3">
+          <p className="text-sm text-primary/60">
+            Enter the 6-digit OTP sent to {profile?.email}.
+          </p>
+          <Input
+            value={otp}
+            onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
+            placeholder="6-digit OTP"
+            inputMode="numeric"
+          />
+          {otpError && <p className="text-xs text-red-400">{otpError}</p>}
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={verifyOtp}
+              disabled={loading || otp.length !== 6}
+              className="flex items-center gap-2 rounded-xl bg-accent px-5 py-2 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
+            >
+              {loading ? <Loader2 className="size-4 animate-spin" /> : <KeyRound className="size-4" />}
+              Verify OTP
+            </button>
+            <button
+              type="button"
+              onClick={resendOtp}
+              disabled={loading || cooldown > 0}
+              className="rounded-xl border border-glass bg-glass-button px-5 py-2 text-sm font-semibold text-primary transition hover:text-accent disabled:opacity-50"
+            >
+              {cooldown > 0 ? `Resend in ${cooldown}s` : "Resend OTP"}
+            </button>
+          </div>
+        </div>
       ) : (
         <div className="space-y-3">
           <p className="text-sm text-primary/60">
-            You&apos;re signed in with Supabase — just enter a new password below.
+            OTP verified. Choose your new password.
           </p>
           <PasswordInput
             value={newPassword}

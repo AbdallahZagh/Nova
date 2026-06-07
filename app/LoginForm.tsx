@@ -1,12 +1,12 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { GoogleSignInButton } from "@/components/auth/GoogleSignInButton";
+import { establishSession } from "@/app/actions/session";
 import { Input, PasswordInput } from "@/components/ui/input";
 import { useToast } from "@/components/ui/Toast";
-import { ApiError } from "@/lib/api/client";
-import { createClient } from "@/lib/supabase/client";
+import { loginApi } from "@/lib/api/auth";
+import { ApiError, setAccessToken } from "@/lib/api/client";
 
 function LoginFormContent() {
   const router = useRouter();
@@ -15,43 +15,22 @@ function LoginFormContent() {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | undefined>();
 
-  useEffect(() => {
-    if (searchParams.get("error") === "auth_callback") {
-      setError("Google sign-in failed. Please try again.");
-      toast({
-        variant: "error",
-        title: "Sign in failed",
-        message: "Could not complete Google sign-in.",
-      });
-    }
-  }, [searchParams, toast]);
-
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(undefined);
     setPending(true);
 
-    const form = e.currentTarget;
-    const formData = new FormData(form);
+    const formData = new FormData(e.currentTarget);
     const email = String(formData.get("email") ?? "").trim();
     const password = String(formData.get("password") ?? "");
 
     try {
-      const supabase = createClient();
-      const { error: authError } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
-
-      if (authError) {
-        const message = authError.message ?? "Unable to sign in. Check your credentials.";
-        setError(message);
-        toast({ variant: "error", title: "Sign in failed", message });
-        return;
-      }
+      const response = await loginApi(email, password);
+      setAccessToken(response.accessToken);
+      await establishSession();
 
       toast({ variant: "success", title: "Welcome back" });
-      router.push("/dashboard");
+      router.push(searchParams.get("from") ?? "/dashboard");
       router.refresh();
     } catch (err) {
       const message =
@@ -66,16 +45,7 @@ function LoginFormContent() {
   }
 
   return (
-    <div className="space-y-4">
-      <GoogleSignInButton />
-
-      <div className="flex items-center gap-3">
-        <div className="h-px flex-1 bg-glass" />
-        <span className="text-xs text-primary/45">or</span>
-        <div className="h-px flex-1 bg-glass" />
-      </div>
-
-      <form onSubmit={handleSubmit} className="space-y-4">
+    <form onSubmit={handleSubmit} className="space-y-4">
       <div>
         <label
           htmlFor="email"
@@ -116,7 +86,7 @@ function LoginFormContent() {
           autoComplete="current-password"
           required
           variant="soft"
-          placeholder="••••••••"
+          placeholder="Password"
           className="bg-main/60"
         />
       </div>
@@ -132,10 +102,9 @@ function LoginFormContent() {
         disabled={pending}
         className="w-full rounded-xl bg-accent px-4 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-60"
       >
-        {pending ? "Signing in…" : "Sign in with email"}
+        {pending ? "Signing in..." : "Sign in"}
       </button>
     </form>
-    </div>
   );
 }
 

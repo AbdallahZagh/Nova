@@ -1,58 +1,28 @@
-import { createServerClient } from "@supabase/ssr";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { AUTH_COOKIE } from "@/lib/auth";
 
-export async function middleware(request: NextRequest) {
+export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // API routes are proxied to the backend — never gate them with session auth
   if (pathname.startsWith("/api/")) {
     return NextResponse.next();
   }
 
-  let response = NextResponse.next({ request });
-
-  // Build a Supabase client that reads/writes cookies on the current request
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return request.cookies.getAll();
-        },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value }) =>
-            request.cookies.set(name, value),
-          );
-          response = NextResponse.next({ request });
-          cookiesToSet.forEach(({ name, value, options }) =>
-            response.cookies.set(name, value, options),
-          );
-        },
-      },
-    },
-  );
-
-  // getUser() refreshes the session if the access token has expired
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  const isAuthenticated = Boolean(user);
+  const isAuthenticated = Boolean(request.cookies.get(AUTH_COOKIE)?.value);
   const isLoginPage = pathname === "/";
   const isPublicPage =
     isLoginPage ||
     pathname === "/forgot-password" ||
     pathname === "/register" ||
-    pathname === "/reactivate" ||
-    pathname === "/auth/callback";
+    pathname === "/reactivate";
 
   if (isPublicPage) {
     if (isAuthenticated && isLoginPage) {
       return NextResponse.redirect(new URL("/dashboard", request.url));
     }
-    return response;
+
+    return NextResponse.next();
   }
 
   if (!isAuthenticated) {
@@ -61,7 +31,7 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  return response;
+  return NextResponse.next();
 }
 
 export const config = {

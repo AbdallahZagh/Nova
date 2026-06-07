@@ -12,6 +12,8 @@ import {
 } from "lucide-react";
 import { clearSession } from "@/app/actions/session";
 import { useToast } from "@/components/ui/Toast";
+import { logoutApi } from "@/lib/api/auth";
+import { clearAccessToken } from "@/lib/api/client";
 import { cn } from "@/lib/cn";
 import Image from "next/image";
 
@@ -35,6 +37,8 @@ export function Sidebar({ mobileOpen = false, onClose }: SidebarProps) {
     if (loggingOut) return;
     setLoggingOut(true);
     try {
+      await logoutApi().catch(() => {});
+      clearAccessToken();
       await clearSession();
     } catch {
       toast({ variant: "error", title: "Sign out failed", message: "Please try again." });

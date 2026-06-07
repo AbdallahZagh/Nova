@@ -1,30 +1,102 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { CheckCircle2, Loader2, UserPlus } from "lucide-react";
-import { GoogleSignInButton } from "@/components/auth/GoogleSignInButton";
+import { ArrowLeft, CheckCircle2, Loader2, UserPlus } from "lucide-react";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { Input, PasswordInput } from "@/components/ui/input";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { useToast } from "@/components/ui/Toast";
-import { createClient } from "@/lib/supabase/client";
+import { registerApi, resendOtpApi, verifyOtpApi } from "@/lib/api/auth";
+import { ApiError } from "@/lib/api/client";
 import { cn } from "@/lib/cn";
 import { bodyToUsername, validateUsername } from "@/lib/username";
+
+type Step = "details" | "otp" | "done";
+
+function OtpInput({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const inputRefs = useRef<Array<HTMLInputElement | null>>([]);
+  const digits = Array.from({ length: 6 }, (_, index) => value[index] ?? "");
+
+  return (
+    <div className="flex justify-center gap-2">
+      {digits.map((digit, index) => (
+        <input
+          key={index}
+          ref={(node) => {
+            inputRefs.current[index] = node;
+          }}
+          value={digit}
+          inputMode="numeric"
+          maxLength={1}
+          onChange={(e) => {
+            const next = e.target.value.replace(/\D/g, "").slice(-1);
+            const chars = value.padEnd(6, " ").split("");
+            chars[index] = next || " ";
+            onChange(chars.join("").replace(/\s/g, "").slice(0, 6));
+            if (next && index < 5) inputRefs.current[index + 1]?.focus();
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Backspace" && !digit && index > 0) {
+              inputRefs.current[index - 1]?.focus();
+            }
+          }}
+          className="size-11 rounded-xl border border-glass bg-main/60 text-center text-lg font-semibold text-primary outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/20"
+        />
+      ))}
+    </div>
+  );
+}
+
+function StepDot({ n, active, done }: { n: number; active: boolean; done: boolean }) {
+  return (
+    <div
+      className={cn(
+        "flex size-8 items-center justify-center rounded-full text-sm font-bold transition",
+        done
+          ? "bg-emerald-500/20 text-emerald-400"
+          : active
+            ? "bg-accent/25 text-accent ring-2 ring-accent/30"
+            : "bg-glass-button text-primary/40",
+      )}
+    >
+      {done ? <CheckCircle2 className="size-4" /> : n}
+    </div>
+  );
+}
 
 export default function RegisterPage() {
   const { toast } = useToast();
 
-  const [step, setStep] = useState<"details" | "done">("details");
+  const [step, setStep] = useState<Step>("details");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
   const [usernameBody, setUsernameBody] = useState("");
   const [roleTitle, setRoleTitle] = useState("");
+  const [otp, setOtp] = useState("");
+  const [cooldown, setCooldown] = useState(0);
 
   const [loading, setLoading] = useState(false);
   const [formError, setFormError] = useState("");
   const [usernameError, setUsernameError] = useState("");
+  const [otpError, setOtpError] = useState("");
+
+  const stepNum = step === "details" ? 1 : step === "otp" ? 2 : 3;
+
+  useEffect(() => {
+    if (!cooldown) return;
+    const timer = window.setInterval(() => {
+      setCooldown((current) => Math.max(0, current - 1));
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [cooldown]);
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -45,36 +117,81 @@ export default function RegisterPage() {
 
     setLoading(true);
     try {
-      const supabase = createClient();
-      const { error } = await supabase.auth.signUp({
-        email: email.trim(),
+      const response = await registerApi({
+        email,
         password,
-        options: {
-          data: {
-            full_name: fullName.trim(),
-            username,
-            role_title: roleTitle.trim(),
-          },
-          emailRedirectTo: `${window.location.origin}/auth/callback`,
-        },
+        fullName,
+        username,
+        roleTitle,
       });
-
-      if (error) {
-        setFormError(error.message);
-        toast({ variant: "error", title: "Registration failed", message: error.message });
-        return;
-      }
 
       toast({
         variant: "success",
-        title: "Account created",
-        message: "Check your email for a confirmation link.",
+        title: "OTP sent",
+        message: response._devOtp
+          ? `Dev OTP: ${response._devOtp}`
+          : "Check your email for the verification code.",
+      });
+      setOtp("");
+      setCooldown(30);
+      setStep("otp");
+    } catch (err) {
+      const message =
+        err instanceof ApiError ? err.message : "Could not create account. Try again.";
+      setFormError(message);
+      toast({ variant: "error", title: "Registration failed", message });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResendOtp = async () => {
+    if (cooldown || loading) return;
+    setOtpError("");
+    setLoading(true);
+    try {
+      const response = await resendOtpApi(email, "REGISTER");
+      setCooldown(30);
+      toast({
+        variant: "success",
+        title: "OTP resent",
+        message: response._devOtp
+          ? `Dev OTP: ${response._devOtp}`
+          : "A fresh code was sent to your email.",
+      });
+    } catch (err) {
+      const message =
+        err instanceof ApiError ? err.message : "Could not resend OTP. Try again.";
+      setOtpError(message);
+      toast({ variant: "error", title: "Resend failed", message });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerifyOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setOtpError("");
+
+    if (otp.length !== 6) {
+      setOtpError("Enter the 6-digit OTP.");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await verifyOtpApi(email, otp, "REGISTER");
+      toast({
+        variant: "success",
+        title: "Account verified",
+        message: "You can now sign in.",
       });
       setStep("done");
-    } catch {
-      const msg = "Could not create account. Try again.";
-      setFormError(msg);
-      toast({ variant: "error", title: "Registration failed", message: msg });
+    } catch (err) {
+      const message =
+        err instanceof ApiError ? err.message : "Could not verify OTP. Try again.";
+      setOtpError(message);
+      toast({ variant: "error", title: "Verification failed", message });
     } finally {
       setLoading(false);
     }
@@ -94,21 +211,20 @@ export default function RegisterPage() {
           Create account
         </h1>
         <p className="mt-2 text-sm text-primary/60">
-          Join Nova and confirm your email
+          Join Nova and verify your email
         </p>
       </div>
 
-      <GlassCard className="w-full max-w-xl space-y-4">
+      <GlassCard className="w-full max-w-xl space-y-6">
+        {step !== "done" && (
+          <div className="flex items-center justify-center gap-3">
+            <StepDot n={1} active={step === "details"} done={stepNum > 1} />
+            <div className={cn("h-px w-10 transition", stepNum > 1 ? "bg-emerald-500/40" : "bg-glass")} />
+            <StepDot n={2} active={step === "otp"} done={stepNum > 2} />
+          </div>
+        )}
+
         {step === "details" && (
-          <>
-            <GoogleSignInButton label="Sign up with Google" />
-
-            <div className="flex items-center gap-3">
-              <div className="h-px flex-1 bg-glass" />
-              <span className="text-xs text-primary/45">or</span>
-              <div className="h-px flex-1 bg-glass" />
-            </div>
-
           <form onSubmit={handleRegister} className="space-y-4">
             <div className="flex justify-between gap-4">
               <div className="flex-1">
@@ -235,10 +351,57 @@ export default function RegisterPage() {
               ) : (
                 <UserPlus className="size-4" />
               )}
-              {loading ? "Creating account…" : "Create account with email"}
+              {loading ? "Creating account..." : "Create account"}
             </button>
           </form>
-          </>
+        )}
+
+        {step === "otp" && (
+          <form onSubmit={handleVerifyOtp} className="space-y-5">
+            <div className="text-center">
+              <p className="font-semibold text-primary">Verify your email</p>
+              <p className="mt-1 text-sm text-primary/55">
+                Enter the 6-digit code sent to{" "}
+                <span className="font-medium text-primary">{email}</span>.
+              </p>
+            </div>
+
+            <OtpInput value={otp} onChange={setOtp} />
+
+            {otpError && (
+              <p className="text-center text-sm text-red-400" role="alert">
+                {otpError}
+              </p>
+            )}
+
+            <button
+              type="submit"
+              disabled={loading || otp.length !== 6}
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-accent px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
+            >
+              {loading ? <Loader2 className="size-4 animate-spin" /> : null}
+              {loading ? "Verifying..." : "Verify account"}
+            </button>
+
+            <div className="flex items-center justify-between text-sm">
+              <button
+                type="button"
+                onClick={() => setStep("details")}
+                className="inline-flex items-center gap-1 text-primary/50 transition hover:text-accent"
+              >
+                <ArrowLeft className="size-4" />
+                Edit details
+              </button>
+              <button
+                type="button"
+                onClick={handleResendOtp}
+                disabled={loading || cooldown > 0}
+                className="text-accent underline-offset-2 hover:underline disabled:text-primary/35 disabled:no-underline"
+              >
+                {cooldown > 0 ? `Resend in ${cooldown}s` : "Resend OTP"}
+              </button>
+            </div>
+          </form>
         )}
 
         {step === "done" && (
@@ -248,20 +411,18 @@ export default function RegisterPage() {
             </div>
             <div>
               <p className="text-lg font-semibold text-primary">
-                Check your email!
+                Account verified!
               </p>
               <p className="mt-1 text-sm text-primary/55">
-                We sent a confirmation link to{" "}
-                <span className="font-medium text-primary">{email}</span>.
-                Click it to activate your account, then sign in.
+                Your account is ready. Sign in with your email and password.
               </p>
             </div>
-            <a
+            <Link
               href="/"
               className="mt-2 w-full rounded-xl bg-accent px-4 py-2.5 text-center text-sm font-semibold text-white transition hover:opacity-90"
             >
               Go to sign in
-            </a>
+            </Link>
           </div>
         )}
 
