@@ -1,127 +1,147 @@
 import { Injectable, InternalServerErrorException, Logger } from '@nestjs/common';
-import { Resend } from 'resend';
 
 type OtpPurpose = 'REGISTER' | 'FORGOT_PASSWORD' | 'REACTIVATE';
 
 @Injectable()
 export class MailService {
   private readonly logger = new Logger(MailService.name);
-  private readonly resend: Resend | null;
-  private readonly from: string;
+  private readonly apiKey: string | null;
+  private readonly secretKey: string | null;
+  private readonly fromName: string;
+  private readonly fromEmail: string;
 
   constructor() {
-    const apiKey = process.env.RESEND_API_KEY;
-    this.resend = apiKey ? new Resend(apiKey) : null;
-
-    const name = process.env.MAIL_FROM_NAME ?? 'Nova';
-    const email = process.env.MAIL_FROM_EMAIL ?? 'onboarding@resend.dev';
-    this.from = `${name} <${email}>`;
+    this.apiKey    = process.env.MAILJET_API_KEY    ?? null;
+    this.secretKey = process.env.MAILJET_SECRET_KEY ?? null;
+    this.fromName  = process.env.MAIL_FROM_NAME  ?? 'Nova';
+    this.fromEmail = process.env.MAIL_FROM_EMAIL ?? '';
   }
 
   async sendOtpEmail(to: string, code: string, purpose: OtpPurpose) {
-    if (!this.resend) {
-      this.handleMissingConfig();
-      return;
-    }
-
-    const subject = this.subjectForPurpose(purpose);
-
-    const { error } = await this.resend.emails.send({
-      from: this.from,
+    await this.send({
       to,
-      subject,
-      text: this.renderOtpText(code, purpose),
+      subject: this.subjectForPurpose(purpose),
       html: this.renderOtpHtml(code, purpose),
+      text: this.renderOtpText(code, purpose),
+      errorLabel: 'OTP',
     });
-
-    if (error) {
-      // Log but do NOT throw — the OTP is already saved in the database and
-      // returned in the API response, so the user can still complete the flow
-      // even if the email could not be delivered.
-      this.logger.warn('OTP email could not be delivered (non-fatal)');
-      this.logger.warn(error);
-    }
   }
 
   async sendProjectInviteEmail(to: string, projectName: string, role: string) {
-    if (!this.resend) {
-      this.handleMissingConfig();
-      return;
-    }
-
-    const { error } = await this.resend.emails.send({
-      from: this.from,
+    await this.send({
       to,
       subject: `You have been added to ${projectName}`,
-      text: this.renderProjectInviteText(projectName, role),
       html: this.renderProjectInviteHtml(projectName, role),
+      text: this.renderProjectInviteText(projectName, role),
+      errorLabel: 'project invite',
+      fatal: false,
     });
-
-    if (error) {
-      // Non-fatal: member was added successfully; email is a courtesy notification
-      this.logger.warn('Project invite email could not be delivered (non-fatal)');
-      this.logger.warn(error);
-    }
   }
 
   async sendTestEmail(to: string) {
-    if (!this.resend) {
-      this.handleMissingConfig();
-      return;
-    }
-
-    const { error } = await this.resend.emails.send({
-      from: this.from,
+    await this.send({
       to,
       subject: 'Nova email test',
-      text: 'Your Nova backend email configuration is working.',
       html: `
         <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #111827;">
           <h2 style="margin: 0 0 12px;">Nova email test</h2>
           <p>Your Nova backend email configuration is working.</p>
         </div>
       `,
+      text: 'Your Nova backend email configuration is working.',
+      errorLabel: 'test',
     });
+  }
 
-    if (error) {
-      this.logger.error('Failed to send test email');
-      this.logger.error(error);
-      throw new InternalServerErrorException(
-        'Unable to send test email. Please check the backend mail configuration.',
-      );
+  // ─── Internal ─────────────────────────────────────────────────────────────
+
+  private async send({
+    to,
+    subject,
+    html,
+    text,
+    errorLabel,
+    fatal = true,
+  }: {
+    to: string;
+    subject: string;
+    html: string;
+    text: string;
+    errorLabel: string;
+    fatal?: boolean;
+  }) {
+    if (!this.apiKey || !this.secretKey || !this.fromEmail) {
+      this.handleMissingConfig(fatal);
+      return;
+    }
+
+    const payload = {
+      Messages: [
+        {
+          From: { Email: this.fromEmail, Name: this.fromName },
+          To: [{ Email: to }],
+          Subject: subject,
+          HTMLPart: html,
+          TextPart: text,
+        },
+      ],
+    };
+
+    const credentials = Buffer.from(`${this.apiKey}:${this.secretKey}`).toString('base64');
+
+    let res: Response;
+    try {
+      res = await fetch('https://api.mailjet.com/v3.1/send', {
+        method: 'POST',
+        headers: {
+          Authorization: `Basic ${credentials}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+    } catch (err) {
+      this.logger.error(`Failed to reach Mailjet API (${errorLabel} email)`, err);
+      if (fatal) {
+        throw new InternalServerErrorException(
+          'Unable to send email. Please try again later.',
+        );
+      }
+      return;
+    }
+
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      this.logger.error(`Mailjet rejected ${errorLabel} email (${res.status})`, body);
+      if (fatal) {
+        throw new InternalServerErrorException(
+          'Unable to send email. Please try again later.',
+        );
+      }
     }
   }
 
-  private handleMissingConfig() {
+  private handleMissingConfig(fatal: boolean) {
     const message =
-      'Mail service is not configured. Set RESEND_API_KEY in your environment variables.';
-
-    if (process.env.NODE_ENV === 'production') {
+      'Mail service is not configured. Set MAILJET_API_KEY, MAILJET_SECRET_KEY, and MAIL_FROM_EMAIL.';
+    if (fatal && process.env.NODE_ENV === 'production') {
       throw new InternalServerErrorException(message);
     }
-
     this.logger.warn(message);
   }
 
   private subjectForPurpose(purpose: OtpPurpose): string {
     switch (purpose) {
-      case 'REGISTER':
-        return 'Verify your Nova account';
-      case 'FORGOT_PASSWORD':
-        return 'Reset your Nova password';
-      case 'REACTIVATE':
-        return 'Reactivate your Nova account';
+      case 'REGISTER':        return 'Verify your Nova account';
+      case 'FORGOT_PASSWORD': return 'Reset your Nova password';
+      case 'REACTIVATE':      return 'Reactivate your Nova account';
     }
   }
 
   private introForPurpose(purpose: OtpPurpose): string {
     switch (purpose) {
-      case 'REGISTER':
-        return 'Use this code to verify your Nova account.';
-      case 'FORGOT_PASSWORD':
-        return 'Use this code to reset your Nova password.';
-      case 'REACTIVATE':
-        return 'Use this code to reactivate your Nova account.';
+      case 'REGISTER':        return 'Use this code to verify your Nova account.';
+      case 'FORGOT_PASSWORD': return 'Use this code to reset your Nova password.';
+      case 'REACTIVATE':      return 'Use this code to reactivate your Nova account.';
     }
   }
 
@@ -146,14 +166,13 @@ export class MailService {
   }
 
   private renderProjectInviteHtml(projectName: string, role: string): string {
-    const safeProjectName = this.escapeHtml(projectName);
-    const safeRole = this.escapeHtml(role);
-
+    const p = this.escapeHtml(projectName);
+    const r = this.escapeHtml(role);
     return `
       <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #111827;">
         <h2 style="margin: 0 0 12px;">You have been added to a Nova project</h2>
-        <p>You have been added to <strong>${safeProjectName}</strong>.</p>
-        <p>Your project role is <strong>${safeRole}</strong>.</p>
+        <p>You have been added to <strong>${p}</strong>.</p>
+        <p>Your project role is <strong>${r}</strong>.</p>
         <p>Log in to Nova to view the project and start collaborating.</p>
       </div>
     `;

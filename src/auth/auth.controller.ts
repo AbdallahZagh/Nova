@@ -1,208 +1,27 @@
-import { Body, Controller, HttpCode, HttpStatus, Post } from '@nestjs/common';
-import {
-  ApiOperation,
-  ApiProperty,
-  ApiResponse,
-  ApiTags,
-} from '@nestjs/swagger';
-import { IsEmail } from 'class-validator';
+import { Controller, HttpCode, HttpStatus, Post } from '@nestjs/common';
+import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
-import { ForgotPasswordDto } from './dto/forgot-password.dto';
-import { LoginDto } from './dto/login.dto';
-import { RegisterDto } from './dto/register.dto';
-import { ResendOtpDto } from './dto/resend-otp.dto';
-import { ResetPasswordDto } from './dto/reset-password.dto';
-import { VerifyOtpDto } from './dto/verify-otp.dto';
-
-class ReactivateDto {
-  @ApiProperty({
-    example: 'sarah.johnson@devteam.io',
-    description: 'Email address of the archived account to restore',
-  })
-  @IsEmail({}, { message: 'Please provide a valid email address' })
-  email: string;
-}
 
 @ApiTags('Authentication')
 @Controller('api/auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
-  // ─── Register ─────────────────────────────────────────────────────────────
-
-  @Post('register')
-  @ApiOperation({
-    summary: 'Register a new user account',
-    description:
-      'Creates a new inactive user record, hashes the password, and issues a 6-digit OTP to the provided email. ' +
-      'The account remains locked until the OTP is verified via POST /api/auth/verify-otp.',
-  })
-  @ApiResponse({
-    status: 201,
-    description: 'Account created — OTP issued to the registered email address',
-  })
-  @ApiResponse({
-    status: 400,
-    description: 'Validation failed — check request body fields',
-  })
-  @ApiResponse({
-    status: 409,
-    description: 'An account with this email already exists',
-  })
-  register(@Body() dto: RegisterDto) {
-    return this.authService.register(dto);
-  }
-
-  // ─── Verify OTP ───────────────────────────────────────────────────────────
-
-  @Post('verify-otp')
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({
-    summary: 'Verify a one-time password (OTP)',
-    description:
-      'Validates the 6-digit OTP and acts based on purpose:\n\n' +
-      '- **REGISTER** — activates a new account and returns an access token\n' +
-      '- **FORGOT_PASSWORD** — confirms identity; proceed to POST /reset-password\n' +
-      '- **REACTIVATE** — restores an archived account and returns an access token',
-  })
-  @ApiResponse({
-    status: 200,
-    description: 'OTP verified — see purpose for exact response shape',
-  })
-  @ApiResponse({ status: 400, description: 'Invalid or expired OTP code' })
-  @ApiResponse({
-    status: 404,
-    description: 'No account found with the provided email',
-  })
-  verifyOtp(@Body() dto: VerifyOtpDto) {
-    return this.authService.verifyOtp(dto);
-  }
-
-  @Post('resend-otp')
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({
-    summary: 'Resend a fresh one-time password (OTP)',
-    description:
-      'Invalidates existing OTPs for the requested purpose, creates a fresh 6-digit code, and sends it to the account email.',
-  })
-  @ApiResponse({ status: 200, description: 'Fresh OTP issued and sent' })
-  @ApiResponse({
-    status: 400,
-    description: 'Validation failed or invalid account state',
-  })
-  @ApiResponse({ status: 404, description: 'No account found with this email' })
-  resendOtp(@Body() dto: ResendOtpDto) {
-    return this.authService.resendOtp(dto);
-  }
-
-  // ─── Login ────────────────────────────────────────────────────────────────
-
-  @Post('login')
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({
-    summary: 'Authenticate a user and obtain an access token',
-    description:
-      'Validates email and password against stored credentials. ' +
-      'Rejects unverified accounts. On success returns a mock JWT access token ' +
-      'and the sanitised user profile (no password hash).',
-  })
-  @ApiResponse({
-    status: 200,
-    description: 'Login successful — returns accessToken and user profile',
-  })
-  @ApiResponse({ status: 400, description: 'Validation failed' })
-  @ApiResponse({
-    status: 401,
-    description: 'Invalid credentials or account not yet verified',
-  })
-  login(@Body() dto: LoginDto) {
-    return this.authService.login(dto);
-  }
-
-  // ─── Forgot Password ──────────────────────────────────────────────────────
-
-  @Post('forgot-password')
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({
-    summary: 'Initiate the forgot-password flow',
-    description:
-      'Looks up the account by email, invalidates any existing reset OTPs, ' +
-      'generates a fresh 6-digit code, and stores it with a 15-minute expiry. ' +
-      'The code must then be verified via POST /api/auth/verify-otp before resetting.',
-  })
-  @ApiResponse({ status: 200, description: 'Reset code issued — check email' })
-  @ApiResponse({ status: 400, description: 'Validation failed' })
-  @ApiResponse({ status: 404, description: 'No account found with this email' })
-  forgotPassword(@Body() dto: ForgotPasswordDto) {
-    return this.authService.forgotPassword(dto);
-  }
-
-  // ─── Reset Password ───────────────────────────────────────────────────────
-
-  @Post('reset-password')
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({
-    summary: 'Reset account password using a verified OTP',
-    description:
-      'Re-validates the FORGOT_PASSWORD OTP, hashes the new password with bcrypt, ' +
-      'writes it to the user record, and permanently deletes the consumed OTP ' +
-      'to prevent replay attacks.',
-  })
-  @ApiResponse({
-    status: 200,
-    description: 'Password updated — user may now log in',
-  })
-  @ApiResponse({
-    status: 400,
-    description: 'Invalid, expired, or already-used reset code',
-  })
-  @ApiResponse({ status: 404, description: 'No account found with this email' })
-  resetPassword(@Body() dto: ResetPasswordDto) {
-    return this.authService.resetPassword(dto);
-  }
-
-  // ─── Reactivate account ───────────────────────────────────────────────────
-
-  @Post('reactivate')
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({
-    summary: 'Request an account reactivation code',
-    description:
-      'Step 1 of the reactivation flow for archived/deactivated accounts.\n\n' +
-      'Sends a 6-digit OTP to the registered email address. ' +
-      'Once received, verify it via POST /api/auth/verify-otp with `purpose: "REACTIVATE"` ' +
-      'to restore full account access.\n\n' +
-      'The response is intentionally generic regardless of whether the account exists or is archived, ' +
-      'to prevent account enumeration.',
-  })
-  @ApiResponse({
-    status: 200,
-    description:
-      'Reactivation code issued if an archived account with that email exists',
-  })
-  @ApiResponse({
-    status: 400,
-    description: 'Validation failed — invalid email format',
-  })
-  requestReactivation(@Body() dto: ReactivateDto) {
-    return this.authService.requestReactivation(dto.email);
-  }
-
-  // ─── Logout ───────────────────────────────────────────────────────────────
-
+  /**
+   * Stateless logout — instructs the client to discard its access token.
+   * Actual token invalidation is handled by Supabase on the client side
+   * (supabase.auth.signOut()). This endpoint exists so the frontend has a
+   * consistent server-acknowledged logout hook.
+   */
   @Post('logout')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary: 'Log out the current session',
+    summary: 'Acknowledge logout',
     description:
-      'Returns a CLEAR_TOKENS instruction payload. ' +
-      'The client is responsible for discarding the access token from storage. ' +
-      'Once a real JWT strategy is added, this endpoint will also blacklist the token.',
+      'Returns a CLEAR_TOKENS instruction. The client must call ' +
+      'supabase.auth.signOut() to revoke the Supabase session.',
   })
-  @ApiResponse({
-    status: 200,
-    description: 'Logout acknowledged — client should clear stored tokens',
-  })
+  @ApiResponse({ status: 200, description: 'Logout acknowledged' })
   logout() {
     return this.authService.logout();
   }
