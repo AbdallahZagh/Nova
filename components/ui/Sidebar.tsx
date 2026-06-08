@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
 import {
   FolderKanban,
@@ -10,7 +10,7 @@ import {
   LogOut,
   X,
 } from "lucide-react";
-import { clearSession } from "@/app/actions/session";
+import { clearSessionCookie } from "@/app/actions/session";
 import { useToast } from "@/components/ui/Toast";
 import { logoutApi } from "@/lib/api/auth";
 import { clearAccessToken } from "@/lib/api/client";
@@ -30,6 +30,7 @@ type SidebarProps = {
 
 export function Sidebar({ mobileOpen = false, onClose }: SidebarProps) {
   const pathname = usePathname();
+  const router = useRouter();
   const { toast } = useToast();
   const [loggingOut, setLoggingOut] = useState(false);
 
@@ -39,8 +40,11 @@ export function Sidebar({ mobileOpen = false, onClose }: SidebarProps) {
     try {
       await logoutApi().catch(() => {});
       clearAccessToken();
-      await clearSession();
+      await clearSessionCookie();
+      router.replace("/");
+      router.refresh();
     } catch {
+      clearAccessToken();
       toast({ variant: "error", title: "Sign out failed", message: "Please try again." });
       setLoggingOut(false);
     }
@@ -65,8 +69,9 @@ export function Sidebar({ mobileOpen = false, onClose }: SidebarProps) {
       >
         <div className="mb-8 flex items-center justify-between px-2">
           <div className="flex justify-center items-center gap-1">
-            <Image src="/logo.png" alt="Taskflow" width={40} height={40} />
-            <p className="text-xl font-semibold bg-linear-90 from-accent to-primary text-transparent bg-clip-text">Taskflow</p>
+            <Image src="/logo.png" alt="Nova" width={40} height={40} />
+            <p className="text-xl font-semibold bg-linear-90 from-accent to-primary text-transparent bg-clip-text">NOVA</p>
+            <p className="text-sm font-thin text-primary/70"> - Taskflow</p>
           </div>
           <button
             type="button"

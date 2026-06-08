@@ -19,7 +19,11 @@ export async function establishSession() {
 }
 
 export async function clearSession() {
+  await clearSessionCookie();
+  redirect("/");
+}
+
+export async function clearSessionCookie() {
   const cookieStore = await cookies();
   cookieStore.delete(AUTH_COOKIE);
-  redirect("/");
 }

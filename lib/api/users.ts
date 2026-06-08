@@ -30,12 +30,21 @@ export type SearchUser = {
 };
 
 type ApiSearchUser = {
-  id: string;
+  id?: string;
+  userId?: string;
   fullName?: string;
   name?: string;
   email: string;
   avatarUrl?: string | null;
   roleTitle?: string;
+  user?: {
+    id?: string;
+    fullName?: string;
+    name?: string;
+    email?: string;
+    avatarUrl?: string | null;
+    roleTitle?: string;
+  };
 };
 
 export async function searchUsersApi(query: string) {
@@ -43,11 +52,25 @@ export async function searchUsersApi(query: string) {
     `/api/users/search?q=${encodeURIComponent(query)}`,
   );
   const users = Array.isArray(data) ? data : (data.users ?? []);
-  return users.map((user) => ({
-    id: user.id,
-    fullName: user.fullName ?? user.name ?? user.email,
-    email: user.email,
-    avatarUrl: user.avatarUrl,
-    roleTitle: user.roleTitle,
-  }));
+  return users.reduce<SearchUser[]>((list, item) => {
+    const user = item.user;
+    const id = item.userId ?? user?.id ?? item.id;
+    if (!id) return list;
+
+    list.push({
+      id,
+      fullName:
+        user?.fullName ??
+        user?.name ??
+        item.fullName ??
+        item.name ??
+        user?.email ??
+        item.email,
+      email: user?.email ?? item.email,
+      avatarUrl: user?.avatarUrl ?? item.avatarUrl,
+      roleTitle: user?.roleTitle ?? item.roleTitle,
+    });
+
+    return list;
+  }, []);
 }

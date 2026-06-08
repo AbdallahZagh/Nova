@@ -18,10 +18,6 @@ export function middleware(request: NextRequest) {
     pathname === "/reactivate";
 
   if (isPublicPage) {
-    if (isAuthenticated && isLoginPage) {
-      return NextResponse.redirect(new URL("/dashboard", request.url));
-    }
-
     return NextResponse.next();
   }
 

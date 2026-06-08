@@ -236,11 +236,33 @@ export async function getProjectApi(id: string) {
 }
 
 export async function createProjectApi(input: ProjectFormInput) {
+  const requestedMembers =
+    input.members?.filter((member) => member.userId.trim()) ?? [];
   const data = await apiFetch<ApiProject>("/api/projects", {
     method: "POST",
     body: JSON.stringify(projectFormToPayload(input)),
   });
-  return apiProjectToProject(data);
+  let project = apiProjectToProject(data);
+
+  if (requestedMembers.length === 0) return project;
+
+  project = await getProjectApi(project.id).catch(() => project);
+
+  const existingMemberIds = new Set(
+    project.teamMembers
+      .map((member) => member.userId ?? member.id)
+      .filter(Boolean),
+  );
+  const missingMembers = requestedMembers.filter(
+    (member) => !existingMemberIds.has(member.userId),
+  );
+
+  if (missingMembers.length > 0) {
+    await addProjectMembersApi(project.id, missingMembers);
+    project = await getProjectApi(project.id).catch(() => project);
+  }
+
+  return project;
 }
 
 export async function updateProjectApi(id: string, input: ProjectFormInput) {
