@@ -4,6 +4,7 @@ import {
   Delete,
   Get,
   HttpCode,
+  Param,
   Patch,
   Post,
   Query,
@@ -12,6 +13,7 @@ import {
 import {
   ApiBearerAuth,
   ApiOperation,
+  ApiParam,
   ApiQuery,
   ApiResponse,
   ApiTags,
@@ -87,6 +89,64 @@ export class UsersController {
   @ApiResponse({ status: 401, description: 'Missing or invalid Bearer token' })
   @ApiResponse({ status: 404, description: 'User not found' })
   getProfile(@CurrentUser('id') userId: string) {
+    return this.usersService.getProfile(userId);
+  }
+
+  @Get(':id/profile')
+  @ApiOperation({
+    summary: 'Get a user profile',
+    description:
+      'Returns profile metadata, overall project/task counts, profile activity, and project task stats for the selected user.',
+  })
+  @ApiParam({ name: 'id', description: 'User ID' })
+  @ApiResponse({
+    status: 200,
+    description: 'User profile returned successfully',
+    schema: {
+      example: {
+        id: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
+        email: 'sarah.johnson@devteam.io',
+        username: 'sarah',
+        fullName: 'Sarah Johnson',
+        isActive: true,
+        isArchived: false,
+        roleTitle: 'Product Designer',
+        bio: 'Designing calm project workflows.',
+        avatarUrl: null,
+        projectsCount: 3,
+        tasksCount: 12,
+        activity: {
+          '2026-06-08': [
+            {
+              id: 'task-id',
+              title: 'Finalize project profile API',
+              status: 'In Progress',
+              dueDate: '2026-06-10',
+              projectName: 'Nova',
+              completionPercentage: 50,
+            },
+          ],
+        },
+        projects: [
+          {
+            id: 'project-id',
+            name: 'Nova',
+            description: 'Team task management',
+            status: 'Active',
+            createdAt: '2026-06-01T12:00:00.000Z',
+            updatedAt: '2026-06-08T12:00:00.000Z',
+            role: 'ADMIN',
+            totalTasksCount: 20,
+            userTasksCount: 5,
+            completedUserTasksCount: 2,
+          },
+        ],
+      },
+    },
+  })
+  @ApiResponse({ status: 401, description: 'Missing or invalid Bearer token' })
+  @ApiResponse({ status: 404, description: 'User not found' })
+  getUserProfile(@Param('id') userId: string) {
     return this.usersService.getProfile(userId);
   }
 
