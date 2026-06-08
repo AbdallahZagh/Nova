@@ -28,7 +28,7 @@ export class AuthService {
   ) {}
 
   async register(dto: RegisterDto) {
-    const email = dto.email.toLowerCase();
+    const email = this.normalizeEmail(dto.email);
     const username = normalizeUsername(dto.username);
 
     const existing = await (this.prisma as any).user.findFirst({
@@ -66,8 +66,14 @@ export class AuthService {
   }
 
   async verifyOtp(dto: VerifyOtpDto) {
-    const email = dto.email.toLowerCase();
+    const email = this.normalizeEmail(dto.email);
     const user = await this.findUserByEmail(email);
+
+    if (dto.purpose === 'FORGOT_PASSWORD') {
+      await this.validateOtp(user.id, dto.code, dto.purpose);
+      return { message: 'OTP verified. You can now reset your password.' };
+    }
+
     await this.consumeOtp(user.id, dto.code, dto.purpose);
 
     if (dto.purpose === 'REGISTER' || dto.purpose === 'REACTIVATE') {
@@ -75,10 +81,6 @@ export class AuthService {
         where: { id: user.id },
         data: { isActive: true, isArchived: false },
       });
-    }
-
-    if (dto.purpose === 'FORGOT_PASSWORD') {
-      return { message: 'OTP verified. You can now reset your password.' };
     }
 
     const activeUser = await (this.prisma as any).user.findUnique({
@@ -89,7 +91,7 @@ export class AuthService {
   }
 
   async resendOtp(dto: ResendOtpDto) {
-    const email = dto.email.toLowerCase();
+    const email = this.normalizeEmail(dto.email);
     const user = await this.findUserByEmail(email);
 
     if (dto.purpose === 'REGISTER' && user.isActive && !user.isArchived) {
@@ -105,7 +107,7 @@ export class AuthService {
   }
 
   async login(dto: LoginDto) {
-    const email = dto.email.toLowerCase();
+    const email = this.normalizeEmail(dto.email);
     const user = await (this.prisma as any).user.findUnique({
       where: { email },
     });
@@ -130,7 +132,7 @@ export class AuthService {
   }
 
   async forgotPassword(dto: ForgotPasswordDto) {
-    const email = dto.email.toLowerCase();
+    const email = this.normalizeEmail(dto.email);
     const user = await this.findUserByEmail(email);
 
     if (user.isArchived) {
@@ -142,7 +144,7 @@ export class AuthService {
   }
 
   async resetPassword(dto: ResetPasswordDto) {
-    const email = dto.email.toLowerCase();
+    const email = this.normalizeEmail(dto.email);
     const user = await this.findUserByEmail(email);
 
     await this.consumeOtp(user.id, dto.code, 'FORGOT_PASSWORD');
@@ -157,7 +159,7 @@ export class AuthService {
   }
 
   async requestReactivation(dto: ForgotPasswordDto) {
-    const email = dto.email.toLowerCase();
+    const email = this.normalizeEmail(dto.email);
     const user = await this.findUserByEmail(email);
 
     if (!user.isArchived) {
@@ -212,8 +214,14 @@ export class AuthService {
   }
 
   private async consumeOtp(userId: string, code: string, purpose: OtpPurpose) {
+    const otp = await this.validateOtp(userId, code, purpose);
+
+    await (this.prisma as any).otp.delete({ where: { id: otp.id } });
+  }
+
+  private async validateOtp(userId: string, code: string, purpose: OtpPurpose) {
     const otp = await (this.prisma as any).otp.findFirst({
-      where: { userId, code, purpose },
+      where: { userId, code: this.normalizeOtpCode(code), purpose },
       orderBy: { expiresAt: 'desc' },
     });
 
@@ -224,7 +232,7 @@ export class AuthService {
       throw new BadRequestException('OTP code has expired');
     }
 
-    await (this.prisma as any).otp.delete({ where: { id: otp.id } });
+    return otp;
   }
 
   private authResponse(user: any, message: string) {
@@ -244,5 +252,13 @@ export class AuthService {
 
   private generateOtp() {
     return Math.floor(100000 + Math.random() * 900000).toString();
+  }
+
+  private normalizeEmail(email: string) {
+    return email.trim().toLowerCase();
+  }
+
+  private normalizeOtpCode(code: string) {
+    return code.trim();
   }
 }
