@@ -101,6 +101,7 @@ export class EmailService {
         user_id: this.config.publicKey,
         accessToken: this.config.privateKey,
         template_params: {
+          email: toEmail,
           to_email: toEmail,
           email_subject: subject,
           email_body: htmlBody,
