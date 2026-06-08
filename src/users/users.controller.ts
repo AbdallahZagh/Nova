@@ -19,7 +19,7 @@ import {
 import { AuthService } from '../auth/auth.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
-import { MailService } from '../mail/mail.service';
+import { EmailService } from '../mail/email.service';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { UserSearchDto } from './dto/user-search.dto';
 import { UsersService } from './users.service';
@@ -32,7 +32,7 @@ export class UsersController {
   constructor(
     private readonly usersService: UsersService,
     private readonly authService: AuthService,
-    private readonly mailService: MailService,
+    private readonly emailService: EmailService,
   ) {}
 
   @Get('search')
@@ -70,7 +70,7 @@ export class UsersController {
   @ApiResponse({ status: 401, description: 'Missing or invalid Bearer token' })
   async sendTestEmail(@CurrentUser('id') userId: string) {
     const profile = await this.usersService.getProfile(userId);
-    await this.mailService.sendTestEmail(profile.email);
+    await this.emailService.sendTestEmail(profile.email);
     return { message: 'Test email sent successfully' };
   }
 

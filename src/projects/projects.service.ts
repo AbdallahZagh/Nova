@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ProjectRole } from '../common/decorators/require-project-role.decorator';
-import { MailService } from '../mail/mail.service';
+import { EmailService } from '../mail/email.service';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   AddProjectMemberDto,
@@ -34,7 +34,7 @@ const TASK_PROGRESS_SELECT = {
 export class ProjectsService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly mailService: MailService,
+    private readonly emailService: EmailService,
   ) {}
 
   // ─── Create ───────────────────────────────────────────────────────────────
@@ -186,6 +186,7 @@ export class ProjectsService {
     dto: AddProjectMemberDto,
   ) {
     const project = await this.findProjectOrFail(projectId);
+    const inviter = await this.findUserOrFail(actorId);
     const membersToAdd = dto.members?.length
       ? dto.members
       : [{ userId: dto.userId!, role: dto.role! }];
@@ -215,10 +216,11 @@ export class ProjectsService {
         include: { user: { select: MEMBER_SELECT } },
       });
 
-      await this.mailService.sendProjectInviteEmail(
+      await this.emailService.sendProjectAddedNotification(
         invitedUser.email,
         project.name,
-        memberInput.role,
+        inviter.fullName,
+        this.buildProjectLink(projectId),
       );
 
       createdMembers.push(member);
@@ -338,10 +340,15 @@ export class ProjectsService {
   private async findUserOrFail(userId: string) {
     const user = await (this.prisma as any).user.findUnique({
       where: { id: userId },
-      select: { id: true, email: true },
+      select: { id: true, email: true, fullName: true },
     });
     if (!user) throw new NotFoundException('User not found');
     return user;
+  }
+
+  private buildProjectLink(projectId: string) {
+    const baseUrl = process.env.FRONTEND_URL?.replace(/\/$/, '');
+    return baseUrl ? `${baseUrl}/projects/${projectId}` : '#';
   }
 
   private async findMemberOrFail(projectId: string, userId: string) {

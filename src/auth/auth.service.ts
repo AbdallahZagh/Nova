@@ -8,7 +8,7 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { normalizeUsername } from '../common/utils/username.util';
-import { MailService } from '../mail/mail.service';
+import { EmailService } from '../mail/email.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { LoginDto } from './dto/login.dto';
@@ -24,7 +24,7 @@ export class AuthService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
-    private readonly mailService: MailService,
+    private readonly emailService: EmailService,
   ) {}
 
   async register(dto: RegisterDto) {
@@ -198,7 +198,7 @@ export class AuthService {
 
   private async issueOtp(userId: string, email: string, purpose: OtpPurpose) {
     const code = this.generateOtp();
-    const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
 
     await (this.prisma as any).otp.deleteMany({
       where: { userId, purpose },
@@ -208,7 +208,7 @@ export class AuthService {
       data: { userId, code, purpose, expiresAt },
     });
 
-    await this.mailService.sendOtpEmail(email, code, purpose);
+    await this.emailService.sendOtpEmail(email, code, purpose);
   }
 
   private async consumeOtp(userId: string, code: string, purpose: OtpPurpose) {
