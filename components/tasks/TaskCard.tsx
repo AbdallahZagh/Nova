@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Calendar, GripVertical } from "lucide-react";
 import { GlassCard } from "@/components/ui/GlassCard";
+import { UserProfileLink } from "@/components/users/UserProfileLink";
 import { cn } from "@/lib/cn";
 import { type Task } from "@/lib/tasks";
 
@@ -102,8 +103,9 @@ export function TaskCard({ task, onClick, canMove = true }: TaskCardProps) {
             ) : (
               <>
                 {task.assignees.slice(0, 2).map((assignee, index) => (
-                  <div
+                  <UserProfileLink
                     key={assignee.id ?? `${assignee.initials}-${assignee.name}-${index}`}
+                    userId={assignee.id}
                     className={cn(
                       "flex size-7 items-center justify-center overflow-hidden rounded-full border border-glass bg-glass-button text-[10px] font-semibold text-primary",
                       index > 0 && "-ml-2",
@@ -120,7 +122,7 @@ export function TaskCard({ task, onClick, canMove = true }: TaskCardProps) {
                     ) : (
                       assignee.initials
                     )}
-                  </div>
+                  </UserProfileLink>
                 ))}
                 {task.assignees.length > 2 ? (
                   <span className="ml-1 text-[10px] font-medium text-primary/55">

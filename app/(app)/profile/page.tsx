@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -325,13 +325,17 @@ function ProfileOtpInput({
   onChange: (value: string) => void;
   disabled?: boolean;
 }) {
+  const inputRefs = useRef<Array<HTMLInputElement | null>>([]);
   const digits = Array.from({ length: 6 }, (_, index) => value[index] ?? "");
 
   return (
-    <div className="grid grid-cols-6 gap-2">
+    <div className="flex flex-wrap justify-center gap-2 sm:justify-start">
       {digits.map((digit, index) => (
         <input
           key={index}
+          ref={(node) => {
+            inputRefs.current[index] = node;
+          }}
           value={digit}
           disabled={disabled}
           inputMode="numeric"
@@ -343,15 +347,23 @@ function ProfileOtpInput({
               .getData("text")
               .replace(/\D/g, "")
               .slice(0, 6);
-            if (pasted) onChange(pasted);
+            if (!pasted) return;
+            onChange(pasted);
+            inputRefs.current[Math.min(pasted.length, 6) - 1]?.focus();
           }}
           onChange={(event) => {
             const next = event.target.value.replace(/\D/g, "").slice(-1);
             const chars = value.padEnd(6, " ").split("");
             chars[index] = next || " ";
             onChange(chars.join("").replace(/\s/g, "").slice(0, 6));
+            if (next && index < 5) inputRefs.current[index + 1]?.focus();
           }}
-          className="aspect-square w-full rounded-xl border border-glass bg-main/60 text-center text-lg font-semibold text-primary outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/20 disabled:opacity-50"
+          onKeyDown={(event) => {
+            if (event.key === "Backspace" && !digit && index > 0) {
+              inputRefs.current[index - 1]?.focus();
+            }
+          }}
+          className="size-12 rounded-xl border border-glass bg-main/60 text-center text-lg font-semibold text-primary outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/20 disabled:opacity-50 sm:size-14"
         />
       ))}
     </div>

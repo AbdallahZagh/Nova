@@ -14,6 +14,7 @@ import { ProjectSuggestionsDrawer } from "@/components/projects/ProjectSuggestio
 import { TaskCard } from "@/components/tasks/TaskCard";
 import { NewTaskModal } from "@/components/tasks/NewTaskModal";
 import { TaskDrawerDetails } from "@/components/tasks/TaskDrawerDetails";
+import { UserProfileLink } from "@/components/users/UserProfileLink";
 import { ApiError } from "@/lib/api/client";
 import { cn } from "@/lib/cn";
 import {
@@ -276,7 +277,14 @@ export default function ProjectWorkspacePage() {
 
             {project.owner && (
               <span className="text-xs text-primary/50">
-                Owner: {project.owner.fullName}
+                Owner:{" "}
+                <UserProfileLink
+                  userId={project.owner.id}
+                  className="font-medium text-primary/60"
+                  title={`View ${project.owner.fullName}`}
+                >
+                  {project.owner.fullName}
+                </UserProfileLink>
                 {project.owner.roleTitle ? ` · ${project.owner.roleTitle}` : ""}
               </span>
             )}
@@ -285,8 +293,9 @@ export default function ProjectWorkspacePage() {
               <div className="flex items-center gap-1.5">
                 <div className="flex items-center">
                   {project.teamMembers.slice(0, 5).map((member, i) => (
-                    <div
+                    <UserProfileLink
                       key={`${member.initials}-${i}`}
+                      userId={member.userId ?? member.id}
                       className={cn(
                         "flex size-6 items-center justify-center rounded-full border border-accent/30 bg-glass-button text-[9px] font-semibold text-primary",
                         i > 0 && "-ml-1.5",
@@ -294,7 +303,7 @@ export default function ProjectWorkspacePage() {
                       title={member.name ?? member.initials}
                     >
                       {member.initials}
-                    </div>
+                    </UserProfileLink>
                   ))}
                 </div>
                 <span className="text-xs text-primary/50">

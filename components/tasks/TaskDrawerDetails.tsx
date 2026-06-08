@@ -8,6 +8,7 @@ import { Input, Textarea } from "@/components/ui/input";
 import { MultiSelect } from "@/components/ui/MultiSelect";
 import { Select } from "@/components/ui/Select";
 import { useToast } from "@/components/ui/Toast";
+import { UserProfileLink } from "@/components/users/UserProfileLink";
 import { useAppData } from "@/components/providers/AppDataProvider";
 import { ApiError } from "@/lib/api/client";
 import {
@@ -275,7 +276,13 @@ function SubtaskRow({
                   assignee.initials
                 )}
               </span>
-              {assignee.name}
+              <UserProfileLink
+                userId={assignee.id}
+                className="text-primary/65"
+                title={`View ${assignee.name}`}
+              >
+                {assignee.name}
+              </UserProfileLink>
             </span>
           ))}
         </div>
@@ -885,7 +892,13 @@ export function TaskDrawerDetails({
                         assignee.initials
                       )}
                     </span>
-                    {assignee.name}
+                    <UserProfileLink
+                      userId={assignee.id}
+                      className="text-primary/75"
+                      title={`View ${assignee.name}`}
+                    >
+                      {assignee.name}
+                    </UserProfileLink>
                   </span>
                 ))}
               </div>
@@ -1074,7 +1087,13 @@ export function TaskDrawerDetails({
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <p className="text-sm font-medium text-primary">
-                        {comment.createdBy?.fullName ?? "Project member"}
+                        <UserProfileLink
+                          userId={comment.createdBy?.id}
+                          className="text-primary"
+                          title={`View ${comment.createdBy?.fullName ?? "Project member"}`}
+                        >
+                          {comment.createdBy?.fullName ?? "Project member"}
+                        </UserProfileLink>
                       </p>
                       <p className="mt-0.5 text-xs text-primary/45">
                         {comment.createdLabel || "Recently"}
@@ -1103,7 +1122,13 @@ export function TaskDrawerDetails({
                           Reply
                         </p>
                         <p className="text-[11px] text-primary/45">
-                          {comment.repliedBy?.fullName ?? "Admin"}
+                          <UserProfileLink
+                            userId={comment.repliedBy?.id}
+                            className="text-primary/45"
+                            title={`View ${comment.repliedBy?.fullName ?? "Admin"}`}
+                          >
+                            {comment.repliedBy?.fullName ?? "Admin"}
+                          </UserProfileLink>
                           {comment.repliedLabel ? ` - ${comment.repliedLabel}` : ""}
                         </p>
                       </div>
@@ -1115,7 +1140,14 @@ export function TaskDrawerDetails({
 
                   {isClosed && comment.closedAt && (
                     <p className="mt-2 text-xs text-primary/40">
-                      Closed by {comment.closedBy?.fullName ?? "Admin"}
+                      Closed by{" "}
+                      <UserProfileLink
+                        userId={comment.closedBy?.id}
+                        className="text-primary/40"
+                        title={`View ${comment.closedBy?.fullName ?? "Admin"}`}
+                      >
+                        {comment.closedBy?.fullName ?? "Admin"}
+                      </UserProfileLink>
                       {comment.closedLabel ? ` - ${comment.closedLabel}` : ""}
                     </p>
                   )}

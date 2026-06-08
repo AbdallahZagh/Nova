@@ -7,6 +7,7 @@ import {
   ProjectMemberPicker,
   type SelectedProjectMember,
 } from "@/components/projects/ProjectMemberPicker";
+import { UserProfileLink } from "@/components/users/UserProfileLink";
 import { Select } from "@/components/ui/Select";
 import { useToast } from "@/components/ui/Toast";
 import { ApiError } from "@/lib/api/client";
@@ -278,9 +279,13 @@ export function ManageTeamModal({
                       )}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium text-primary">
+                      <UserProfileLink
+                        userId={userId}
+                        className="block truncate text-sm font-medium text-primary"
+                        title={`View ${showName(member)}`}
+                      >
                         {showName(member)}
-                      </p>
+                      </UserProfileLink>
                       {member.email ? (
                         <p className="truncate text-xs text-primary/45">
                           {member.email}

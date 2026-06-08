@@ -5,6 +5,10 @@ export async function getMeApi() {
   return apiFetch<ApiUser>("/api/users/me");
 }
 
+export async function getUserProfileApi(id: string) {
+  return apiFetch<ApiUser>(`/api/users/${id}/profile`);
+}
+
 export async function updateMeApi(payload: UpdateProfilePayload) {
   return apiFetch<ApiUser>("/api/users/me", {
     method: "PATCH",

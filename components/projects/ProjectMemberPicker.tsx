@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { Check, Loader2, Search, X } from "lucide-react";
 import { Select } from "@/components/ui/Select";
+import { UserProfileLink } from "@/components/users/UserProfileLink";
 import { searchUsersApi, type SearchUser } from "@/lib/api/users";
 import { cn } from "@/lib/cn";
 import type { ProjectMemberRole } from "@/lib/projects";
@@ -172,9 +173,13 @@ export function ProjectMemberPicker({
                       )}
                     </div>
                     <div className="min-w-0">
-                      <p className="truncate font-medium text-primary">
-                        {user.fullName}
-                      </p>
+                    <UserProfileLink
+                      userId={user.id}
+                      className="block truncate font-medium text-primary"
+                      title={`View ${user.fullName}`}
+                    >
+                      {user.fullName}
+                    </UserProfileLink>
                       <p className="truncate text-xs text-primary/50">{user.email}</p>
                     </div>
                   </div>
@@ -206,9 +211,13 @@ export function ProjectMemberPicker({
                 )}
               </div>
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium text-primary">
+                <UserProfileLink
+                  userId={member.user.id}
+                  className="block truncate text-sm font-medium text-primary"
+                  title={`View ${member.user.fullName}`}
+                >
                   {member.user.fullName}
-                </p>
+                </UserProfileLink>
                 <p className="truncate text-xs text-primary/45">
                   {member.user.email}
                 </p>

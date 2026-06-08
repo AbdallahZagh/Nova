@@ -7,6 +7,7 @@ import { GlassCard } from "@/components/ui/GlassCard";
 import { Select } from "@/components/ui/Select";
 import { useToast } from "@/components/ui/Toast";
 import { Textarea } from "@/components/ui/input";
+import { UserProfileLink } from "@/components/users/UserProfileLink";
 import { ApiError } from "@/lib/api/client";
 import {
   createProjectSuggestionApi,
@@ -249,7 +250,13 @@ export function ProjectSuggestionsDrawer({
                   <div className="mb-3 flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <p className="text-sm font-medium text-primary">
-                        {suggestion.author?.fullName ?? "Project member"}
+                        <UserProfileLink
+                          userId={suggestion.author?.id}
+                          className="text-primary"
+                          title={`View ${suggestion.author?.fullName ?? "Project member"}`}
+                        >
+                          {suggestion.author?.fullName ?? "Project member"}
+                        </UserProfileLink>
                       </p>
                       <p className="mt-0.5 text-xs text-primary/45">
                         {suggestion.createdLabel || "Recently"}
