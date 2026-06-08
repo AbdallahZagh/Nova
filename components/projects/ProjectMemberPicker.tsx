@@ -3,11 +3,6 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { Check, Loader2, Search, X } from "lucide-react";
 import { Select } from "@/components/ui/Select";
-import {
-  FloatingMenuPortal,
-  useFloatingClickOutside,
-  useFloatingMenu,
-} from "@/components/ui/useDropdownPlacement";
 import { searchUsersApi, type SearchUser } from "@/lib/api/users";
 import { cn } from "@/lib/cn";
 import type { ProjectMemberRole } from "@/lib/projects";
@@ -46,14 +41,23 @@ export function ProjectMemberPicker({
   const [loading, setLoading] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
 
-  const { menuRef, style, precomputeStyle } = useFloatingMenu(
-    rootRef,
-    isOpen,
-    220,
-  );
+  const menuRef = useRef<HTMLDivElement>(null);
 
   const close = useCallback(() => setIsOpen(false), []);
-  useFloatingClickOutside(isOpen, close, rootRef, menuRef);
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handlePointerDown = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (rootRef.current?.contains(target)) return;
+      if (menuRef.current?.contains(target)) return;
+      close();
+    };
+
+    document.addEventListener("mousedown", handlePointerDown);
+    return () => document.removeEventListener("mousedown", handlePointerDown);
+  }, [close, isOpen]);
 
   useEffect(() => {
     const trimmed = query.trim();
@@ -118,74 +122,68 @@ export function ProjectMemberPicker({
           disabled={disabled}
           onChange={(event) => {
             setQuery(event.target.value);
-            if (!isOpen) {
-              precomputeStyle();
-              setIsOpen(true);
-            }
+            setIsOpen(true);
           }}
           onFocus={() => {
             if (disabled) return;
-            precomputeStyle();
             setIsOpen(true);
           }}
           placeholder={placeholder}
           className="w-full rounded-xl border border-glass bg-glass-button/75 py-2.5 pl-10 pr-4 text-sm text-primary outline-none transition-all duration-200 placeholder:text-primary/40 focus:border-accent/60 focus:bg-glass-button focus:shadow-[0_0_15px_rgba(230,106,23,0.15)] disabled:cursor-not-allowed disabled:opacity-60"
         />
 
-        <FloatingMenuPortal
-          isOpen={isOpen && !disabled && query.trim().length > 0}
-          triggerRef={rootRef}
-          menuRef={menuRef}
-          style={style}
-          menuMaxHeight={220}
-          role="listbox"
-          aria-labelledby={generatedId}
-          className="z-50 max-h-56 w-full overflow-y-auto rounded-xl border border-glass bg-sidebar p-1.5 shadow-xl shadow-black/50 backdrop-blur-2xl"
-        >
-          {loading ? (
-            <div className="flex items-center gap-2 px-3 py-2.5 text-sm text-primary/50">
-              <Loader2 className="size-4 animate-spin" />
-              Searching...
-            </div>
-          ) : filteredResults.length === 0 ? (
-            <p className="px-3 py-2.5 text-sm text-primary/45">
-              {query.trim().length < 2 ? "Type at least 2 characters." : "No users found."}
-            </p>
-          ) : (
-            filteredResults.map((user) => (
-              <button
-                key={user.id}
-                type="button"
-                role="option"
-                aria-selected="false"
-                onClick={() => addUser(user)}
-                className="mt-0.5 flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2.5 text-left text-sm transition hover:bg-accent/10"
-              >
-                <div className="flex min-w-0 items-center gap-2.5">
-                  <div className="flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-full border border-glass bg-glass-button text-[10px] font-semibold text-primary">
-                    {user.avatarUrl ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={user.avatarUrl}
-                        alt={user.fullName}
-                        className="size-full object-cover"
-                      />
-                    ) : (
-                      user.fullName.slice(0, 2).toUpperCase()
-                    )}
+        {isOpen && !disabled && query.trim().length > 0 && (
+          <div
+            ref={menuRef}
+            role="listbox"
+            aria-labelledby={generatedId}
+            className="absolute left-0 right-0 top-full z-80 mt-2 max-h-56 overflow-y-auto rounded-xl border border-glass bg-sidebar p-1.5 shadow-xl shadow-black/50 backdrop-blur-2xl animate-in fade-in slide-in-from-top-2"
+          >
+            {loading ? (
+              <div className="flex items-center gap-2 px-3 py-2.5 text-sm text-primary/50">
+                <Loader2 className="size-4 animate-spin" />
+                Searching...
+              </div>
+            ) : filteredResults.length === 0 ? (
+              <p className="px-3 py-2.5 text-sm text-primary/45">
+                {query.trim().length < 2 ? "Type at least 2 characters." : "No users found."}
+              </p>
+            ) : (
+              filteredResults.map((user) => (
+                <button
+                  key={user.id}
+                  type="button"
+                  role="option"
+                  aria-selected="false"
+                  onClick={() => addUser(user)}
+                  className="mt-0.5 flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2.5 text-left text-sm transition hover:bg-accent/10"
+                >
+                  <div className="flex min-w-0 items-center gap-2.5">
+                    <div className="flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-full border border-glass bg-glass-button text-[10px] font-semibold text-primary">
+                      {user.avatarUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={user.avatarUrl}
+                          alt={user.fullName}
+                          className="size-full object-cover"
+                        />
+                      ) : (
+                        user.fullName.slice(0, 2).toUpperCase()
+                      )}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="truncate font-medium text-primary">
+                        {user.fullName}
+                      </p>
+                      <p className="truncate text-xs text-primary/50">{user.email}</p>
+                    </div>
                   </div>
-                  <div className="min-w-0">
-                    <p className="truncate font-medium text-primary">
-                      {user.fullName}
-                    </p>
-                    <p className="truncate text-xs text-primary/50">{user.email}</p>
-                  </div>
-                </div>
-                <Check className="size-4 shrink-0 text-accent/0" />
-              </button>
-            ))
-          )}
-        </FloatingMenuPortal>
+                  <Check className="size-4 shrink-0 text-accent/0" />
+                </button>
+              ))
+            )}
+          </div>
+        )}
       </div>
 
       {value.length > 0 && (

@@ -28,7 +28,7 @@ async function proxy(req: NextRequest): Promise<NextResponse> {
       ...(hasBody ? { body: req.body, duplex: "half" as any } : {}),
     });
   } catch (err) {
-    console.error("[proxy] fetch failed", target, err);
+    console.error("[proxy] fetch failed", { target, backend: BACKEND, err });
     return NextResponse.json(
       { error: "Backend unreachable" },
       { status: 502 },

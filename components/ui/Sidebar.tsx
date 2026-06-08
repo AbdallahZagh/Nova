@@ -70,8 +70,11 @@ export function Sidebar({ mobileOpen = false, onClose }: SidebarProps) {
         <div className="mb-8 flex items-center justify-between px-2">
           <div className="flex justify-center items-center gap-1">
             <Image src="/logo.png" alt="Nova" width={40} height={40} />
-            <p className="text-xl font-semibold bg-linear-90 from-accent to-primary text-transparent bg-clip-text">NOVA</p>
-            <p className="text-sm font-thin text-primary/70"> - Taskflow</p>
+            <div>
+
+            <p className="text-xl font-semibold mb-0 bg-linear-90 from-accent to-primary text-transparent bg-clip-text">NOVA</p>
+            <p className="text-xs font-thin text-primary/70 tracking-widest -mt-1.5">Taskflow</p>
+            </div>
           </div>
           <button
             type="button"
