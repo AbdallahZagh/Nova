@@ -88,7 +88,7 @@ export async function verifyOtpApi(
   return apiFetch<VerifyOtpResponse>("/api/auth/verify-otp", {
     method: "POST",
     auth: false,
-    body: JSON.stringify({ email: email.trim(), code, purpose }),
+    body: JSON.stringify({ email: email.trim(), code: code.trim(), purpose }),
   });
 }
 
@@ -115,6 +115,10 @@ export async function resetPasswordApi(
   return apiFetch<ResetPasswordResponse>("/api/auth/reset-password", {
     method: "POST",
     auth: false,
-    body: JSON.stringify({ email, code, newPassword }),
+    body: JSON.stringify({
+      email: email.trim(),
+      code: code.trim(),
+      newPassword,
+    }),
   });
 }

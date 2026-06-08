@@ -67,6 +67,19 @@ export function apiUserToProfile(user: ApiUser): UserProfile {
     avatarUrl: user.avatarUrl ?? null,
     projectCount,
     taskCount,
+    activity: user.activity ?? {},
+    projects: (user.projects ?? []).map((project) => ({
+      id: project.id,
+      name: project.name,
+      description: project.description ?? "",
+      status: project.status,
+      createdAt: project.createdAt,
+      updatedAt: project.updatedAt,
+      role: project.role,
+      totalTasksCount: project.totalTasksCount ?? 0,
+      userTasksCount: project.userTasksCount ?? 0,
+      completedUserTasksCount: project.completedUserTasksCount ?? 0,
+    })),
   };
 }
 

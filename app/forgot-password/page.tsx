@@ -57,6 +57,14 @@ function OtpInput({
           value={digit}
           inputMode="numeric"
           maxLength={1}
+          onPaste={(event) => {
+            event.preventDefault();
+            const pasted = event.clipboardData
+              .getData("text")
+              .replace(/\D/g, "")
+              .slice(0, 6);
+            if (pasted) onChange(pasted);
+          }}
           onChange={(e) => {
             const next = e.target.value.replace(/\D/g, "").slice(-1);
             const chars = value.padEnd(6, " ").split("");
@@ -135,6 +143,7 @@ function ForgotPasswordContent() {
 
     try {
       const response = await resendOtpApi(email.trim(), "FORGOT_PASSWORD");
+      setOtp("");
       setCooldown(30);
       toast({
         variant: "success",

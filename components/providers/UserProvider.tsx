@@ -20,6 +20,20 @@ import {
   getAccessToken,
 } from "@/lib/api/client";
 import type { ApiUser } from "@/lib/api/types";
+import type { ActivityMap } from "@/lib/api/dashboard";
+
+export type UserProfileProject = {
+  id: string;
+  name: string;
+  description: string;
+  status: string;
+  createdAt?: string;
+  updatedAt?: string;
+  role: string;
+  totalTasksCount: number;
+  userTasksCount: number;
+  completedUserTasksCount: number;
+};
 
 export type UserProfile = {
   id: string;
@@ -31,6 +45,8 @@ export type UserProfile = {
   avatarUrl: string | null;
   projectCount: number;
   taskCount: number;
+  activity: ActivityMap;
+  projects: UserProfileProject[];
 };
 
 export function getInitials(name: string): string {
