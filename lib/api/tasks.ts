@@ -1,7 +1,11 @@
 import { apiFetch } from "@/lib/api/client";
 import {
   apiSubtaskToSubtask,
+  createSubtaskApi,
+  deleteSubtaskApi,
+  isPersistedSubtaskId,
   syncSubtaskAssigneesApi,
+  updateSubtaskApi,
   type ApiSubtask,
 } from "@/lib/api/subtasks";
 import type {
@@ -266,6 +270,7 @@ export function createInputToPayload(
   projectId: string,
   input: CreateTaskInput,
 ): CreateTaskPayload {
+  const subtasks = normalizedCreateSubtasks(input);
   const payload: CreateTaskPayload = {
     title: input.title.trim(),
     projectId,
@@ -278,13 +283,8 @@ export function createInputToPayload(
     payload.dueDate = input.dueDateIso;
   }
 
-  const subtaskTitles = input.subtasks
-    .map((s) => s.label.trim())
-    .filter(Boolean)
-    .map((title) => ({ title }));
-
-  if (subtaskTitles.length > 0) {
-    payload.subtasks = subtaskTitles;
+  if (subtasks.length > 0) {
+    payload.subtasks = subtasks.map((subtask) => ({ title: subtask.label }));
   }
 
   return payload;
@@ -341,11 +341,12 @@ export async function createTaskApi(projectId: string, input: CreateTaskInput) {
   const created = apiTaskToTask(data);
   await syncTaskAssignees(created.id, [], input.assigneeIds);
   const saved = await getTaskApi(created.id);
-  await syncCreatedSubtaskAssignees(saved, input);
+  await syncCreatedSubtasks(saved, input);
   return getTaskApi(created.id);
 }
 
 export async function updateTaskApi(task: Task) {
+  const current = await getTaskApi(task.id);
   const data = await apiFetch<ApiTask>(`/api/tasks/${task.id}`, {
     method: "PATCH",
     body: JSON.stringify(taskToUpdatePayload(task)),
@@ -356,6 +357,7 @@ export async function updateTaskApi(task: Task) {
     task.assignees.map((assignee) => assignee.id).filter(Boolean) as string[],
     task.assigneeIds ?? [],
   );
+  await syncTaskSubtasks(task.id, current.subtasks, task.subtasks);
   return getTaskApi(saved.id);
 }
 
@@ -404,17 +406,98 @@ async function syncTaskAssignees(
   await Promise.all(toRemove.map((userId) => unassignTaskApi(taskId, userId)));
 }
 
-async function syncCreatedSubtaskAssignees(task: Task, input: CreateTaskInput) {
-  const pairs = input.subtasks
+function normalizedCreateSubtasks(input: CreateTaskInput) {
+  return input.subtasks
+    .map((subtask) => ({
+      ...subtask,
+      label: subtask.label.trim(),
+      assigneeIds: subtask.assigneeIds ?? [],
+    }))
+    .filter((subtask) => subtask.label.length > 0);
+}
+
+function sameIds(a: string[] = [], b: string[] = []) {
+  const left = [...a].filter(isUuid).sort();
+  const right = [...b].filter(isUuid).sort();
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
+async function syncCreatedSubtasks(task: Task, input: CreateTaskInput) {
+  const pairs = normalizedCreateSubtasks(input)
     .map((subtask, index) => ({
       created: task.subtasks[index],
       assigneeIds: subtask.assigneeIds ?? [],
+      done: subtask.done,
     }))
-    .filter((item) => item.created && item.assigneeIds.length > 0);
+    .filter((item) => item.created);
 
   await Promise.all(
-    pairs.map((item) =>
-      syncSubtaskAssigneesApi(item.created.id, [], item.assigneeIds),
-    ),
+    pairs.map(async (item) => {
+      if (item.done) {
+        await updateSubtaskApi(item.created.id, { isCompleted: true });
+      }
+      if (item.assigneeIds.length > 0) {
+        await syncSubtaskAssigneesApi(item.created.id, [], item.assigneeIds);
+      }
+    }),
+  );
+}
+
+async function syncTaskSubtasks(
+  taskId: string,
+  currentSubtasks: Task["subtasks"],
+  nextSubtasks: Task["subtasks"],
+) {
+  const next = nextSubtasks
+    .map((subtask) => ({
+      ...subtask,
+      label: subtask.label.trim(),
+      assigneeIds: subtask.assigneeIds ?? [],
+    }))
+    .filter((subtask) => subtask.label.length > 0);
+  const currentById = new Map(currentSubtasks.map((subtask) => [subtask.id, subtask]));
+  const nextPersistedIds = new Set(
+    next.map((subtask) => subtask.id).filter(isPersistedSubtaskId),
+  );
+
+  await Promise.all(
+    currentSubtasks
+      .filter(
+        (subtask) =>
+          isPersistedSubtaskId(subtask.id) && !nextPersistedIds.has(subtask.id),
+      )
+      .map((subtask) => deleteSubtaskApi(subtask.id)),
+  );
+
+  await Promise.all(
+    next.map(async (subtask) => {
+      if (!isPersistedSubtaskId(subtask.id)) {
+        const created = await createSubtaskApi(taskId, subtask.label);
+        if (subtask.done) {
+          await updateSubtaskApi(created.id, { isCompleted: true });
+        }
+        if (subtask.assigneeIds.length > 0) {
+          await syncSubtaskAssigneesApi(created.id, [], subtask.assigneeIds);
+        }
+        return;
+      }
+
+      const current = currentById.get(subtask.id);
+      if (!current) return;
+
+      const patch: { title?: string; isCompleted?: boolean } = {};
+      if (subtask.label !== current.label.trim()) patch.title = subtask.label;
+      if (subtask.done !== current.done) patch.isCompleted = subtask.done;
+      if (Object.keys(patch).length > 0) {
+        await updateSubtaskApi(subtask.id, patch);
+      }
+      if (!sameIds(current.assigneeIds, subtask.assigneeIds)) {
+        await syncSubtaskAssigneesApi(
+          subtask.id,
+          current.assigneeIds ?? [],
+          subtask.assigneeIds,
+        );
+      }
+    }),
   );
 }

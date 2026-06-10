@@ -1,17 +1,23 @@
 "use client";
 
 import Link from "next/link";
-import { Menu, Search } from "lucide-react";
-import { Input } from "@/components/ui/input";
+import { Menu } from "lucide-react";
+import { CommandPalette } from "@/components/search/CommandPalette";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { useUser } from "@/components/providers/UserProvider";
 
 type HeaderProps = {
   onMenuClick?: () => void;
+  searchOpen: boolean;
+  onSearchOpenChange: (open: boolean) => void;
 };
 
-export function Header({ onMenuClick }: HeaderProps) {
+export function Header({
+  onMenuClick,
+  searchOpen,
+  onSearchOpenChange,
+}: HeaderProps) {
   const { profile, initials, loading } = useUser();
 
   return (
@@ -25,15 +31,7 @@ export function Header({ onMenuClick }: HeaderProps) {
         <Menu className="size-5" />
       </button>
 
-      <div className="relative max-w-md flex-1">
-        <Search className="size-4 z-10 absolute left-3 top-1/2 -translate-y-1/2 text-primary" />
-        <Input
-          type="search"
-          variant="soft"
-          placeholder="Search tasks, projects..."
-          className="pl-10"
-        />
-      </div>
+      <CommandPalette open={searchOpen} onOpenChange={onSearchOpenChange} />
 
       <div className="ml-auto flex items-center gap-3">
         <ThemeToggle />

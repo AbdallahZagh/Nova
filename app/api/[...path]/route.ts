@@ -11,7 +11,8 @@ async function proxy(req: NextRequest): Promise<NextResponse> {
   const url = new URL(req.url);
 
   // Forward the full path + query string to the backend
-  const target = `${BACKEND}${url.pathname}${url.search}`;
+  const targetPath = url.pathname === "/api/search" ? "/search" : url.pathname;
+  const target = `${BACKEND}${targetPath}${url.search}`;
 
   // Copy request headers, drop `host` so the backend doesn't get confused
   const reqHeaders = new Headers(req.headers);

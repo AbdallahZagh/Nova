@@ -83,6 +83,7 @@ function taskSnapshot(t: Task) {
       id: s.id,
       label: s.label.trim(),
       done: s.done,
+      assigneeIds: [...(s.assigneeIds ?? [])].sort(),
     })),
   });
 }

@@ -219,6 +219,26 @@ function NewTaskForm({
         onSubmit={async (event) => {
           event.preventDefault();
           if (!title.trim() || submitting) return;
+          const pendingSubtaskLabel = newSubtaskLabel.trim();
+          const subtasksToSave = [
+            ...subtasks,
+            ...(pendingSubtaskLabel
+              ? [
+                  {
+                    id: `s-${Date.now()}`,
+                    label: pendingSubtaskLabel,
+                    done: false,
+                    assigneeIds: [],
+                  },
+                ]
+              : []),
+          ]
+            .map((subtask) => ({
+              ...subtask,
+              label: subtask.label.trim(),
+              assigneeIds: canAssignSubtasks ? (subtask.assigneeIds ?? []) : [],
+            }))
+            .filter((subtask) => subtask.label.length > 0);
           try {
             await onCreate({
               title: title.trim(),
@@ -228,7 +248,7 @@ function NewTaskForm({
               assigneeIds: canAssignTasks ? assigneeIds : [],
               dueDate: dueDate ? formatDueDate(dueDate) : "TBD",
               dueDateIso: dueDate?.toISOString() ?? null,
-              subtasks,
+              subtasks: subtasksToSave,
             });
             onClose();
           } catch {

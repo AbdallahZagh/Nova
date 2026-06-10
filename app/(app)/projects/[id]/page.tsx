@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { KanbanSkeleton } from "@/components/skeletons/KanbanSkeleton";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { MessageSquare, Plus } from "lucide-react";
 import { DeleteConfirmModal } from "@/components/ui/DeleteConfirmModal";
 import { SideDrawer } from "@/components/ui/SideDrawer";
@@ -42,6 +42,7 @@ const statusStyles: Record<Project["status"], string> = {
 export default function ProjectWorkspacePage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { toast } = useToast();
   const { profile } = useUser();
   const projectId = typeof params.id === "string" ? params.id : "";
@@ -100,6 +101,15 @@ export default function ProjectWorkspacePage() {
 
   const selectedTask = tasks.find((task) => task.id === selectedTaskId) ?? null;
   const deleteTaskItem = tasks.find((task) => task.id === deleteTaskId) ?? null;
+  const queryTaskId = searchParams.get("task");
+
+  useEffect(() => {
+    if (!queryTaskId) return;
+    if (tasks.some((task) => task.id === queryTaskId)) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- sync task query param into drawer state
+      setSelectedTaskId(queryTaskId);
+    }
+  }, [queryTaskId, tasks]);
 
   const tasksByColumn = useMemo(() => {
     return TASK_COLUMNS.reduce(
@@ -204,6 +214,14 @@ export default function ProjectWorkspacePage() {
   const openNewTaskModal = (status: TaskStatus = "To Do") => {
     setNewTaskDefaultStatus(status);
     setIsNewTaskOpen(true);
+  };
+
+  const closeTaskDrawer = () => {
+    if (saving) return;
+    setSelectedTaskId(null);
+    if (queryTaskId) {
+      router.replace(`/projects/${projectId}`, { scroll: false });
+    }
   };
 
   if (isLoading) {
@@ -441,7 +459,7 @@ export default function ProjectWorkspacePage() {
 
       <SideDrawer
         isOpen={Boolean(selectedTask)}
-        onClose={() => !saving && setSelectedTaskId(null)}
+        onClose={closeTaskDrawer}
         title="Task Details"
       >
         {selectedTask ? (
