@@ -6,6 +6,7 @@ import { DashboardModule } from './dashboard/dashboard.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { ProjectsModule } from './projects/projects.module';
 import { ProjectSuggestionsModule } from './project-suggestions/project-suggestions.module';
+import { SearchModule } from './search/search.module';
 import { SubtasksModule } from './subtasks/subtasks.module';
 import { TaskCommentsModule } from './task-comments/task-comments.module';
 import { TasksModule } from './tasks/tasks.module';
@@ -22,6 +23,7 @@ import { UsersModule } from './users/users.module';
     TasksModule,
     TaskCommentsModule,
     SubtasksModule,
+    SearchModule,
     TimelineModule,
     DashboardModule,
   ],
