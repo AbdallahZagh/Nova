@@ -15,14 +15,14 @@ export class SearchService {
     const q = query?.trim();
     if (!q) return EMPTY_SEARCH_RESULTS;
 
-    const memberProjectWhere = {
-      members: { some: { userId } },
+    const accessibleProjectWhere = {
+      OR: [{ ownerId: userId }, { members: { some: { userId } } }],
     };
 
     const [projects, tasks, users] = await Promise.all([
       (this.prisma as any).project.findMany({
         where: {
-          ...memberProjectWhere,
+          ...accessibleProjectWhere,
           name: { contains: q, mode: 'insensitive' },
         },
         select: {
@@ -34,7 +34,7 @@ export class SearchService {
       (this.prisma as any).task.findMany({
         where: {
           title: { contains: q, mode: 'insensitive' },
-          project: memberProjectWhere,
+          project: accessibleProjectWhere,
         },
         select: {
           id: true,

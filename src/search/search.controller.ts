@@ -17,7 +17,7 @@ type AuthenticatedRequest = {
 @ApiTags('Search')
 @ApiBearerAuth('access-token')
 @UseGuards(JwtAuthGuard)
-@Controller('search')
+@Controller(['search', 'api/search'])
 export class SearchController {
   constructor(private readonly searchService: SearchService) {}
 
