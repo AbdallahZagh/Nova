@@ -1,6 +1,7 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
-import * as admin from 'firebase-admin';
+import { cert, getApps, initializeApp } from 'firebase-admin/app';
+import { getMessaging } from 'firebase-admin/messaging';
 import { PrismaService } from '../prisma/prisma.service';
 import { SaveDeviceTokenDto } from './dto/save-device-token.dto';
 
@@ -344,7 +345,7 @@ export class NotificationsService implements OnModuleInit {
   }
 
   private initializeFirebase() {
-    if (admin.apps.length) {
+    if (getApps().length) {
       this.firebaseReady = true;
       return;
     }
@@ -362,8 +363,8 @@ export class NotificationsService implements OnModuleInit {
       return;
     }
 
-    admin.initializeApp({
-      credential: admin.credential.cert({
+    initializeApp({
+      credential: cert({
         projectId,
         clientEmail,
         privateKey,
@@ -389,7 +390,7 @@ export class NotificationsService implements OnModuleInit {
 
     if (!tokens.length) return;
 
-    const response = await admin.messaging().sendEachForMulticast({
+    const response = await getMessaging().sendEachForMulticast({
       tokens,
       notification: { title, body },
       data: this.stringifyMetadata(metadata),
