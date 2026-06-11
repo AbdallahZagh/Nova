@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { establishSession } from "@/app/actions/session";
 import { Input, PasswordInput } from "@/components/ui/input";
@@ -14,6 +14,18 @@ function LoginFormContent() {
   const { toast } = useToast();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | undefined>();
+  const showedExpiredToast = useRef(false);
+
+  useEffect(() => {
+    if (showedExpiredToast.current) return;
+    if (searchParams.get("reason") !== "session_expired") return;
+    showedExpiredToast.current = true;
+    toast({
+      variant: "warning",
+      title: "Session expired",
+      message: "Your token expired. Please log in again.",
+    });
+  }, [searchParams, toast]);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();

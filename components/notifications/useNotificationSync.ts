@@ -9,24 +9,16 @@ import {
   FIREBASE_VAPID_KEY,
   getFirebaseMessaging,
   initFirebaseAnalytics,
+  isValidFirebaseVapidKey,
 } from "@/lib/firebase/client";
 import { getSupabaseRealtimeClient } from "@/lib/supabase/client";
+import type { AppNotification } from "@/lib/api/notifications";
 
 type NotificationUser = {
   id: string;
 } | null;
 
-type NotificationRow = {
-  id: string;
-  title: string;
-  message: string;
-  type: string;
-  metadata: Record<string, unknown> | null;
-  isRead: boolean;
-  createdAt: string;
-  updatedAt: string;
-  userId: string;
-};
+type NotificationRow = AppNotification;
 
 function notificationText(row: NotificationRow) {
   return {
@@ -66,7 +58,7 @@ function payloadText(payload: MessagePayload) {
 }
 
 export function useNotificationSync(user: NotificationUser) {
-  const { incrementUnread } = useNotifications();
+  const { incrementUnread, pushNotification } = useNotifications();
   const { toast } = useToast();
   const tokenUserRef = useRef<string | null>(null);
   const handledNotificationsRef = useRef<Map<string, number>>(new Map());
@@ -107,6 +99,7 @@ export function useNotificationSync(user: NotificationUser) {
           const { title, message } = notificationText(row);
           markHandled(rowNotificationKey(row));
           markHandled(rowContentKey(row));
+          pushNotification(row);
           incrementUnread();
           toast({
             variant: "info",
@@ -120,13 +113,19 @@ export function useNotificationSync(user: NotificationUser) {
     return () => {
       void supabase.removeChannel(channel);
     };
-  }, [incrementUnread, markHandled, toast, user?.id]);
+  }, [incrementUnread, markHandled, pushNotification, toast, user?.id]);
 
   useEffect(() => {
     if (!user?.id) return;
     const userId = user.id;
     if (tokenUserRef.current === userId) return;
     if (typeof window === "undefined" || !("Notification" in window)) return;
+    if (!isValidFirebaseVapidKey(FIREBASE_VAPID_KEY)) {
+      console.warn(
+        "Firebase push notifications are disabled because NEXT_PUBLIC_FIREBASE_VAPID_KEY is missing or invalid.",
+      );
+      return;
+    }
 
     let unsubscribe: (() => void) | undefined;
     let cancelled = false;
@@ -154,6 +153,7 @@ export function useNotificationSync(user: NotificationUser) {
 
       if (cancelled || !token) return;
 
+      console.info("[notifications] FCM token", token);
       await saveDeviceTokenApi(token);
       tokenUserRef.current = userId;
 
@@ -163,6 +163,17 @@ export function useNotificationSync(user: NotificationUser) {
           if (wasRecentlyHandled(key)) return;
           const { title, message } = payloadText(payload);
           markHandled(key);
+          pushNotification({
+            id: key || `fcm-${Date.now()}`,
+            title,
+            message,
+            type: payload.data?.type ?? "PUSH",
+            metadata: payload.data ?? null,
+            isRead: false,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            userId,
+          });
           incrementUnread();
           toast({
             variant: "info",
@@ -179,5 +190,12 @@ export function useNotificationSync(user: NotificationUser) {
       cancelled = true;
       unsubscribe?.();
     };
-  }, [incrementUnread, markHandled, toast, user?.id, wasRecentlyHandled]);
+  }, [
+    incrementUnread,
+    markHandled,
+    pushNotification,
+    toast,
+    user?.id,
+    wasRecentlyHandled,
+  ]);
 }

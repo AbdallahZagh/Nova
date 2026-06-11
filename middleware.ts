@@ -23,7 +23,8 @@ export function middleware(request: NextRequest) {
 
   if (!isAuthenticated) {
     const loginUrl = new URL("/", request.url);
-    loginUrl.searchParams.set("from", pathname);
+    loginUrl.searchParams.set("from", `${pathname}${request.nextUrl.search}`);
+    loginUrl.searchParams.set("reason", "session_expired");
     return NextResponse.redirect(loginUrl);
   }
 

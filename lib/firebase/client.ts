@@ -19,7 +19,11 @@ export const firebaseConfig = {
 };
 
 export const FIREBASE_VAPID_KEY =
-  "LBureKTt2M3z2zYkp-9NjdnIbj24ftislT7wGW6NHfI";
+  process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY ?? "";
+
+export function isValidFirebaseVapidKey(key: string) {
+  return /^[A-Za-z0-9_-]{80,}$/.test(key);
+}
 
 export function getFirebaseApp(): FirebaseApp {
   return getApps().length ? getApp() : initializeApp(firebaseConfig);

@@ -3,6 +3,7 @@
 import { useEffect, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
+import { cn } from "@/lib/cn";
 function subscribe() {
   return () => {};
 }
@@ -20,6 +21,8 @@ type SideDrawerProps = {
   onClose: () => void;
   title: string;
   children: React.ReactNode;
+  panelClassName?: string;
+  bodyClassName?: string;
 };
 
 export function SideDrawer({
@@ -27,6 +30,8 @@ export function SideDrawer({
   onClose,
   title,
   children,
+  panelClassName,
+  bodyClassName,
 }: SideDrawerProps) {
   const mounted = useSyncExternalStore(
     subscribe,
@@ -66,7 +71,10 @@ export function SideDrawer({
         role="dialog"
         aria-modal="true"
         aria-labelledby="side-drawer-title"
-        className="fixed inset-y-0 right-0 z-160 flex w-full max-w-md flex-col border-l border-glass bg-sidebar/95 shadow-2xl shadow-black/30 backdrop-blur-3xl animate-in slide-in-from-right duration-300 ease-out"
+        className={cn(
+          "fixed inset-y-0 right-0 z-160 flex w-full max-w-md flex-col border-l border-glass bg-sidebar/95 shadow-2xl shadow-black/30 backdrop-blur-3xl animate-in slide-in-from-right duration-300 ease-out",
+          panelClassName,
+        )}
       >
         <div className="flex items-center justify-between border-b border-glass px-6 py-4">
           <h2
@@ -85,7 +93,9 @@ export function SideDrawer({
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-6 py-5">{children}</div>
+        <div className={cn("flex-1 overflow-y-auto px-6 py-5", bodyClassName)}>
+          {children}
+        </div>
       </aside>
     </>,
     document.body,

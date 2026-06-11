@@ -2,8 +2,10 @@
 
 import Link from "next/link";
 import { Bell, Menu } from "lucide-react";
+import { useState } from "react";
 import { CommandPalette } from "@/components/search/CommandPalette";
 import { useNotifications } from "@/components/providers/notification-context";
+import { NotificationDrawer } from "@/components/notifications/NotificationDrawer";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { useUser } from "@/components/providers/UserProvider";
@@ -20,9 +22,16 @@ export function Header({
   onSearchOpenChange,
 }: HeaderProps) {
   const { profile, initials, loading } = useUser();
-  const { unreadCount, resetUnread } = useNotifications();
+  const { unreadCount, refreshNotifications } = useNotifications();
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+
+  const openNotifications = () => {
+    setNotificationsOpen(true);
+    void refreshNotifications();
+  };
 
   return (
+    <>
     <header className="bg-sidebar absolute top-0 right-0 left-0 z-30 flex h-16 items-center gap-4 px-4 md:px-8">
       <button
         type="button"
@@ -38,7 +47,7 @@ export function Header({
       <div className="ml-auto flex items-center gap-3">
         <button
           type="button"
-          onClick={resetUnread}
+          onClick={openNotifications}
           aria-label="Notifications"
           className="relative flex size-10 items-center justify-center rounded-xl border border-glass bg-glass-card text-primary/65 transition hover:border-accent/35 hover:text-accent"
         >
@@ -94,5 +103,10 @@ export function Header({
         </Link>
       </div>
     </header>
+    <NotificationDrawer
+      open={notificationsOpen}
+      onClose={() => setNotificationsOpen(false)}
+    />
+    </>
   );
 }

@@ -39,6 +39,20 @@ export function clearAccessToken(): void {
   }
 }
 
+function redirectToLoginForExpiredSession() {
+  if (typeof window === "undefined") return;
+  if (window.location.pathname === "/") return;
+
+  clearAccessToken();
+  const loginUrl = new URL("/", window.location.origin);
+  loginUrl.searchParams.set(
+    "from",
+    `${window.location.pathname}${window.location.search}`,
+  );
+  loginUrl.searchParams.set("reason", "session_expired");
+  window.location.assign(loginUrl.toString());
+}
+
 export class ApiError extends Error {
   status: number;
   details?: unknown;
@@ -87,6 +101,10 @@ export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): 
           ? ((payload as { message: string[] }).message).join(", ")
           : String((payload as { message: unknown }).message)
         : `Request failed with status ${response.status}`;
+
+    if (auth && response.status === 401) {
+      redirectToLoginForExpiredSession();
+    }
 
     throw new ApiError(message, response.status, payload);
   }
