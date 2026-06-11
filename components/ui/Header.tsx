@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { Menu } from "lucide-react";
+import { Bell, Menu } from "lucide-react";
 import { CommandPalette } from "@/components/search/CommandPalette";
+import { useNotifications } from "@/components/providers/notification-context";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { useUser } from "@/components/providers/UserProvider";
@@ -19,6 +20,7 @@ export function Header({
   onSearchOpenChange,
 }: HeaderProps) {
   const { profile, initials, loading } = useUser();
+  const { unreadCount, resetUnread } = useNotifications();
 
   return (
     <header className="bg-sidebar absolute top-0 right-0 left-0 z-30 flex h-16 items-center gap-4 px-4 md:px-8">
@@ -34,6 +36,20 @@ export function Header({
       <CommandPalette open={searchOpen} onOpenChange={onSearchOpenChange} />
 
       <div className="ml-auto flex items-center gap-3">
+        <button
+          type="button"
+          onClick={resetUnread}
+          aria-label="Notifications"
+          className="relative flex size-10 items-center justify-center rounded-xl border border-glass bg-glass-card text-primary/65 transition hover:border-accent/35 hover:text-accent"
+        >
+          <Bell className="size-4" />
+          {unreadCount > 0 ? (
+            <span className="absolute -right-1 -top-1 flex min-w-5 items-center justify-center rounded-full border border-sidebar bg-accent px-1 text-[10px] font-bold leading-5 text-white">
+              {unreadCount > 99 ? "99+" : unreadCount}
+            </span>
+          ) : null}
+        </button>
+
         <ThemeToggle />
 
         <Link
