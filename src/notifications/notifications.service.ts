@@ -45,6 +45,63 @@ export class NotificationsService implements OnModuleInit {
     };
   }
 
+  async listNotifications(userId: string, page = 1, limit = 20) {
+    const safePage = Math.max(1, page);
+    const safeLimit = Math.min(100, Math.max(1, limit));
+    const skip = (safePage - 1) * safeLimit;
+
+    const [notifications, unreadCount, total] = await Promise.all([
+      (this.prisma as any).notification.findMany({
+        where: { userId },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: safeLimit,
+      }),
+      (this.prisma as any).notification.count({
+        where: { userId, isRead: false },
+      }),
+      (this.prisma as any).notification.count({
+        where: { userId },
+      }),
+    ]);
+
+    return {
+      unreadCount,
+      page: safePage,
+      limit: safeLimit,
+      total,
+      totalPages: Math.ceil(total / safeLimit),
+      data: notifications,
+    };
+  }
+
+  async markNotificationsRead(userId: string, notificationId?: string) {
+    if (notificationId) {
+      const notification = await (this.prisma as any).notification.updateMany({
+        where: { id: notificationId, userId },
+        data: { isRead: true },
+      });
+
+      return {
+        message:
+          notification.count > 0
+            ? 'Notification marked as read'
+            : 'Notification not found',
+        count: notification.count,
+      };
+    }
+
+    const result = await (this.prisma as any).notification.updateMany({
+      where: { userId, isRead: false },
+      data: { isRead: true },
+    });
+
+    return {
+      message: 'Notifications marked as read',
+      count: result.count,
+    };
+  }
+
   async createNotification(
     userId: string,
     type: string,
