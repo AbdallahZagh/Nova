@@ -3,6 +3,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateTaskCommentDto } from './dto/create-task-comment.dto';
 import { ReplyTaskCommentDto } from './dto/reply-task-comment.dto';
@@ -23,12 +24,15 @@ const COMMENT_INCLUDE = {
 
 @Injectable()
 export class TaskCommentsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notificationsService: NotificationsService,
+  ) {}
 
   async create(userId: string, dto: CreateTaskCommentDto) {
     const task = await this.findTaskOrFail(dto.taskId);
 
-    return (this.prisma as any).taskComment.create({
+    const comment = await (this.prisma as any).taskComment.create({
       data: {
         content: dto.content,
         taskId: task.id,
@@ -36,6 +40,16 @@ export class TaskCommentsService {
       },
       include: COMMENT_INCLUDE,
     });
+
+    await this.notificationsService.notifyProjectMembers(
+      task.projectId,
+      'TASK_COMMENT_CREATED',
+      'New task comment',
+      `A new comment was added to ${comment.task.title}.`,
+      { taskId: task.id, commentId: comment.id },
+    );
+
+    return comment;
   }
 
   async findByTask(taskId: string) {
@@ -52,7 +66,7 @@ export class TaskCommentsService {
     const comment = await this.findCommentOrFail(id);
     this.ensureOpen(comment);
 
-    return (this.prisma as any).taskComment.update({
+    const updated = await (this.prisma as any).taskComment.update({
       where: { id },
       data: {
         replyContent: dto.replyContent,
@@ -61,13 +75,23 @@ export class TaskCommentsService {
       },
       include: COMMENT_INCLUDE,
     });
+
+    if (updated.createdById) {
+      await this.notificationsService.notifyTaskCommentReply(
+        updated.createdById,
+        updated.id,
+        updated.task.title,
+      );
+    }
+
+    return updated;
   }
 
   async close(id: string, userId: string) {
     const comment = await this.findCommentOrFail(id);
     this.ensureOpen(comment);
 
-    return (this.prisma as any).taskComment.update({
+    const updated = await (this.prisma as any).taskComment.update({
       where: { id },
       data: {
         status: 'CLOSED',
@@ -76,6 +100,17 @@ export class TaskCommentsService {
       },
       include: COMMENT_INCLUDE,
     });
+
+    if (updated.createdById) {
+      await this.notificationsService.notifyTaskCommentStatusChanged(
+        updated.createdById,
+        updated.id,
+        updated.task.title,
+        updated.status,
+      );
+    }
+
+    return updated;
   }
 
   private async findTaskOrFail(taskId: string) {

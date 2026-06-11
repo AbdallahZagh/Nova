@@ -3,6 +3,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   CreateProjectSuggestionDto,
@@ -25,12 +26,15 @@ const SUGGESTION_INCLUDE = {
 
 @Injectable()
 export class ProjectSuggestionsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notificationsService: NotificationsService,
+  ) {}
 
   async create(userId: string, dto: CreateProjectSuggestionDto) {
-    await this.ensureProjectAccess(userId, dto.projectId);
+    const project = await this.ensureProjectAccess(userId, dto.projectId);
 
-    return (this.prisma as any).projectSuggestion.create({
+    const suggestion = await (this.prisma as any).projectSuggestion.create({
       data: {
         content: dto.content,
         status: dto.status ?? ProjectSuggestionStatus.IN_REVIEW,
@@ -39,6 +43,16 @@ export class ProjectSuggestionsService {
       },
       include: SUGGESTION_INCLUDE,
     });
+
+    await this.notificationsService.notifyProjectMembers(
+      dto.projectId,
+      'PROJECT_SUGGESTION_CREATED',
+      'New project suggestion',
+      `A new suggestion was added to ${project.name}.`,
+      { suggestionId: suggestion.id },
+    );
+
+    return suggestion;
   }
 
   async findByProject(userId: string, projectId: string) {

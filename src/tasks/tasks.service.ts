@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ProjectRole } from '../common/decorators/require-project-role.decorator';
+import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AssignTasksDto, TaskAssignmentInputDto } from './dto/assign-tasks.dto';
 import { CreateTaskDto } from './dto/create-task.dto';
@@ -65,7 +66,10 @@ interface ActivityInput {
 
 @Injectable()
 export class TasksService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notificationsService: NotificationsService,
+  ) {}
 
   // ─── Create ───────────────────────────────────────────────────────────────
 
@@ -108,6 +112,7 @@ export class TasksService {
                 create: dto.subtasks.map((s) => ({
                   title: s.title,
                   isCompleted: false,
+                  dueDate: s.dueDate ? new Date(s.dueDate) : undefined,
                 })),
               },
             }
@@ -116,6 +121,14 @@ export class TasksService {
       },
       include: TASK_INCLUDE,
     });
+
+    if (assigneeId) {
+      await this.notificationsService.notifyTaskAssigned(
+        assigneeId,
+        task.id,
+        task.title,
+      );
+    }
 
     return this.formatTask(task);
   }
@@ -160,7 +173,7 @@ export class TasksService {
     ];
     const tasks = await (this.prisma as any).task.findMany({
       where: { id: { in: taskIds } },
-      select: { id: true, projectId: true },
+      select: { id: true, title: true, projectId: true },
     });
     const tasksById = new Map(tasks.map((task: any) => [task.id, task]));
 
@@ -214,6 +227,11 @@ export class TasksService {
         });
 
         updatedTasks.push(this.formatTask(updated));
+        await this.notificationsService.notifyTaskAssigned(
+          assignment.userId,
+          taskId,
+          updated.title,
+        );
       }
     }
 
@@ -227,7 +245,7 @@ export class TasksService {
   async unassignTask(actorId: string, taskId: string, userId: string) {
     const task = await (this.prisma as any).task.findUnique({
       where: { id: taskId },
-      select: { id: true, projectId: true, assigneeId: true },
+      select: { id: true, title: true, projectId: true, assigneeId: true },
     });
     if (!task) throw new NotFoundException('Task not found');
 
@@ -264,6 +282,12 @@ export class TasksService {
       },
       include: TASK_INCLUDE,
     });
+
+    await this.notificationsService.notifyTaskUnassigned(
+      userId,
+      taskId,
+      updated.title,
+    );
 
     return {
       message: 'Task assignment removed successfully',
@@ -337,6 +361,37 @@ export class TasksService {
       },
       include: TASK_INCLUDE,
     });
+
+    if (dto.assigneeId && dto.assigneeId !== task.assigneeId) {
+      await this.notificationsService.notifyTaskAssigned(
+        dto.assigneeId,
+        updated.id,
+        updated.title,
+      );
+    }
+
+    if (dto.assigneeId === null && task.assigneeId) {
+      await this.notificationsService.notifyTaskUnassigned(
+        task.assigneeId,
+        updated.id,
+        updated.title,
+      );
+    }
+
+    if (Object.keys(data).length > 0) {
+      await this.notificationsService.notifyTaskUpdated(
+        updated.id,
+        updated.title,
+      );
+    }
+
+    if (
+      dto.status !== undefined &&
+      dto.status !== task.status &&
+      this.isDoneStatus(dto.status)
+    ) {
+      await this.notificationsService.notifyTaskDone(updated.id, updated.title);
+    }
 
     return this.formatTask(updated);
   }
@@ -496,6 +551,10 @@ export class TasksService {
   }
 
   // ─── Response shaping ─────────────────────────────────────────────────────
+
+  private isDoneStatus(status: string) {
+    return status === 'DONE' || status === 'Done' || status === 'Completed';
+  }
 
   private formatActivity(activity: any) {
     return {

@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ProjectRole } from '../common/decorators/require-project-role.decorator';
+import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   AssignSubtasksDto,
@@ -36,7 +37,10 @@ const SUBTASK_INCLUDE = {
 
 @Injectable()
 export class SubtasksService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notificationsService: NotificationsService,
+  ) {}
 
   // ─── Create ───────────────────────────────────────────────────────────────
 
@@ -45,6 +49,7 @@ export class SubtasksService {
       data: {
         title: dto.title,
         isCompleted: false,
+        dueDate: dto.dueDate ? new Date(dto.dueDate) : undefined,
         taskId: dto.taskId,
       },
       include: SUBTASK_INCLUDE,
@@ -56,17 +61,36 @@ export class SubtasksService {
   // ─── Update ───────────────────────────────────────────────────────────────
 
   async update(id: string, dto: UpdateSubtaskDto) {
-    await this.findOneOrFail(id);
+    const before = await this.findOneOrFail(id);
 
     const data: Record<string, any> = {};
     if (dto.title !== undefined) data.title = dto.title;
     if (dto.isCompleted !== undefined) data.isCompleted = dto.isCompleted;
+    if (dto.dueDate !== undefined) data.dueDate = new Date(dto.dueDate);
 
     const subtask = await (this.prisma as any).subtask.update({
       where: { id },
       data,
       include: SUBTASK_INCLUDE,
     });
+
+    if (
+      dto.title !== undefined ||
+      dto.isCompleted !== undefined ||
+      dto.dueDate !== undefined
+    ) {
+      await this.notificationsService.notifySubtaskUpdated(
+        subtask.id,
+        subtask.title,
+      );
+    }
+
+    if (dto.isCompleted === true && before.isCompleted !== true) {
+      await this.notificationsService.notifySubtaskDone(
+        subtask.id,
+        subtask.title,
+      );
+    }
 
     return this.formatSubtask(subtask);
   }
@@ -83,7 +107,11 @@ export class SubtasksService {
     ];
     const subtasks = await (this.prisma as any).subtask.findMany({
       where: { id: { in: subtaskIds } },
-      select: { id: true, task: { select: { id: true, projectId: true } } },
+      select: {
+        id: true,
+        title: true,
+        task: { select: { id: true, projectId: true } },
+      },
     });
     const subtasksById = new Map(
       subtasks.map((subtask: any) => [subtask.id, subtask]),
@@ -133,6 +161,11 @@ export class SubtasksService {
         });
 
         updatedSubtasks.push(this.formatSubtask(updated));
+        await this.notificationsService.notifySubtaskAssigned(
+          assignment.userId,
+          subtaskId,
+          updated.title,
+        );
       }
     }
 
@@ -146,7 +179,7 @@ export class SubtasksService {
   async unassignSubtask(actorId: string, subtaskId: string, userId: string) {
     const subtask = await (this.prisma as any).subtask.findUnique({
       where: { id: subtaskId },
-      select: { id: true, task: { select: { projectId: true } } },
+      select: { id: true, title: true, task: { select: { projectId: true } } },
     });
     if (!subtask) throw new NotFoundException('Subtask not found');
 
@@ -166,6 +199,12 @@ export class SubtasksService {
       where: { id: subtaskId },
       include: SUBTASK_INCLUDE,
     });
+
+    await this.notificationsService.notifySubtaskUnassigned(
+      userId,
+      subtaskId,
+      subtask.title,
+    );
 
     return {
       message: 'Subtask assignment removed successfully',

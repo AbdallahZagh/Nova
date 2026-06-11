@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { ProjectRole } from '../common/decorators/require-project-role.decorator';
 import { EmailService } from '../mail/email.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   AddProjectMemberDto,
@@ -35,6 +36,7 @@ export class ProjectsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly emailService: EmailService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   // ─── Create ───────────────────────────────────────────────────────────────
@@ -221,6 +223,13 @@ export class ProjectsService {
         project.name,
         inviter.fullName,
         this.buildProjectLink(projectId),
+      );
+
+      await this.notificationsService.notifyProjectMemberAdded(
+        invitedUser.id,
+        projectId,
+        project.name,
+        inviter.fullName,
       );
 
       createdMembers.push(member);

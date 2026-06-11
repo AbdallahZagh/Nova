@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsNotEmpty, IsString, IsUUID } from 'class-validator';
+import { IsDateString, IsNotEmpty, IsOptional, IsString, IsUUID } from 'class-validator';
 
 export class CreateSubtaskDto {
   @ApiProperty({
@@ -17,4 +17,13 @@ export class CreateSubtaskDto {
   @IsString()
   @IsNotEmpty()
   title: string;
+
+  @ApiProperty({
+    example: '2026-06-30T00:00:00.000Z',
+    required: false,
+    description: 'Optional deadline in ISO 8601 format',
+  })
+  @IsOptional()
+  @IsDateString()
+  dueDate?: string;
 }

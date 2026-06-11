@@ -1,0 +1,1 @@
+ALTER TABLE "subtasks" ADD COLUMN "dueDate" TIMESTAMP(3);

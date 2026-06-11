@@ -48,6 +48,8 @@ model User {
   taskCommentReplies TaskComment[]       @relation("TaskCommentReplier")
   closedTaskComments TaskComment[]       @relation("TaskCommentCloser")
   projectSuggestions ProjectSuggestion[]
+  notifications      Notification[]
+  deviceTokens       UserDeviceToken[]
   otps               Otp[]
 
   @@map("users")
@@ -179,9 +181,10 @@ model TaskComment {
 // ─────────────────────────────────────────────
 
 model Subtask {
-  id          String  @id @default(uuid())
+  id          String    @id @default(uuid())
   title       String
-  isCompleted Boolean @default(false)
+  isCompleted Boolean   @default(false)
+  dueDate     DateTime?
 
   taskId String
   task   Task   @relation(fields: [taskId], references: [id], onDelete: Cascade)
@@ -225,6 +228,39 @@ model TaskActivity {
 // ─────────────────────────────────────────────
 // Otp
 // ─────────────────────────────────────────────
+
+model Notification {
+  id        String   @id @default(uuid())
+  title     String
+  message   String
+  type      String   @default("INFO")
+  metadata  Json?
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead])
+  @@map("notification")
+}
+
+model UserDeviceToken {
+  id         String   @id @default(uuid())
+  token      String   @unique
+  platform   String?
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  lastSeenAt DateTime @default(now())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isActive])
+  @@map("user_device_tokens")
+}
 
 model Otp {
   id        String   @id @default(uuid())
