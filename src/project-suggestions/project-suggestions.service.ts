@@ -44,12 +44,12 @@ export class ProjectSuggestionsService {
       include: SUGGESTION_INCLUDE,
     });
 
-    await this.notificationsService.notifyProjectMembers(
+    await this.notificationsService.notifyProjectManagers(
       dto.projectId,
       'PROJECT_SUGGESTION_CREATED',
       'New project suggestion',
       `A new suggestion was added to ${project.name}.`,
-      { suggestionId: suggestion.id },
+      { suggestionId: suggestion.id, createdById: userId },
     );
 
     return suggestion;
@@ -79,11 +79,31 @@ export class ProjectSuggestionsService {
     if (dto.content !== undefined) data.content = dto.content;
     if (dto.status !== undefined) data.status = dto.status;
 
-    return (this.prisma as any).projectSuggestion.update({
+    const updated = await (this.prisma as any).projectSuggestion.update({
       where: { id },
       data,
       include: SUGGESTION_INCLUDE,
     });
+
+    if (
+      dto.status !== undefined &&
+      dto.status !== suggestion.status &&
+      updated.createdById
+    ) {
+      await this.notificationsService.createNotification(
+        updated.createdById,
+        'PROJECT_SUGGESTION_STATUS_CHANGED',
+        'Suggestion status updated',
+        `Your suggestion in ${updated.project.name} was changed to ${updated.status}.`,
+        {
+          projectId: updated.projectId,
+          suggestionId: updated.id,
+          status: updated.status,
+        },
+      );
+    }
+
+    return updated;
   }
 
   async remove(userId: string, id: string) {

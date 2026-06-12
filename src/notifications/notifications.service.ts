@@ -163,12 +163,73 @@ export class NotificationsService implements OnModuleInit {
     );
   }
 
+  async notifyProjectMemberAddedToTeam(
+    projectId: string,
+    projectName: string,
+    memberName: string,
+    role: string,
+    excludeUserIds: string[] = [],
+  ) {
+    await this.notifyProjectMembers(
+      projectId,
+      'PROJECT_TEAM_MEMBER_ADDED',
+      'New project member',
+      `${memberName} joined ${projectName} as ${role.toLowerCase()}.`,
+      { projectId, memberName, role },
+      excludeUserIds,
+    );
+  }
+
+  async notifyProjectMemberRemoved(
+    userId: string,
+    projectId: string,
+    projectName: string,
+  ) {
+    await this.createNotification(
+      userId,
+      'PROJECT_MEMBER_REMOVED',
+      'Removed from project',
+      `You were removed from ${projectName}.`,
+      { projectId },
+    );
+  }
+
+  async notifyProjectManagers(
+    projectId: string,
+    type: string,
+    title: string,
+    body: string,
+    metadata?: any,
+  ) {
+    const project = await (this.prisma as any).project.findUnique({
+      where: { id: projectId },
+      select: {
+        ownerId: true,
+        members: {
+          where: { role: 'ADMIN' },
+          select: { userId: true },
+        },
+      },
+    });
+
+    if (!project) return;
+
+    await this.notifyUsers(
+      [project.ownerId, ...project.members.map((member: any) => member.userId)],
+      type,
+      title,
+      body,
+      { ...metadata, projectId },
+    );
+  }
+
   async notifyProjectMembers(
     projectId: string,
     type: string,
     title: string,
     body: string,
     metadata?: any,
+    excludeUserIds: string[] = [],
   ) {
     const project = await (this.prisma as any).project.findUnique({
       where: { id: projectId },
@@ -180,8 +241,14 @@ export class NotificationsService implements OnModuleInit {
 
     if (!project) return;
 
+    const excluded = new Set(excludeUserIds);
+    const userIds = [
+      project.ownerId,
+      ...project.members.map((member: any) => member.userId),
+    ].filter((userId) => !excluded.has(userId));
+
     await this.notifyUsers(
-      [project.ownerId, ...project.members.map((member: any) => member.userId)],
+      userIds,
       type,
       title,
       body,

@@ -232,6 +232,14 @@ export class ProjectsService {
         inviter.fullName,
       );
 
+      await this.notificationsService.notifyProjectMemberAddedToTeam(
+        projectId,
+        project.name,
+        invitedUser.fullName,
+        memberInput.role,
+        [invitedUser.id],
+      );
+
       createdMembers.push(member);
     }
 
@@ -257,6 +265,13 @@ export class ProjectsService {
   async removeMember(actorId: string, projectId: string, userId: string) {
     const member = await this.findMemberOrFail(projectId, userId);
     await this.ensureCanModifyMember(actorId, projectId, member.role);
+    const project = await this.findProjectOrFail(projectId);
+
+    await this.notificationsService.notifyProjectMemberRemoved(
+      userId,
+      projectId,
+      project.name,
+    );
 
     await (this.prisma as any).projectMember.delete({
       where: { userId_projectId: { userId, projectId } },
