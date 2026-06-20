@@ -16,7 +16,11 @@ import {
   type ProjectFormInput,
   type ProjectStatus,
 } from "@/lib/projects";
-import { canDeleteProject, getProjectMemberRole } from "@/lib/useProjectRole";
+import {
+  canDeleteProject,
+  canEditProjectDetails,
+  getProjectMemberRole,
+} from "@/lib/useProjectRole";
 
 type FilterStatus = "All" | ProjectStatus;
 
@@ -47,19 +51,36 @@ export default function ProjectsPage() {
     return sortProjectsByStatus(list);
   }, [activeFilter, projects]);
 
+  const canCreateProjects = useMemo(() => {
+    if (projects.length === 0) return true;
+    return projects.some((project) =>
+      canEditProjectDetails(getProjectMemberRole(project, profile?.id)),
+    );
+  }, [profile?.id, projects]);
+
   const openCreateModal = () => {
+    if (!canCreateProjects) return;
     setModalMode("create");
     setEditingProject(null);
     setIsModalOpen(true);
   };
 
   const openEditModal = (project: Project) => {
+    if (!canEditProjectDetails(getProjectMemberRole(project, profile?.id))) return;
     setModalMode("edit");
     setEditingProject(project);
     setIsModalOpen(true);
   };
 
   const handleSubmit = async (input: ProjectFormInput) => {
+    if (modalMode === "create" && !canCreateProjects) return;
+    if (
+      modalMode === "edit" &&
+      editingProject &&
+      !canEditProjectDetails(getProjectMemberRole(editingProject, profile?.id))
+    ) {
+      return;
+    }
     setSubmitting(true);
     try {
       if (modalMode === "edit" && editingProject) {
@@ -133,13 +154,15 @@ export default function ProjectsPage() {
             Manage and track your active projects.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={openCreateModal}
-          className="rounded-xl bg-linear-90 from-accent/75 to-accent/35 px-4 py-2.5 text-sm font-semibold text-primary transition hover:opacity-90"
-        >
-          New Project
-        </button>
+        {canCreateProjects && (
+          <button
+            type="button"
+            onClick={openCreateModal}
+            className="rounded-xl bg-linear-90 from-accent/75 to-accent/35 px-4 py-2.5 text-sm font-semibold text-primary transition hover:opacity-90"
+          >
+            New Project
+          </button>
+        )}
       </div>
 
       <div className="space-y-4">
@@ -168,27 +191,31 @@ export default function ProjectsPage() {
       {filteredProjects.length === 0 ? (
         <div className="rounded-2xl border border-glass bg-glass-card p-10 text-center">
           <p className="text-sm text-primary/60">No projects found.</p>
-          <button
-            type="button"
-            onClick={openCreateModal}
-            className="mt-4 text-sm font-medium text-accent hover:underline"
-          >
-            Create your first project
-          </button>
+          {canCreateProjects && (
+            <button
+              type="button"
+              onClick={openCreateModal}
+              className="mt-4 text-sm font-medium text-accent hover:underline"
+            >
+              Create your first project
+            </button>
+          )}
         </div>
       ) : (
         <div className="grid auto-rows-fr grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {filteredProjects.map((project) => (
-            <ProjectCard
-              key={project.id}
-              project={project}
-              onEdit={openEditModal}
-              onDelete={setDeleteTarget}
-              canDelete={canDeleteProject(
-                getProjectMemberRole(project, profile?.id),
-              )}
-            />
-          ))}
+          {filteredProjects.map((project) => {
+            const role = getProjectMemberRole(project, profile?.id);
+            return (
+              <ProjectCard
+                key={project.id}
+                project={project}
+                onEdit={openEditModal}
+                onDelete={setDeleteTarget}
+                canEdit={canEditProjectDetails(role)}
+                canDelete={canDeleteProject(role)}
+              />
+            );
+          })}
         </div>
       )}
 

@@ -24,6 +24,10 @@ export function canDeleteProject(role: ProjectMemberRole | null) {
   return role === "OWNER";
 }
 
+export function canEditProjectDetails(role: ProjectMemberRole | null) {
+  return role !== null && role !== "VIEWER";
+}
+
 export function canEditProjectTasks(role: ProjectMemberRole | null) {
   return role !== null && role !== "VIEWER";
 }

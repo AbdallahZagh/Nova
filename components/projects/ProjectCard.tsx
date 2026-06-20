@@ -25,6 +25,7 @@ type ProjectCardProps = {
   project: Project;
   onEdit: (project: Project) => void;
   onDelete: (project: Project) => void;
+  canEdit?: boolean;
   canDelete?: boolean;
 };
 
@@ -32,6 +33,7 @@ export function ProjectCard({
   project,
   onEdit,
   onDelete,
+  canEdit = true,
   canDelete = true,
 }: ProjectCardProps) {
   const progress = Math.max(0, Math.min(100, project.progress));
@@ -49,6 +51,8 @@ export function ProjectCard({
   const close = useCallback(() => setMenuOpen(false), []);
   useFloatingClickOutside(menuOpen, close, triggerRef, menuRef);
 
+  const hasActions = canEdit || canDelete;
+
   const toggleMenu = (event: React.MouseEvent) => {
     event.preventDefault();
     event.stopPropagation();
@@ -65,7 +69,7 @@ export function ProjectCard({
             "hover:scale-[1.02] hover:border-accent/40",
           )}
         >
-          <div className="flex items-start justify-between gap-3 pr-10">
+          <div className={cn("flex items-start justify-between gap-3", hasActions && "pr-10")}>
             <h3 className="text-base font-semibold leading-snug text-primary">
               {project.title}
             </h3>
@@ -131,45 +135,49 @@ export function ProjectCard({
       </Link>
 
       {/* Three-dot action button — always visible, outside the Link */}
-      <button
-        ref={triggerRef}
-        type="button"
-        aria-label="Project actions"
-        aria-haspopup="menu"
-        aria-expanded={menuOpen}
-        onClick={toggleMenu}
-        className={cn(
-          "absolute right-3 top-3 z-10 flex size-7 items-center justify-center rounded-lg border border-glass bg-glass-button text-primary/60 transition hover:border-accent/40 hover:text-accent",
-          menuOpen && "border-accent/40 text-accent",
-        )}
-      >
-        <MoreHorizontal className="size-4" />
-      </button>
+      {hasActions && (
+        <button
+          ref={triggerRef}
+          type="button"
+          aria-label="Project actions"
+          aria-haspopup="menu"
+          aria-expanded={menuOpen}
+          onClick={toggleMenu}
+          className={cn(
+            "absolute right-3 top-3 z-10 flex size-7 items-center justify-center rounded-lg border border-glass bg-glass-button text-primary/60 transition hover:border-accent/40 hover:text-accent",
+            menuOpen && "border-accent/40 text-accent",
+          )}
+        >
+          <MoreHorizontal className="size-4" />
+        </button>
+      )}
 
       <FloatingMenuPortal
-        isOpen={menuOpen}
+        isOpen={menuOpen && hasActions}
         triggerRef={triggerRef}
         menuRef={menuRef}
         style={style}
         role="menu"
         className="overflow-hidden rounded-xl border border-glass bg-sidebar p-1 shadow-xl shadow-black/40 backdrop-blur-2xl"
       >
-        <button
-          type="button"
-          role="menuitem"
-          onClick={(event) => {
-            event.stopPropagation();
-            setMenuOpen(false);
-            onEdit(project);
-          }}
-          className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-sm text-primary transition hover:bg-accent/10 hover:text-accent"
-        >
-          <Pencil className="size-3.5 shrink-0" />
-          Edit project
-        </button>
+        {canEdit && (
+          <button
+            type="button"
+            role="menuitem"
+            onClick={(event) => {
+              event.stopPropagation();
+              setMenuOpen(false);
+              onEdit(project);
+            }}
+            className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-sm text-primary transition hover:bg-accent/10 hover:text-accent"
+          >
+            <Pencil className="size-3.5 shrink-0" />
+            Edit project
+          </button>
+        )}
         {canDelete && (
           <>
-            <div className="my-1 h-px bg-glass-border" />
+            {canEdit && <div className="my-1 h-px bg-glass-border" />}
             <button
               type="button"
               role="menuitem"

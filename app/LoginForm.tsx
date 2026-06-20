@@ -5,8 +5,21 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { establishSession } from "@/app/actions/session";
 import { Input, PasswordInput } from "@/components/ui/input";
 import { useToast } from "@/components/ui/Toast";
-import { loginApi } from "@/lib/api/auth";
+import { loginApi, reactivateApi } from "@/lib/api/auth";
 import { ApiError, setAccessToken } from "@/lib/api/client";
+
+function isInactiveAccountError(err: unknown) {
+  if (!(err instanceof ApiError)) return false;
+  const message = err.message.toLowerCase();
+  return (
+    message.includes("inactive") ||
+    message.includes("archived") ||
+    message.includes("archive") ||
+    message.includes("reactivat") ||
+    message.includes("deactivated") ||
+    message.includes("account is not active")
+  );
+}
 
 function LoginFormContent() {
   const router = useRouter();
@@ -38,6 +51,28 @@ function LoginFormContent() {
 
     try {
       const response = await loginApi(email, password);
+      const loginUser = response.user as typeof response.user & {
+        isActive?: boolean;
+        isArchived?: boolean;
+      };
+      if (
+        loginUser.isActive === false ||
+        loginUser.isArchived === true
+      ) {
+        const reactivateResponse = await reactivateApi(loginUser.email);
+        toast({
+          variant: "success",
+          title: "Reactivation code sent",
+          message:
+            reactivateResponse._devOtp
+              ? `Your code: ${reactivateResponse._devOtp}`
+              : "Check your email for the OTP.",
+        });
+        router.push(
+          `/reactivate?email=${encodeURIComponent(loginUser.email)}&step=otp`,
+        );
+        return;
+      }
       setAccessToken(response.accessToken);
       await establishSession();
 
@@ -45,6 +80,29 @@ function LoginFormContent() {
       router.push(searchParams.get("from") ?? "/dashboard");
       router.refresh();
     } catch (err) {
+      if (isInactiveAccountError(err)) {
+        try {
+          const reactivateResponse = await reactivateApi(email);
+          toast({
+            variant: "success",
+            title: "Reactivation code sent",
+            message:
+              reactivateResponse._devOtp
+                ? `Your code: ${reactivateResponse._devOtp}`
+                : "Check your email for the OTP.",
+          });
+          router.push(`/reactivate?email=${encodeURIComponent(email)}&step=otp`);
+          return;
+        } catch (reactivateErr) {
+          const message =
+            reactivateErr instanceof ApiError
+              ? reactivateErr.message
+              : "Could not send a reactivation code. Please try again.";
+          setError(message);
+          toast({ variant: "error", title: "Reactivation failed", message });
+          return;
+        }
+      }
       const message =
         err instanceof ApiError
           ? err.message

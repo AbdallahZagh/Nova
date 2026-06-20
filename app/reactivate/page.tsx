@@ -122,7 +122,11 @@ function ReactivateContent() {
   const searchParams = useSearchParams();
   const { toast } = useToast();
 
-  const [step, setStep] = useState<Step>("email");
+  const [step, setStep] = useState<Step>(() =>
+    searchParams.get("step") === "otp" && searchParams.get("email")
+      ? "otp"
+      : "email",
+  );
   const [email, setEmail] = useState(() => searchParams.get("email") ?? "");
   const [otp, setOtp] = useState("");
   const [loading, setLoading] = useState(false);
@@ -142,6 +146,15 @@ function ReactivateContent() {
     const interval = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(interval);
   }, [otpCooldownUntil]);
+
+  useEffect(() => {
+    if (searchParams.get("step") !== "otp" || !searchParams.get("email")) {
+      return;
+    }
+    const nextNow = Date.now();
+    setOtpCooldownUntil(nextNow + 30_000);
+    setNow(nextNow);
+  }, [searchParams]);
 
   const requestCode = async () => {
     setEmailError("");
