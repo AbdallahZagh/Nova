@@ -12,6 +12,9 @@ import { router, usePathname } from "expo-router";
 import { useColorScheme } from "nativewind";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { DynamicLogo } from "@/components/UI/DynamicLogo";
+import { useNotificationSync } from "@/hooks/useNotificationSync";
+import { useAuthStore } from "@/store/useAuthStore";
+import { useNotificationStore } from "@/store/useNotificationStore";
 import { getPalette } from "@/theme/colors";
 
 const tabs = [
@@ -26,7 +29,11 @@ export function AppFrame({ children }: PropsWithChildren) {
   const pathname = usePathname();
   const { colorScheme } = useColorScheme();
   const palette = getPalette(colorScheme);
+  const user = useAuthStore((state) => state.user);
+  const unreadCount = useNotificationStore((state) => state.unreadCount);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
+
+  useNotificationSync(user);
 
   useEffect(() => {
     const showSubscription = Keyboard.addListener("keyboardDidShow", () =>
@@ -72,9 +79,16 @@ export function AppFrame({ children }: PropsWithChildren) {
             accessibilityLabel="Notifications"
             accessibilityRole="button"
             onPress={() => router.push("/(main)/notifications")}
-            className="h-[42px] w-[42px] items-center justify-center rounded-[14px] border border-glass bg-glass-button active:opacity-70 dark:border-dark-glass dark:bg-dark-glass-button"
+            className="relative h-[42px] w-[42px] items-center justify-center rounded-[14px] border border-glass bg-glass-button active:opacity-70 dark:border-dark-glass dark:bg-dark-glass-button"
           >
             <Ionicons name="notifications-outline" size={20} color={palette.muted} />
+            {unreadCount > 0 ? (
+              <View className="absolute -right-1 -top-1 min-w-[18px] items-center justify-center rounded-full bg-accent px-1.5 py-0.5 dark:bg-dark-accent">
+                <Text className="text-[10px] font-black text-white">
+                  {unreadCount > 99 ? "99+" : unreadCount}
+                </Text>
+              </View>
+            ) : null}
           </Pressable>
 
           {/* <Pressable

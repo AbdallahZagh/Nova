@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "579731140205",
+    "project_id": "nova-taskflow",
+    "storage_bucket": "nova-taskflow.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:579731140205:android:2af478935edbd35fa65964",
+        "android_client_info": {
+          "package_name": "com.anonymous.novataskflow"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDbPxkbTU4O2hpFU9bZlMTUkRvCNiIrFuY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
