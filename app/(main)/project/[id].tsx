@@ -76,6 +76,12 @@ type SelectedInviteMember = {
   role: EditableProjectMemberRole;
 };
 
+type CreateSubtaskDraft = {
+  id: string;
+  label: string;
+  done: boolean;
+};
+
 const inviteRoles: EditableProjectMemberRole[] = ["ADMIN", "MEMBER", "VIEWER"];
 
 function TaskCard({
@@ -191,7 +197,7 @@ function NewTaskDrawer({
   const [status, setStatus] = useState<TaskStatus>(defaultStatus);
   const [priority, setPriority] = useState<TaskPriority>("Medium");
   const [dueDate, setDueDate] = useState("");
-  const [subtasksText, setSubtasksText] = useState("");
+  const [subtasks, setSubtasks] = useState<CreateSubtaskDraft[]>([]);
   const [assigneeIds, setAssigneeIds] = useState<string[]>([]);
 
   useEffect(() => {
@@ -201,7 +207,7 @@ function NewTaskDrawer({
     setStatus(defaultStatus);
     setPriority("Medium");
     setDueDate("");
-    setSubtasksText("");
+    setSubtasks([]);
     setAssigneeIds([]);
   }, [defaultStatus, visible]);
 
@@ -225,15 +231,36 @@ function NewTaskDrawer({
         : currentUserId
           ? [currentUserId]
           : [],
-      subtasks: subtasksText
-        .split("\n")
-        .map((label, index) => ({
-          id: `new-${Date.now()}-${index}`,
-          label: label.trim(),
-          done: false,
+      subtasks: subtasks
+        .map((subtask) => ({
+          ...subtask,
+          label: subtask.label.trim(),
         }))
         .filter((subtask) => subtask.label),
     });
+  };
+
+  const addSubtask = () => {
+    setSubtasks((current) => [
+      ...current,
+      {
+        id: `new-${Date.now()}`,
+        label: "",
+        done: false,
+      },
+    ]);
+  };
+
+  const updateSubtask = (id: string, patch: Partial<CreateSubtaskDraft>) => {
+    setSubtasks((current) =>
+      current.map((subtask) =>
+        subtask.id === id ? { ...subtask, ...patch } : subtask,
+      ),
+    );
+  };
+
+  const removeSubtask = (id: string) => {
+    setSubtasks((current) => current.filter((subtask) => subtask.id !== id));
   };
 
   return (
@@ -364,19 +391,75 @@ function NewTaskDrawer({
         </View>
       ) : null}
 
-      <View>
-        <Text className="mb-2 text-xs font-black uppercase tracking-[1.4px] text-muted dark:text-dark-muted">
-          Subtasks
-        </Text>
-        <TextInput
-          value={subtasksText}
-          onChangeText={setSubtasksText}
-          placeholder="One subtask per line"
-          placeholderTextColor={palette.muted}
-          multiline
-          textAlignVertical="top"
-          className="min-h-[92px] rounded-nova border border-glass bg-glass-button px-3.5 py-3 text-primary dark:border-dark-glass dark:bg-dark-glass-button dark:text-dark-primary"
-        />
+      <View className="rounded-nova-xl border border-glass bg-sidebar p-4 dark:border-dark-glass dark:bg-dark-sidebar">
+        <View className="mb-4 flex-row items-center justify-between">
+          <Text className="text-[18px] font-black text-primary dark:text-dark-primary">
+            Subtasks
+          </Text>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Add subtask"
+            onPress={addSubtask}
+            className="h-9 w-9 items-center justify-center rounded-full bg-accent dark:bg-dark-accent"
+          >
+            <Ionicons name="add-outline" size={20} color={palette.white} />
+          </Pressable>
+        </View>
+
+        <View className="gap-3">
+          {subtasks.length === 0 ? (
+            <Text className="text-sm text-muted dark:text-dark-muted">
+              No subtasks yet.
+            </Text>
+          ) : (
+            subtasks.map((subtask, index) => (
+              <View
+                key={subtask.id}
+                className="rounded-nova border border-glass bg-glass-card p-3 dark:border-dark-glass dark:bg-dark-glass-card"
+              >
+                <View className="flex-row items-center gap-3">
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Toggle subtask ${index + 1}`}
+                    onPress={() =>
+                      updateSubtask(subtask.id, { done: !subtask.done })
+                    }
+                    className={`h-8 w-8 items-center justify-center rounded-nova border ${
+                      subtask.done
+                        ? "border-accent bg-accent dark:border-dark-accent dark:bg-dark-accent"
+                        : "border-glass bg-glass-button dark:border-dark-glass dark:bg-dark-glass-button"
+                    }`}
+                  >
+                    {subtask.done ? (
+                      <Ionicons
+                        name="checkmark-outline"
+                        size={18}
+                        color={palette.white}
+                      />
+                    ) : null}
+                  </Pressable>
+
+                  <TextInput
+                    value={subtask.label}
+                    onChangeText={(label) => updateSubtask(subtask.id, { label })}
+                    placeholder={`Subtask ${index + 1}`}
+                    placeholderTextColor={palette.muted}
+                    className="flex-1 text-primary dark:text-dark-primary"
+                  />
+
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Remove subtask ${index + 1}`}
+                    onPress={() => removeSubtask(subtask.id)}
+                    className="h-8 w-8 items-center justify-center rounded-full bg-glass-button dark:bg-dark-glass-button"
+                  >
+                    <Ionicons name="close-outline" size={18} color={palette.muted} />
+                  </Pressable>
+                </View>
+              </View>
+            ))
+          )}
+        </View>
       </View>
 
       <Pressable

@@ -1,6 +1,5 @@
 import { useEffect, useState, type PropsWithChildren } from "react";
 import {
-  Image,
   Keyboard,
   KeyboardAvoidingView,
   Platform,
@@ -12,6 +11,7 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { router, usePathname } from "expo-router";
 import { useColorScheme } from "nativewind";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { DynamicLogo } from "@/components/UI/DynamicLogo";
 import { getPalette } from "@/theme/colors";
 
 const tabs = [
@@ -48,13 +48,14 @@ export function AppFrame({ children }: PropsWithChildren) {
         className="min-h-[82px] flex-row items-center gap-5 border-b border-glass bg-sidebar px-4 pb-2.5 dark:border-dark-glass dark:bg-dark-sidebar"
         style={{ paddingTop: insets.top + 10 }}
       >
-        <View className="flex-row items-center gap-2">
-          <Image
-            source={require("../../assets/images/icon.png")}
-            resizeMode="contain"
-            className="h-[38px] w-[38px]"
-          />
-        </View>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Go to dashboard"
+          onPress={() => router.push("/(main)/dashboard")}
+          className="items-center justify-center active:opacity-75"
+        >
+          <DynamicLogo size={40} />
+        </Pressable>
 
         <View className="flex-1 flex-row items-center justify-end gap-3">
           <Pressable
