@@ -1,3 +1,5 @@
+import axios, { isAxiosError, type AxiosRequestConfig, type Method } from "axios";
+
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "";
 
 export const ACCESS_TOKEN_KEY = "taskflow-access-token";
@@ -69,6 +71,23 @@ type ApiFetchOptions = RequestInit & {
   auth?: boolean;
 };
 
+function headersToObject(headers: Headers): Record<string, string> {
+  return Object.fromEntries(headers.entries());
+}
+
+function getApiErrorMessage(payload: unknown, status: number) {
+  if (typeof payload === "object" && payload && "message" in payload) {
+    const message = (payload as { message: unknown }).message;
+    return Array.isArray(message) ? message.join(", ") : String(message);
+  }
+
+  if (typeof payload === "object" && payload && "error" in payload) {
+    return String((payload as { error: unknown }).error);
+  }
+
+  return `Request failed with status ${status}`;
+}
+
 export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): Promise<T> {
   const { auth = true, headers: providedHeaders, body, ...rest } = options;
   const headers = new Headers(providedHeaders);
@@ -84,30 +103,46 @@ export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): 
     }
   }
 
-  const response = await fetch(apiUrl(path), {
-    ...rest,
-    headers,
-    body,
-  });
+  const config: AxiosRequestConfig = {
+    url: apiUrl(path),
+    method: (rest.method ?? "GET") as Method,
+    headers: headersToObject(headers),
+    data: body,
+    signal: rest.signal ?? undefined,
+    validateStatus: () => true,
+  };
 
-  const contentType = response.headers.get("Content-Type");
-  const isJson = contentType?.includes("application/json");
-  const payload = isJson ? await response.json().catch(() => null) : await response.text();
+  try {
+    const response = await axios.request<T>(config);
 
-  if (!response.ok) {
-    const message =
-      typeof payload === "object" && payload && "message" in payload
-        ? Array.isArray((payload as { message: unknown }).message)
-          ? ((payload as { message: string[] }).message).join(", ")
-          : String((payload as { message: unknown }).message)
-        : `Request failed with status ${response.status}`;
+    if (response.status < 200 || response.status >= 300) {
+      if (auth && response.status === 401) {
+        redirectToLoginForExpiredSession();
+      }
 
-    if (auth && response.status === 401) {
-      redirectToLoginForExpiredSession();
+      throw new ApiError(
+        getApiErrorMessage(response.data, response.status),
+        response.status,
+        response.data,
+      );
     }
 
-    throw new ApiError(message, response.status, payload);
-  }
+    return response.data as T;
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
 
-  return payload as T;
+    if (isAxiosError(error)) {
+      const status = error.response?.status ?? 0;
+      if (auth && status === 401) {
+        redirectToLoginForExpiredSession();
+      }
+      throw new ApiError(
+        getApiErrorMessage(error.response?.data, status || 500),
+        status || 500,
+        error.response?.data,
+      );
+    }
+
+    throw error;
+  }
 }

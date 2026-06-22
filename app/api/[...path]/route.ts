@@ -1,4 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server";
+import axios from "axios";
 
 const BACKEND = (
   process.env.API_PROXY_TARGET ?? "https://nova-l5df.onrender.com"
@@ -20,32 +21,38 @@ async function proxy(req: NextRequest): Promise<NextResponse> {
 
   const hasBody = !["GET", "HEAD"].includes(req.method);
 
-  let upstream: Response;
   try {
-    upstream = await fetch(target, {
+    const upstream = await axios.request<ArrayBuffer>({
+      url: target,
       method: req.method,
-      headers: reqHeaders,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      ...(hasBody ? { body: req.body, duplex: "half" as any } : {}),
+      headers: Object.fromEntries(reqHeaders.entries()),
+      data: hasBody ? Buffer.from(await req.arrayBuffer()) : undefined,
+      responseType: "arraybuffer",
+      validateStatus: () => true,
+    });
+
+    const resHeaders = new Headers();
+    Object.entries(upstream.headers).forEach(([key, value]) => {
+      if (key === "content-encoding" || key === "transfer-encoding") return;
+      if (Array.isArray(value)) {
+        resHeaders.set(key, value.join(", "));
+        return;
+      }
+      if (value !== undefined) resHeaders.set(key, String(value));
+    });
+
+    return new NextResponse(Buffer.from(upstream.data), {
+      status: upstream.status,
+      statusText: upstream.statusText,
+      headers: resHeaders,
     });
   } catch (err) {
-    console.error("[proxy] fetch failed", { target, backend: BACKEND, err });
+    console.error("[proxy] axios failed", { target, backend: BACKEND, err });
     return NextResponse.json(
       { error: "Backend unreachable" },
       { status: 502 },
     );
   }
-
-  // Copy response headers, strip encoding that breaks streaming on Netlify
-  const resHeaders = new Headers(upstream.headers);
-  resHeaders.delete("content-encoding");
-  resHeaders.delete("transfer-encoding");
-
-  return new NextResponse(upstream.body, {
-    status: upstream.status,
-    statusText: upstream.statusText,
-    headers: resHeaders,
-  });
 }
 
 export const GET = proxy;

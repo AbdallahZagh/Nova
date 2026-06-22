@@ -2,11 +2,13 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Check, Plus, X } from "lucide-react";
+import { Check, Plus, Sparkles, X } from "lucide-react";
 import { DatePicker, formatDueDate } from "@/components/ui/Calendar";
 import { Input, Textarea } from "@/components/ui/input";
 import { MultiSelect } from "@/components/ui/MultiSelect";
 import { Select } from "@/components/ui/Select";
+import { useToast } from "@/components/ui/Toast";
+import { apiFetch } from "@/lib/api/client";
 import { cn } from "@/lib/cn";
 import {
   TASK_STATUS_OPTIONS,
@@ -134,6 +136,37 @@ const PRIORITY_OPTIONS = [
   { value: "High", label: "High" },
 ];
 
+type AiTaskSuggestion = {
+  description: string;
+  subTasks: string[];
+  priority: "LOW" | "MEDIUM" | "HIGH";
+  suggestedDaysUntilDue: number;
+};
+
+const AI_PRIORITY_TO_TASK_PRIORITY: Record<AiTaskSuggestion["priority"], TaskPriority> = {
+  LOW: "Low",
+  MEDIUM: "Medium",
+  HIGH: "High",
+};
+
+const aiFilledFieldClass =
+  "border-accent/60 bg-accent/10 ring-1 ring-accent/25 shadow-[0_0_0_1px_rgba(197,96,16,0.08)]";
+
+function AiDraftBadge({ visible }: { visible: boolean }) {
+  if (!visible) return null;
+  return (
+    <span className="rounded-full border border-accent/25 bg-accent/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-accent">
+      AI draft
+    </span>
+  );
+}
+
+function dueDateFromSuggestedDays(days: number) {
+  const due = new Date();
+  due.setDate(due.getDate() + Math.max(0, days));
+  return due;
+}
+
 function NewTaskForm({
   defaultStatus,
   onClose,
@@ -153,6 +186,7 @@ function NewTaskForm({
   subtaskAssigneeOptions: SelectOption[];
   submitting?: boolean;
 }) {
+  const { toast } = useToast();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [priority, setPriority] = useState<TaskPriority>("Medium");
@@ -161,6 +195,13 @@ function NewTaskForm({
   const [dueDate, setDueDate] = useState<Date | null>(null);
   const [subtasks, setSubtasks] = useState<SubtaskItem[]>([]);
   const [newSubtaskLabel, setNewSubtaskLabel] = useState("");
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [aiGeneratedFields, setAiGeneratedFields] = useState({
+    description: false,
+    priority: false,
+    dueDate: false,
+    subtasks: false,
+  });
 
   const statusOptions = useMemo(
     () => TASK_STATUS_OPTIONS,
@@ -170,12 +211,20 @@ function NewTaskForm({
   const updateSubtask = (id: string, changes: Partial<SubtaskItem>) =>
     setSubtasks((prev) => prev.map((s) => (s.id === id ? { ...s, ...changes } : s)));
 
-  const deleteSubtask = (id: string) =>
+  const updateSubtaskFromUser = (id: string, changes: Partial<SubtaskItem>) => {
+    setAiGeneratedFields((prev) => ({ ...prev, subtasks: false }));
+    updateSubtask(id, changes);
+  };
+
+  const deleteSubtask = (id: string) => {
+    setAiGeneratedFields((prev) => ({ ...prev, subtasks: false }));
     setSubtasks((prev) => prev.filter((s) => s.id !== id));
+  };
 
   const addSubtask = () => {
     const label = newSubtaskLabel.trim();
     if (!label) return;
+    setAiGeneratedFields((prev) => ({ ...prev, subtasks: false }));
     setSubtasks((prev) => [
       ...prev,
       { id: `s-${Date.now()}`, label, done: false, assigneeIds: [] },
@@ -185,6 +234,65 @@ function NewTaskForm({
 
   const handleClose = () => {
     onClose();
+  };
+
+  const handleAiSuggest = async () => {
+    const trimmedTitle = title.trim();
+    if (!trimmedTitle || isGenerating) {
+      if (!trimmedTitle) {
+        toast({
+          variant: "warning",
+          title: "Add a title first",
+          message: "The AI needs a task title before it can suggest details.",
+        });
+      }
+      return;
+    }
+
+    setIsGenerating(true);
+    try {
+      const suggestion = await apiFetch<AiTaskSuggestion>("/api/tasks/ai-suggest", {
+        method: "POST",
+        body: JSON.stringify({ title: trimmedTitle }),
+      });
+
+      setDescription(suggestion.description ?? "");
+      setPriority(AI_PRIORITY_TO_TASK_PRIORITY[suggestion.priority] ?? "Medium");
+      setSubtasks(
+        (suggestion.subTasks ?? [])
+          .map((label) => label.trim())
+          .filter(Boolean)
+          .map((label, index) => ({
+            id: `ai-${Date.now()}-${index}`,
+            label,
+            done: false,
+            assigneeIds: [],
+          })),
+      );
+      setAiGeneratedFields({
+        description: true,
+        priority: true,
+        dueDate: true,
+        subtasks: true,
+      });
+      setDueDate(dueDateFromSuggestedDays(suggestion.suggestedDaysUntilDue ?? 0));
+      toast({
+        variant: "success",
+        title: "Task details generated",
+        message: "Review the AI suggestions before creating the task.",
+      });
+    } catch (error) {
+      toast({
+        variant: "error",
+        title: "AI suggestion failed",
+        message:
+          error instanceof Error
+            ? error.message
+            : "Could not generate task details. Please try again.",
+      });
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
   return (
@@ -272,40 +380,78 @@ function NewTaskForm({
             required
             placeholder="e.g. Design onboarding flow"
           />
+          <button
+            type="button"
+            onClick={handleAiSuggest}
+            disabled={isGenerating || !title.trim()}
+            aria-label="Generate task details with AI"
+            className="mt-2 flex w-full items-center justify-between gap-3 rounded-xl border border-glass bg-glass-button/60 px-3 py-2 text-left transition hover:border-accent/60 hover:bg-accent/10 disabled:cursor-not-allowed disabled:opacity-45"
+          >
+            <span className="flex min-w-0 items-center gap-2.5">
+              <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-accent text-white shadow-sm shadow-accent/20">
+                <Sparkles className={cn("size-4", isGenerating && "animate-pulse")} />
+              </span>
+              <span className="min-w-0">
+                <span className="block text-xs font-semibold text-primary">
+                  {isGenerating ? "Generating task draft" : "Generate with AI"}
+                </span>
+                <span className="block truncate text-[11px] text-primary/55">
+                  Fill description, priority, due date, and subtasks.
+                </span>
+              </span>
+            </span>
+            <span className="shrink-0 rounded-full border border-accent/25 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-accent">
+              AI
+            </span>
+          </button>
         </div>
 
         <div>
-          <label
-            htmlFor="task-description"
-            className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-primary/75"
-          >
-            Description
-          </label>
+          <div className="mb-1.5 flex items-center justify-between gap-3">
+            <label
+              htmlFor="task-description"
+              className="block text-xs font-semibold uppercase tracking-wider text-primary/75"
+            >
+              Description
+            </label>
+            <AiDraftBadge visible={aiGeneratedFields.description} />
+          </div>
           <Textarea
             id="task-description"
             value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            rows={2}
+            onChange={(e) => {
+              setDescription(e.target.value);
+              setAiGeneratedFields((prev) => ({ ...prev, description: false }));
+            }}
+            rows={4}
             placeholder="Describe what needs to be done..."
-            className="resize-none"
+            className={cn("resize-none transition", aiGeneratedFields.description && aiFilledFieldClass)}
           />
         </div>
 
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div>
-            <label
-              htmlFor="task-priority"
-              className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-primary/75"
-            >
-              Priority
-            </label>
-            <Select
-              id="task-priority"
-              value={priority}
-              onChange={(value) => setPriority(value as TaskPriority)}
-              options={PRIORITY_OPTIONS}
-              aria-label="Priority"
-            />
+            <div className="mb-1.5 flex items-center justify-between gap-3">
+              <label
+                htmlFor="task-priority"
+                className="block text-xs font-semibold uppercase tracking-wider text-primary/75"
+              >
+                Priority
+              </label>
+              <AiDraftBadge visible={aiGeneratedFields.priority} />
+            </div>
+            <div className={cn("rounded-xl transition", aiGeneratedFields.priority && aiFilledFieldClass)}>
+              <Select
+                id="task-priority"
+                value={priority}
+                onChange={(value) => {
+                  setPriority(value as TaskPriority);
+                  setAiGeneratedFields((prev) => ({ ...prev, priority: false }));
+                }}
+                options={PRIORITY_OPTIONS}
+                aria-label="Priority"
+              />
+            </div>
           </div>
 
           <div>
@@ -326,19 +472,27 @@ function NewTaskForm({
         </div>
 
         <div>
-          <label
-            htmlFor="task-due-date"
-            className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-primary/75"
-          >
-            Due Date
-          </label>
-          <DatePicker
-            id="task-due-date"
-            value={dueDate}
-            onChange={setDueDate}
-            placeholder="Select due date..."
-            aria-label="Due date"
-          />
+          <div className="mb-1.5 flex items-center justify-between gap-3">
+            <label
+              htmlFor="task-due-date"
+              className="block text-xs font-semibold uppercase tracking-wider text-primary/75"
+            >
+              Due Date
+            </label>
+            <AiDraftBadge visible={aiGeneratedFields.dueDate} />
+          </div>
+          <div className={cn("rounded-xl transition", aiGeneratedFields.dueDate && aiFilledFieldClass)}>
+            <DatePicker
+              id="task-due-date"
+              value={dueDate}
+              onChange={(date) => {
+                setDueDate(date);
+                setAiGeneratedFields((prev) => ({ ...prev, dueDate: false }));
+              }}
+              placeholder="Select due date..."
+              aria-label="Due date"
+            />
+          </div>
         </div>
 
         {canAssignTasks && (
@@ -363,21 +517,29 @@ function NewTaskForm({
 
         {/* Subtasks */}
         <div>
-          <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-primary/75">
-            Subtasks
-          </label>
+          <div className="mb-1.5 flex items-center justify-between gap-3">
+            <label className="block text-xs font-semibold uppercase tracking-wider text-primary/75">
+              Subtasks
+            </label>
+            <AiDraftBadge visible={aiGeneratedFields.subtasks} />
+          </div>
 
           {subtasks.length > 0 && (
-            <ul className="mb-2 space-y-1.5">
+            <ul
+              className={cn(
+                "mb-2 space-y-1.5 rounded-xl transition",
+                aiGeneratedFields.subtasks && "border border-accent/45 bg-accent/5 p-2 ring-1 ring-accent/15",
+              )}
+            >
               {subtasks.map((subtask) => (
                 <SubtaskRow
                   key={subtask.id}
                   subtask={subtask}
-                  onToggle={() => updateSubtask(subtask.id, { done: !subtask.done })}
-                  onLabelChange={(label) => updateSubtask(subtask.id, { label })}
+                  onToggle={() => updateSubtaskFromUser(subtask.id, { done: !subtask.done })}
+                  onLabelChange={(label) => updateSubtaskFromUser(subtask.id, { label })}
                   onDelete={() => deleteSubtask(subtask.id)}
                   onAssigneesChange={(assigneeIds) =>
-                    updateSubtask(subtask.id, { assigneeIds })
+                    updateSubtaskFromUser(subtask.id, { assigneeIds })
                   }
                   canAssignSubtasks={canAssignSubtasks}
                   assigneeOptions={subtaskAssigneeOptions}
@@ -389,7 +551,10 @@ function NewTaskForm({
           <div className="flex items-center gap-2">
             <input
               value={newSubtaskLabel}
-              onChange={(e) => setNewSubtaskLabel(e.target.value)}
+              onChange={(e) => {
+                setNewSubtaskLabel(e.target.value);
+                setAiGeneratedFields((prev) => ({ ...prev, subtasks: false }));
+              }}
               onKeyDown={(e) => {
                 if (e.key === "Enter") {
                   e.preventDefault();

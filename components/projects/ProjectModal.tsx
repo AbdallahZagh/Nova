@@ -2,13 +2,16 @@
 
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
-import { X } from "lucide-react";
+import { Sparkles, X } from "lucide-react";
 import { Input, Textarea } from "@/components/ui/input";
 import { Select } from "@/components/ui/Select";
+import { useToast } from "@/components/ui/Toast";
 import {
   ProjectMemberPicker,
   type SelectedProjectMember,
 } from "@/components/projects/ProjectMemberPicker";
+import { apiFetch } from "@/lib/api/client";
+import { cn } from "@/lib/cn";
 import {
   PROJECT_STATUS_OPTIONS,
   type Project,
@@ -37,6 +40,22 @@ type ProjectModalProps = {
   submitting?: boolean;
 };
 
+type AiProjectDescriptionResponse = {
+  description: string;
+};
+
+const aiFilledFieldClass =
+  "border-accent/60 bg-accent/10 ring-1 ring-accent/25 shadow-[0_0_0_1px_rgba(197,96,16,0.08)]";
+
+function AiDraftBadge({ visible }: { visible: boolean }) {
+  if (!visible) return null;
+  return (
+    <span className="rounded-full border border-accent/25 bg-accent/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-accent">
+      AI draft
+    </span>
+  );
+}
+
 function ProjectForm({
   mode,
   project,
@@ -50,6 +69,7 @@ function ProjectForm({
   onSubmit: (input: ProjectFormInput) => void | Promise<void>;
   submitting?: boolean;
 }) {
+  const { toast } = useToast();
   const [title, setTitle] = useState(project?.title ?? "");
   const [description, setDescription] = useState(project?.description ?? "");
   const [status, setStatus] = useState<ProjectStatus>(project?.status ?? "Active");
@@ -57,8 +77,53 @@ function ProjectForm({
     project?.contributorIds ?? [],
   );
   const [selectedMembers, setSelectedMembers] = useState<SelectedProjectMember[]>([]);
+  const [isGeneratingDescription, setIsGeneratingDescription] = useState(false);
+  const [isAiDescription, setIsAiDescription] = useState(false);
 
   const isEdit = mode === "edit";
+
+  const handleAiDescription = async () => {
+    const trimmedTitle = title.trim();
+    if (!trimmedTitle || isGeneratingDescription) {
+      if (!trimmedTitle) {
+        toast({
+          variant: "warning",
+          title: "Add a project name first",
+          message: "The AI needs a project name before it can write a description.",
+        });
+      }
+      return;
+    }
+
+    setIsGeneratingDescription(true);
+    try {
+      const suggestion = await apiFetch<AiProjectDescriptionResponse>(
+        "/api/projects/ai-description",
+        {
+          method: "POST",
+          body: JSON.stringify({ title: trimmedTitle }),
+        },
+      );
+      setDescription(suggestion.description ?? "");
+      setIsAiDescription(true);
+      toast({
+        variant: "success",
+        title: "Description generated",
+        message: "Review the AI suggestion before saving the project.",
+      });
+    } catch (error) {
+      toast({
+        variant: "error",
+        title: "AI description failed",
+        message:
+          error instanceof Error
+            ? error.message
+            : "Could not generate a project description. Please try again.",
+      });
+    } finally {
+      setIsGeneratingDescription(false);
+    }
+  };
 
   return (
     <div className="relative overflow-visible rounded-2xl border border-glass bg-sidebar px-6 py-4 shadow-2xl shadow-black/40 backdrop-blur-2xl">
@@ -125,22 +190,59 @@ function ProjectForm({
             required
             placeholder="e.g. Elegance Hub Redesign"
           />
+          <button
+            type="button"
+            onClick={handleAiDescription}
+            disabled={isGeneratingDescription || !title.trim()}
+            aria-label="Generate project description with AI"
+            className="mt-2 flex w-full items-center justify-between gap-3 rounded-xl border border-glass bg-glass-button/60 px-3 py-2 text-left transition hover:border-accent/60 hover:bg-accent/10 disabled:cursor-not-allowed disabled:opacity-45"
+          >
+            <span className="flex min-w-0 items-center gap-2.5">
+              <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-accent text-white shadow-sm shadow-accent/20">
+                <Sparkles
+                  className={cn(
+                    "size-4",
+                    isGeneratingDescription && "animate-pulse",
+                  )}
+                />
+              </span>
+              <span className="min-w-0">
+                <span className="block text-xs font-semibold text-primary">
+                  {isGeneratingDescription
+                    ? "Writing project description"
+                    : "Generate with AI"}
+                </span>
+                <span className="block truncate text-[11px] text-primary/55">
+                  Create a concise description from the project name.
+                </span>
+              </span>
+            </span>
+            <span className="shrink-0 rounded-full border border-accent/25 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-accent">
+              AI
+            </span>
+          </button>
         </div>
 
         <div>
-          <label
-            htmlFor="project-description"
-            className="mb-2 block text-xs font-semibold uppercase tracking-wider text-primary/75"
-          >
-            Description
-          </label>
+          <div className="mb-2 flex items-center justify-between gap-3">
+            <label
+              htmlFor="project-description"
+              className="block text-xs font-semibold uppercase tracking-wider text-primary/75"
+            >
+              Description
+            </label>
+            <AiDraftBadge visible={isAiDescription} />
+          </div>
           <Textarea
             id="project-description"
             value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            rows={3}
+            onChange={(e) => {
+              setDescription(e.target.value);
+              setIsAiDescription(false);
+            }}
+            rows={4}
             placeholder="Briefly describe the goals of this project..."
-            className="resize-none"
+            className={cn("resize-none transition", isAiDescription && aiFilledFieldClass)}
           />
         </div>
 
