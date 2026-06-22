@@ -1,31 +1,37 @@
 import {
+  BadRequestException,
   Injectable,
   InternalServerErrorException,
   Logger,
 } from '@nestjs/common';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai';
 import { AiProjectDescriptionDto } from './dto/ai-project-description.dto';
 import { AiTaskSuggestionDto } from './dto/ai-task-suggestion.dto';
 
 const TASK_SYSTEM_INSTRUCTION = `
 You are an expert project manager inside a task-management product.
-Analyze the incoming task title and respond only with a JSON object matching this TypeScript shape:
-{
-  "description": string,
-  "subTasks": string[],
-  "priority": "LOW" | "MEDIUM" | "HIGH",
-  "suggestedDaysUntilDue": number,
-  "dueDate": string
-}
-
-Rules:
+Generate concise, practical task metadata from the provided task title.
 - description must be exactly 2 concise, high-quality sentences.
 - subTasks must contain 3 or 4 clear, sequential, actionable steps.
-- priority must be one of LOW, MEDIUM, or HIGH.
 - suggestedDaysUntilDue must be an integer from 1 to 30.
-- dueDate must be a YYYY-MM-DD date string calculated from today's date plus suggestedDaysUntilDue.
-- Do not include markdown, code fences, comments, or extra keys.
 `;
+
+const TASK_RESPONSE_SCHEMA = {
+  type: SchemaType.OBJECT,
+  properties: {
+    description: { type: SchemaType.STRING },
+    subTasks: {
+      type: SchemaType.ARRAY,
+      items: { type: SchemaType.STRING },
+    },
+    priority: {
+      type: SchemaType.STRING,
+      enum: ['LOW', 'MEDIUM', 'HIGH'],
+    },
+    suggestedDaysUntilDue: { type: SchemaType.INTEGER },
+  },
+  required: ['description', 'subTasks', 'priority', 'suggestedDaysUntilDue'],
+};
 
 const PROJECT_SYSTEM_INSTRUCTION = `
 You are an expert product/project manager inside a task-management product.
@@ -71,10 +77,16 @@ export class AiService {
   }
 
   async generateTaskSuggestion(title: string): Promise<AiTaskSuggestionDto> {
+    const trimmedTitle = title.trim();
+    if (!trimmedTitle) {
+      throw new BadRequestException('Title is required');
+    }
+
     try {
       const parsed = await this.generateJson(
         TASK_SYSTEM_INSTRUCTION,
-        `Today is ${this.todayDateString()}. Generate a task suggestion for this title: "${title.trim()}"`,
+        `You are an expert project manager. Generate metadata suggestions for a task titled: "${trimmedTitle}".`,
+        TASK_RESPONSE_SCHEMA,
       );
 
       return this.validateSuggestion(parsed);
@@ -90,7 +102,11 @@ export class AiService {
     }
   }
 
-  private async generateJson(systemInstruction: string, prompt: string) {
+  private async generateJson(
+    systemInstruction: string,
+    prompt: string,
+    responseSchema?: any,
+  ) {
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
       throw new InternalServerErrorException('Gemini API key is not configured');
@@ -102,6 +118,7 @@ export class AiService {
       systemInstruction,
       generationConfig: {
         responseMimeType: 'application/json',
+        ...(responseSchema ? { responseSchema } : {}),
         temperature: 0.4,
       },
     });
@@ -124,22 +141,28 @@ export class AiService {
       typeof value.description !== 'string' ||
       !Array.isArray(value.subTasks) ||
       !['LOW', 'MEDIUM', 'HIGH'].includes(value.priority) ||
-      !Number.isInteger(value.suggestedDaysUntilDue) ||
-      typeof value.dueDate !== 'string'
+      !Number.isInteger(value.suggestedDaysUntilDue)
     ) {
       throw new Error('Gemini returned an invalid task suggestion shape');
     }
+
+    const suggestedDaysUntilDue = Math.min(
+      30,
+      Math.max(1, value.suggestedDaysUntilDue),
+    );
 
     return {
       description: value.description,
       subTasks: value.subTasks.map(String).slice(0, 4),
       priority: value.priority,
-      suggestedDaysUntilDue: value.suggestedDaysUntilDue,
-      dueDate: value.dueDate,
+      suggestedDaysUntilDue,
+      dueDate: this.dateFromToday(suggestedDaysUntilDue),
     };
   }
 
-  private todayDateString() {
-    return new Date().toISOString().split('T')[0];
+  private dateFromToday(daysUntilDue: number) {
+    const dueDate = new Date();
+    dueDate.setDate(dueDate.getDate() + daysUntilDue);
+    return dueDate.toISOString().split('T')[0];
   }
 }

@@ -1,4 +1,11 @@
-import { Body, Controller, Post, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Post,
+  UseGuards,
+  UsePipes,
+  ValidationPipe,
+} from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiOperation,
@@ -7,10 +14,10 @@ import {
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { AiService } from './ai.service';
+import { AiSuggestDto } from './dto/ai-suggest.dto';
 import { AiProjectDescriptionDto } from './dto/ai-project-description.dto';
 import { AiTaskSuggestionDto } from './dto/ai-task-suggestion.dto';
 import { GenerateProjectDescriptionDto } from './dto/generate-project-description.dto';
-import { GenerateTaskSuggestionDto } from './dto/generate-task-suggestion.dto';
 
 @ApiTags('AI')
 @ApiBearerAuth('access-token')
@@ -47,7 +54,8 @@ export class AiController {
     type: AiTaskSuggestionDto,
   })
   @ApiResponse({ status: 401, description: 'Missing or invalid Bearer token' })
-  generateTaskSuggestion(@Body() dto: GenerateTaskSuggestionDto) {
+  @UsePipes(new ValidationPipe({ transform: true }))
+  generateTaskSuggestion(@Body() dto: AiSuggestDto) {
     return this.aiService.generateTaskSuggestion(dto.title);
   }
 }
