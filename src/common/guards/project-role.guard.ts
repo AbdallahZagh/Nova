@@ -91,6 +91,12 @@ export class ProjectRoleGuard implements CanActivate {
       });
       if (taskComment) return taskComment.task.projectId;
 
+      const whiteboard = await (this.prisma as any).whiteboard.findUnique({
+        where: { id: params.id },
+        select: { projectId: true },
+      });
+      if (whiteboard?.projectId) return whiteboard.projectId;
+
       throw new NotFoundException('Project resource not found');
     }
 

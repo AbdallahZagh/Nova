@@ -15,11 +15,14 @@ import { TaskCommentsModule } from './task-comments/task-comments.module';
 import { TasksModule } from './tasks/tasks.module';
 import { TimelineModule } from './timeline/timeline.module';
 import { UsersModule } from './users/users.module';
+import { WhiteboardsModule } from './whiteboards/whiteboards.module';
+import { StorageModule } from './storage/storage.module';
 
 @Module({
   imports: [
     PrismaModule,
     ScheduleModule.forRoot(),
+    StorageModule,
     AiModule,
     NotificationsModule,
     AuthModule,
@@ -32,6 +35,7 @@ import { UsersModule } from './users/users.module';
     SearchModule,
     TimelineModule,
     DashboardModule,
+    WhiteboardsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

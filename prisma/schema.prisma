@@ -51,6 +51,7 @@ model User {
   notifications      Notification[]
   deviceTokens       UserDeviceToken[]
   otps               Otp[]
+  whiteboards        Whiteboard[]
 
   @@map("users")
 }
@@ -73,6 +74,7 @@ model Project {
   tasks       Task[]
   members     ProjectMember[]
   suggestions ProjectSuggestion[]
+  whiteboards Whiteboard[]
 
   @@map("projects")
 }
@@ -272,4 +274,43 @@ model Otp {
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("otps")
+}
+
+// ─────────────────────────────────────────────
+// Whiteboard
+// ─────────────────────────────────────────────
+
+model Whiteboard {
+  id           String   @id @default(uuid())
+  title        String?
+  documentJson Json
+  version      Int      @default(1)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  projectId String?
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  createdById String
+  createdBy   User   @relation(fields: [createdById], references: [id], onDelete: Cascade)
+
+  snapshot WhiteboardSnapshot?
+
+  @@index([projectId])
+  @@index([createdById])
+  @@map("whiteboards")
+}
+
+model WhiteboardSnapshot {
+  id           String     @id @default(uuid())
+  whiteboardId String     @unique
+  whiteboard   Whiteboard @relation(fields: [whiteboardId], references: [id], onDelete: Cascade)
+  imageUrl     String
+  storagePath  String
+  width        Int
+  height       Int
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@map("whiteboard_snapshots")
 }
