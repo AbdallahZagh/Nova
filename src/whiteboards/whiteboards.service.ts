@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   Injectable,
@@ -7,9 +8,11 @@ import {
 import { ProjectRole } from '../common/decorators/require-project-role.decorator';
 import { PrismaService } from '../prisma/prisma.service';
 import { StorageService } from '../storage/storage.service';
+import { ApplyWhiteboardOpsDto } from './dto/apply-ops.dto';
 import { CreateWhiteboardDto } from './dto/create-whiteboard.dto';
 import { UpdateWhiteboardDto } from './dto/update-whiteboard.dto';
 import {
+  applyWhiteboardOps,
   emptyWhiteboardDocument,
   validateWhiteboardDocument,
 } from './validate-document';
@@ -166,6 +169,44 @@ export class WhiteboardsService {
       data: {
         documentJson: documentJson as object,
         version: { increment: 1 },
+        ...(dto.title !== undefined ? { title: dto.title } : {}),
+      },
+      include: { snapshot: true },
+    });
+
+    return this.formatWhiteboard(updated);
+  }
+
+  async applyOps(userId: string, id: string, dto: ApplyWhiteboardOpsDto) {
+    const row = await this.prisma.whiteboard.findUnique({ where: { id } });
+    if (!row) throw new NotFoundException('Whiteboard not found');
+
+    await this.ensureWhiteboardAccess(userId, row);
+
+    const hasDocumentOps =
+      (dto.addedStrokes?.length ?? 0) > 0 ||
+      (dto.removedStrokeIds?.length ?? 0) > 0 ||
+      (dto.addedRegions?.length ?? 0) > 0 ||
+      (dto.removedRegionIds?.length ?? 0) > 0 ||
+      dto.canvas != null;
+
+    if (!hasDocumentOps && dto.title === undefined) {
+      throw new BadRequestException('At least one whiteboard op is required');
+    }
+
+    const documentJson = hasDocumentOps
+      ? applyWhiteboardOps(row.documentJson, dto)
+      : undefined;
+
+    const updated = await this.prisma.whiteboard.update({
+      where: { id },
+      data: {
+        ...(documentJson
+          ? {
+              documentJson: documentJson as object,
+              version: { increment: 1 },
+            }
+          : {}),
         ...(dto.title !== undefined ? { title: dto.title } : {}),
       },
       include: { snapshot: true },

@@ -12,18 +12,29 @@ const PrismaBase = PrismaClient as unknown as {
   prototype: PrismaClient;
 };
 
+function createPgAdapter() {
+  const connectionString = process.env.DATABASE_URL!;
+  const isLocalDb = /localhost|127\.0\.0\.1/i.test(connectionString);
+  const needsSsl =
+    !isLocalDb &&
+    (connectionString.includes('supabase.com') ||
+      /sslmode=(require|verify-ca|verify-full)/i.test(connectionString) ||
+      !/sslmode=disable/i.test(connectionString));
+
+  if (needsSsl) {
+    process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+  }
+
+  return new PrismaPg({
+    connectionString,
+    ...(needsSsl ? { ssl: { rejectUnauthorized: false } } : {}),
+  });
+}
+
 @Injectable()
 export class PrismaService extends PrismaBase implements OnModuleInit {
   constructor() {
-    if (process.env.DATABASE_URL?.includes('supabase.com')) {
-      process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
-    }
-
-    const adapter = new PrismaPg({
-      connectionString: process.env.DATABASE_URL!,
-      ssl: { rejectUnauthorized: false },
-    });
-    super({ adapter });
+    super({ adapter: createPgAdapter() });
   }
 
   async onModuleInit() {

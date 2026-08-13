@@ -29,6 +29,7 @@ import {
   RequireProjectRole,
 } from '../common/decorators/require-project-role.decorator';
 import { ProjectRoleGuard } from '../common/guards/project-role.guard';
+import { ApplyWhiteboardOpsDto } from './dto/apply-ops.dto';
 import { CreateWhiteboardDto } from './dto/create-whiteboard.dto';
 import { UpdateWhiteboardDto } from './dto/update-whiteboard.dto';
 import { UploadSnapshotMetaDto } from './dto/upload-snapshot.dto';
@@ -86,6 +87,19 @@ export class WhiteboardsController {
     @Body() dto: UpdateWhiteboardDto,
   ) {
     return this.whiteboardsService.update(userId, id, dto);
+  }
+
+  @Post('whiteboards/:id/ops')
+  @ApiOperation({
+    summary:
+      'Merge stroke/region ops by id (collab-safe; does not replace the document)',
+  })
+  applyOps(
+    @CurrentUser('id') userId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: ApplyWhiteboardOpsDto,
+  ) {
+    return this.whiteboardsService.applyOps(userId, id, dto);
   }
 
   @Delete('whiteboards/:id')

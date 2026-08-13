@@ -191,3 +191,73 @@ export function emptyWhiteboardDocument(): WhiteboardDocumentContent {
     regions: [],
   };
 }
+
+export type WhiteboardOps = {
+  addedStrokes?: unknown[];
+  removedStrokeIds?: string[];
+  addedRegions?: unknown[];
+  removedRegionIds?: string[];
+  canvas?: { width: number; height: number };
+};
+
+export function applyWhiteboardOps(
+  current: unknown,
+  ops: WhiteboardOps,
+): WhiteboardDocumentContent {
+  const hasOps =
+    (ops.addedStrokes?.length ?? 0) > 0 ||
+    (ops.removedStrokeIds?.length ?? 0) > 0 ||
+    (ops.addedRegions?.length ?? 0) > 0 ||
+    (ops.removedRegionIds?.length ?? 0) > 0 ||
+    ops.canvas != null;
+
+  if (!hasOps) {
+    throw new BadRequestException('At least one whiteboard op is required');
+  }
+
+  const base =
+    current && typeof current === 'object'
+      ? validateWhiteboardDocument(current)
+      : emptyWhiteboardDocument();
+
+  const removedStrokeIds = new Set(ops.removedStrokeIds ?? []);
+  const strokeMap = new Map(
+    base.strokes
+      .filter((stroke) => !removedStrokeIds.has(stroke.id))
+      .map((stroke) => [stroke.id, stroke]),
+  );
+  (ops.addedStrokes ?? []).forEach((raw, index) => {
+    const stroke = parseStroke(raw, index);
+    if (removedStrokeIds.has(stroke.id)) return;
+    strokeMap.set(stroke.id, stroke);
+  });
+
+  const removedRegionIds = new Set(ops.removedRegionIds ?? []);
+  const regionMap = new Map(
+    base.regions
+      .filter((region) => !removedRegionIds.has(region.id))
+      .map((region) => [region.id, region]),
+  );
+  (ops.addedRegions ?? []).forEach((raw, index) => {
+    const region = parseRegion(raw, index);
+    if (removedRegionIds.has(region.id)) return;
+    regionMap.set(region.id, region);
+  });
+
+  let canvas = base.canvas;
+  if (ops.canvas) {
+    if (
+      typeof ops.canvas.width !== 'number' ||
+      typeof ops.canvas.height !== 'number'
+    ) {
+      throw new BadRequestException('canvas.width and canvas.height are required');
+    }
+    canvas = { width: ops.canvas.width, height: ops.canvas.height };
+  }
+
+  return {
+    canvas,
+    strokes: [...strokeMap.values()],
+    regions: [...regionMap.values()],
+  };
+}

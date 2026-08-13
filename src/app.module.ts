@@ -17,10 +17,12 @@ import { TimelineModule } from './timeline/timeline.module';
 import { UsersModule } from './users/users.module';
 import { WhiteboardsModule } from './whiteboards/whiteboards.module';
 import { StorageModule } from './storage/storage.module';
+import { MailModule } from './mail/mail.module';
 
 @Module({
   imports: [
     PrismaModule,
+    MailModule,
     ScheduleModule.forRoot(),
     StorageModule,
     AiModule,
