@@ -148,7 +148,8 @@ export class WhiteboardsService {
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString(),
       myRole:
-        row.members.find((member) => member.userId === userId)?.role ?? null,
+        row.members.find((member) => member.userId === userId)?.role ??
+        (row.createdById === userId ? WhiteboardRole.ADMIN : null),
       members: row.members.map((member) => this.formatMember(member)),
       pages: row.pages.map((page) => this.formatPage(page, includeDocuments)),
       snapshot: cover ? this.formatSnapshot(cover) : null,
@@ -188,10 +189,21 @@ export class WhiteboardsService {
 
   private async ensureWhiteboardAccess(userId: string, board: BoardRow) {
     const member = this.membership(board, userId);
-    if (!member) {
-      throw new ForbiddenException('You do not have access to this whiteboard');
+    if (member) return member;
+    if (board.createdById === userId) {
+      return {
+        userId,
+        role: WhiteboardRole.ADMIN,
+        user: {
+          id: userId,
+          fullName: "",
+          email: "",
+          avatarUrl: null,
+          roleTitle: null,
+        },
+      };
     }
-    return member;
+    throw new ForbiddenException('You do not have access to this whiteboard');
   }
 
   private ensureCanDraw(role: WhiteboardRole) {
@@ -264,7 +276,9 @@ export class WhiteboardsService {
 
   async findMine(userId: string) {
     const rows = await this.prisma.whiteboard.findMany({
-      where: { members: { some: { userId } } },
+      where: {
+        OR: [{ createdById: userId }, { members: { some: { userId } } }],
+      },
       orderBy: { updatedAt: 'desc' },
       include: BOARD_INCLUDE,
     });
