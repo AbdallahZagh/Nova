@@ -216,12 +216,17 @@ export class WhiteboardsService {
   }
 
   async remove(userId: string, id: string) {
-    const row = await this.prisma.whiteboard.findUnique({ where: { id } });
+    const row = await this.prisma.whiteboard.findUnique({
+      where: { id },
+      include: { snapshot: true },
+    });
     if (!row) throw new NotFoundException('Whiteboard not found');
 
     await this.ensureWhiteboardAccess(userId, row);
 
-    await this.storage.deleteSnapshot(id).catch(() => undefined);
+    await this.storage
+      .deleteSnapshot(id, row.snapshot?.storagePath)
+      .catch(() => undefined);
 
     await this.prisma.whiteboard.delete({ where: { id } });
 
@@ -240,9 +245,15 @@ export class WhiteboardsService {
 
     await this.ensureWhiteboardAccess(userId, row);
 
+    const existing = await this.prisma.whiteboardSnapshot.findUnique({
+      where: { whiteboardId: id },
+    });
+
     const { storagePath, imageUrl } = await this.storage.uploadSnapshot(
       id,
       buffer,
+      'image/png',
+      existing?.storagePath,
     );
 
     const snapshot = await this.prisma.whiteboardSnapshot.upsert({

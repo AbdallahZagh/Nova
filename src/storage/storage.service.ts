@@ -33,6 +33,7 @@ export class StorageService {
     whiteboardId: string,
     buffer: Buffer,
     mimeType = 'image/png',
+    previousPath?: string | null,
   ): Promise<{ storagePath: string; imageUrl: string }> {
     if (!this.client) {
       throw new InternalServerErrorException(
@@ -40,14 +41,14 @@ export class StorageService {
       );
     }
 
-    const storagePath = this.snapshotPath(whiteboardId);
+    const storagePath = `snapshot_${whiteboardId}_${Date.now()}.png`;
 
     const { error } = await this.client.storage
       .from(this.bucket)
       .upload(storagePath, buffer, {
-        upsert: true,
+        upsert: false,
         contentType: mimeType,
-        cacheControl: '3600',
+        cacheControl: '0',
       });
 
     if (error) {
@@ -56,17 +57,28 @@ export class StorageService {
       );
     }
 
+    const stale = new Set<string>([`snapshot_${whiteboardId}.png`]);
+    if (previousPath) stale.add(previousPath);
+    await this.client.storage.from(this.bucket).remove([...stale]);
+
     const { data } = this.client.storage
       .from(this.bucket)
       .getPublicUrl(storagePath);
 
-    return { storagePath, imageUrl: data.publicUrl };
+    return {
+      storagePath,
+      imageUrl: `${data.publicUrl}?v=${Date.now()}`,
+    };
   }
 
-  async deleteSnapshot(whiteboardId: string): Promise<void> {
+  async deleteSnapshot(
+    whiteboardId: string,
+    storagePath?: string | null,
+  ): Promise<void> {
     if (!this.client) return;
 
-    const storagePath = this.snapshotPath(whiteboardId);
-    await this.client.storage.from(this.bucket).remove([storagePath]);
+    const stale = new Set<string>([this.snapshotPath(whiteboardId)]);
+    if (storagePath) stale.add(storagePath);
+    await this.client.storage.from(this.bucket).remove([...stale]);
   }
 }
