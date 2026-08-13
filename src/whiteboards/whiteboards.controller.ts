@@ -29,11 +29,18 @@ import {
   RequireProjectRole,
 } from '../common/decorators/require-project-role.decorator';
 import { ProjectRoleGuard } from '../common/guards/project-role.guard';
+import { AddWhiteboardMembersDto } from './dto/add-whiteboard-members.dto';
 import { ApplyWhiteboardOpsDto } from './dto/apply-ops.dto';
 import { CreateWhiteboardDto } from './dto/create-whiteboard.dto';
 import { UpdateWhiteboardDto } from './dto/update-whiteboard.dto';
+import { UpdateWhiteboardMemberDto } from './dto/update-whiteboard-member.dto';
 import { UploadSnapshotMetaDto } from './dto/upload-snapshot.dto';
 import { WhiteboardsService } from './whiteboards.service';
+
+const snapshotUpload = FileInterceptor('file', {
+  storage: memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+});
 
 @ApiTags('Whiteboards')
 @ApiBearerAuth('access-token')
@@ -59,7 +66,12 @@ export class WhiteboardsController {
 
   @Get('projects/:projectId/whiteboards')
   @UseGuards(ProjectRoleGuard)
-  @RequireProjectRole(ProjectRole.OWNER, ProjectRole.ADMIN, ProjectRole.MEMBER)
+  @RequireProjectRole(
+    ProjectRole.OWNER,
+    ProjectRole.ADMIN,
+    ProjectRole.MEMBER,
+    ProjectRole.VIEWER,
+  )
   @ApiOperation({ summary: 'List whiteboards for a project' })
   findByProject(
     @CurrentUser('id') userId: string,
@@ -78,9 +90,7 @@ export class WhiteboardsController {
   }
 
   @Patch('whiteboards/:id')
-  @ApiOperation({
-    summary: 'Save whiteboard strokes/regions (raw points only, no snapshot)',
-  })
+  @ApiOperation({ summary: 'Rename a whiteboard' })
   update(
     @CurrentUser('id') userId: string,
     @Param('id', ParseUUIDPipe) id: string,
@@ -91,31 +101,48 @@ export class WhiteboardsController {
 
   @Post('whiteboards/:id/ops')
   @ApiOperation({
-    summary:
-      'Merge stroke/region ops by id (collab-safe; does not replace the document)',
+    summary: 'Rename or apply ops to the first page (compat)',
   })
   applyOps(
     @CurrentUser('id') userId: string,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: ApplyWhiteboardOpsDto,
   ) {
-    return this.whiteboardsService.applyOps(userId, id, dto);
+    return this.whiteboardsService.applyBoardOps(userId, id, dto);
   }
 
-  @Delete('whiteboards/:id')
-  @ApiOperation({ summary: 'Delete a whiteboard' })
-  remove(
+  @Post('whiteboards/:id/pages')
+  @ApiOperation({ summary: 'Add a blank page' })
+  addPage(
     @CurrentUser('id') userId: string,
     @Param('id', ParseUUIDPipe) id: string,
   ) {
-    return this.whiteboardsService.remove(userId, id);
+    return this.whiteboardsService.addPage(userId, id);
   }
 
-  @Put('whiteboards/:id/snapshots')
-  @ApiOperation({
-    summary:
-      'Upsert PNG snapshot (overwrites snapshot_{id}.png — not called on debounced PATCH)',
-  })
+  @Delete('whiteboards/:id/pages/:pageId')
+  @ApiOperation({ summary: 'Delete a page' })
+  removePage(
+    @CurrentUser('id') userId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('pageId', ParseUUIDPipe) pageId: string,
+  ) {
+    return this.whiteboardsService.removePage(userId, id, pageId);
+  }
+
+  @Post('whiteboards/:id/pages/:pageId/ops')
+  @ApiOperation({ summary: 'Merge stroke/region ops for a page' })
+  applyPageOps(
+    @CurrentUser('id') userId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('pageId', ParseUUIDPipe) pageId: string,
+    @Body() dto: ApplyWhiteboardOpsDto,
+  ) {
+    return this.whiteboardsService.applyPageOps(userId, id, pageId, dto);
+  }
+
+  @Put('whiteboards/:id/pages/:pageId/snapshots')
+  @ApiOperation({ summary: 'Upsert PNG snapshot for a page' })
   @ApiConsumes('multipart/form-data')
   @ApiBody({
     schema: {
@@ -128,15 +155,11 @@ export class WhiteboardsController {
       required: ['file', 'width', 'height'],
     },
   })
-  @UseInterceptors(
-    FileInterceptor('file', {
-      storage: memoryStorage(),
-      limits: { fileSize: 10 * 1024 * 1024 },
-    }),
-  )
-  upsertSnapshot(
+  @UseInterceptors(snapshotUpload)
+  upsertPageSnapshot(
     @CurrentUser('id') userId: string,
     @Param('id', ParseUUIDPipe) id: string,
+    @Param('pageId', ParseUUIDPipe) pageId: string,
     @UploadedFile() file: Express.Multer.File,
     @Body() meta: UploadSnapshotMetaDto,
   ) {
@@ -144,12 +167,53 @@ export class WhiteboardsController {
       throw new BadRequestException('Snapshot file is required');
     }
 
-    return this.whiteboardsService.upsertSnapshot(
+    return this.whiteboardsService.upsertPageSnapshot(
       userId,
       id,
+      pageId,
       file.buffer,
       meta.width,
       meta.height,
     );
+  }
+
+  @Post('whiteboards/:id/members')
+  @ApiOperation({ summary: 'Add collaborators to a whiteboard' })
+  addMembers(
+    @CurrentUser('id') userId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: AddWhiteboardMembersDto,
+  ) {
+    return this.whiteboardsService.addMembers(userId, id, dto);
+  }
+
+  @Patch('whiteboards/:id/members/:userId')
+  @ApiOperation({ summary: 'Update a collaborator role' })
+  updateMember(
+    @CurrentUser('id') actorId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('userId', ParseUUIDPipe) userId: string,
+    @Body() dto: UpdateWhiteboardMemberDto,
+  ) {
+    return this.whiteboardsService.updateMember(actorId, id, userId, dto);
+  }
+
+  @Delete('whiteboards/:id/members/:userId')
+  @ApiOperation({ summary: 'Remove a collaborator' })
+  removeMember(
+    @CurrentUser('id') actorId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('userId', ParseUUIDPipe) userId: string,
+  ) {
+    return this.whiteboardsService.removeMember(actorId, id, userId);
+  }
+
+  @Delete('whiteboards/:id')
+  @ApiOperation({ summary: 'Delete a whiteboard' })
+  remove(
+    @CurrentUser('id') userId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.whiteboardsService.remove(userId, id);
   }
 }

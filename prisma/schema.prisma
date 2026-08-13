@@ -48,10 +48,11 @@ model User {
   taskCommentReplies TaskComment[]       @relation("TaskCommentReplier")
   closedTaskComments TaskComment[]       @relation("TaskCommentCloser")
   projectSuggestions ProjectSuggestion[]
-  notifications      Notification[]
-  deviceTokens       UserDeviceToken[]
-  otps               Otp[]
-  whiteboards        Whiteboard[]
+  notifications          Notification[]
+  deviceTokens           UserDeviceToken[]
+  otps                   Otp[]
+  whiteboards            Whiteboard[]
+  whiteboardMemberships  WhiteboardMember[]
 
   @@map("users")
 }
@@ -280,13 +281,17 @@ model Otp {
 // Whiteboard
 // ─────────────────────────────────────────────
 
+enum WhiteboardRole {
+  ADMIN
+  MEMBER
+  VIEWER
+}
+
 model Whiteboard {
-  id           String   @id @default(uuid())
-  title        String?
-  documentJson Json
-  version      Int      @default(1)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id        String   @id @default(uuid())
+  title     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   projectId String?
   project   Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
@@ -294,23 +299,53 @@ model Whiteboard {
   createdById String
   createdBy   User   @relation(fields: [createdById], references: [id], onDelete: Cascade)
 
-  snapshot WhiteboardSnapshot?
+  pages   WhiteboardPage[]
+  members WhiteboardMember[]
 
   @@index([projectId])
   @@index([createdById])
   @@map("whiteboards")
 }
 
-model WhiteboardSnapshot {
-  id           String     @id @default(uuid())
-  whiteboardId String     @unique
-  whiteboard   Whiteboard @relation(fields: [whiteboardId], references: [id], onDelete: Cascade)
-  imageUrl     String
-  storagePath  String
-  width        Int
-  height       Int
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
+model WhiteboardPage {
+  id           String   @id @default(uuid())
+  index        Int      @default(0)
+  documentJson Json
+  version      Int      @default(1)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
-  @@map("whiteboard_snapshots")
+  whiteboardId String
+  whiteboard   Whiteboard @relation(fields: [whiteboardId], references: [id], onDelete: Cascade)
+
+  snapshot WhiteboardPageSnapshot?
+
+  @@index([whiteboardId])
+  @@map("whiteboard_pages")
+}
+
+model WhiteboardPageSnapshot {
+  id          String         @id @default(uuid())
+  pageId      String         @unique
+  page        WhiteboardPage @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  imageUrl    String
+  storagePath String
+  width       Int
+  height      Int
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  @@map("whiteboard_page_snapshots")
+}
+
+model WhiteboardMember {
+  userId       String
+  whiteboardId String
+  role         WhiteboardRole @default(MEMBER)
+
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  whiteboard Whiteboard @relation(fields: [whiteboardId], references: [id], onDelete: Cascade)
+
+  @@id([userId, whiteboardId])
+  @@map("whiteboard_members")
 }

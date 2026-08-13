@@ -25,12 +25,15 @@ export class StorageService {
     return this.client !== null;
   }
 
-  snapshotPath(whiteboardId: string): string {
-    return `snapshot_${whiteboardId}.png`;
+  snapshotPath(whiteboardId: string, pageId?: string): string {
+    return pageId
+      ? `snapshot_${whiteboardId}_${pageId}.png`
+      : `snapshot_${whiteboardId}.png`;
   }
 
   async uploadSnapshot(
     whiteboardId: string,
+    pageId: string,
     buffer: Buffer,
     mimeType = 'image/png',
     previousPath?: string | null,
@@ -41,7 +44,7 @@ export class StorageService {
       );
     }
 
-    const storagePath = `snapshot_${whiteboardId}_${Date.now()}.png`;
+    const storagePath = `snapshot_${whiteboardId}_${pageId}_${Date.now()}.png`;
 
     const { error } = await this.client.storage
       .from(this.bucket)
@@ -57,7 +60,10 @@ export class StorageService {
       );
     }
 
-    const stale = new Set<string>([`snapshot_${whiteboardId}.png`]);
+    const stale = new Set<string>([
+      this.snapshotPath(whiteboardId),
+      this.snapshotPath(whiteboardId, pageId),
+    ]);
     if (previousPath) stale.add(previousPath);
     await this.client.storage.from(this.bucket).remove([...stale]);
 
@@ -74,11 +80,18 @@ export class StorageService {
   async deleteSnapshot(
     whiteboardId: string,
     storagePath?: string | null,
+    pageId?: string,
   ): Promise<void> {
     if (!this.client) return;
 
     const stale = new Set<string>([this.snapshotPath(whiteboardId)]);
+    if (pageId) stale.add(this.snapshotPath(whiteboardId, pageId));
     if (storagePath) stale.add(storagePath);
     await this.client.storage.from(this.bucket).remove([...stale]);
+  }
+
+  async deleteSnapshots(storagePaths: string[]): Promise<void> {
+    if (!this.client || storagePaths.length === 0) return;
+    await this.client.storage.from(this.bucket).remove(storagePaths);
   }
 }
