@@ -1,11 +1,16 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Bell, CheckCheck, Loader2, RefreshCw } from "lucide-react";
 import { SideDrawer } from "@/components/ui/SideDrawer";
 import { useNotifications } from "@/components/providers/notification-context";
 import { cn } from "@/lib/cn";
 import type { AppNotification } from "@/lib/api/notifications";
+import {
+  formatNotificationType,
+  hrefFromNotification,
+} from "@/lib/notifications/links";
 
 type NotificationDrawerProps = {
   open: boolean;
@@ -97,7 +102,7 @@ function NotificationListItem({
                 typeClass(item.type),
               )}
             >
-              {item.type}
+              {formatNotificationType(item.type)}
             </span>
             <span className="text-xs text-primary/40">
               {formatNotificationTime(item.createdAt)}
@@ -124,7 +129,7 @@ function NotificationDetail({ item }: { item: AppNotification }) {
                 typeClass(item.type),
               )}
             >
-              {item.type}
+              {formatNotificationType(item.type)}
             </span>
             <span className="text-xs text-primary/40">
               {formatNotificationTime(item.createdAt)}
@@ -144,6 +149,7 @@ function NotificationDetail({ item }: { item: AppNotification }) {
 }
 
 export function NotificationDrawer({ open, onClose }: NotificationDrawerProps) {
+  const router = useRouter();
   const {
     notifications,
     unreadCount,
@@ -176,8 +182,15 @@ export function NotificationDrawer({ open, onClose }: NotificationDrawerProps) {
   }, [loadMoreNotifications, open]);
 
   const handleSelect = (item: AppNotification) => {
-    setSelectedId(item.id);
     void markNotificationRead(item.id);
+    const href = hrefFromNotification(item);
+    if (href) {
+      setSelectedId(null);
+      onClose();
+      router.push(href);
+      return;
+    }
+    setSelectedId(item.id);
   };
 
   const handleMarkAll = () => {
@@ -250,7 +263,7 @@ export function NotificationDrawer({ open, onClose }: NotificationDrawerProps) {
                 No notifications yet
               </p>
               <p className="mt-1 text-xs text-primary/45">
-                New project and task updates will show here.
+                New project, task, and whiteboard updates will show here.
               </p>
             </div>
           ) : (

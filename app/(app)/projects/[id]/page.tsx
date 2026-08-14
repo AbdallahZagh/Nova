@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { KanbanSkeleton } from "@/components/skeletons/KanbanSkeleton";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { MessageSquare, Plus } from "lucide-react";
+import { MessageSquare, PenLine, Plus } from "lucide-react";
 import { DeleteConfirmModal } from "@/components/ui/DeleteConfirmModal";
 import { SideDrawer } from "@/components/ui/SideDrawer";
 import { useToast } from "@/components/ui/Toast";
@@ -25,6 +25,7 @@ import {
   type TaskStatus,
 } from "@/lib/tasks";
 import { projectStatusLabel, type Project } from "@/lib/projects";
+import { normalizeMention } from "@/lib/mentions";
 import {
   canAssignProjectTasks,
   canEditProjectTasks,
@@ -87,10 +88,33 @@ export default function ProjectWorkspacePage() {
     return assigneeOptions.filter((option) => option.value === profile.id);
   }, [assigneeOptions, canAssignTasks, currentRole, profile]);
 
-  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const mentionUsers = useMemo(() => {
+    const byId = new Map<
+      string,
+      { id: string; username: string; fullName: string }
+    >();
+    if (project?.owner?.id && project.owner.username) {
+      byId.set(project.owner.id, {
+        id: project.owner.id,
+        username: normalizeMention(project.owner.username),
+        fullName: project.owner.fullName,
+      });
+    }
+    for (const member of project?.teamMembers ?? []) {
+      const id = member.userId ?? member.id ?? "";
+      if (!id || !member.username) continue;
+      byId.set(id, {
+        id,
+        username: normalizeMention(member.username),
+        fullName: member.name ?? member.email ?? member.initials,
+      });
+    }
+    return [...byId.values()];
+  }, [project?.owner, project?.teamMembers]);
   const [isNewTaskOpen, setIsNewTaskOpen] = useState(false);
   const [newTaskDefaultStatus, setNewTaskDefaultStatus] =
     useState<TaskStatus>("To Do");
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [deleteTaskId, setDeleteTaskId] = useState<string | null>(null);
   const [dragOverColumn, setDragOverColumn] = useState<TaskStatus | null>(null);
   const [isSuggestionsOpen, setIsSuggestionsOpen] = useState(false);
@@ -361,6 +385,14 @@ export default function ProjectWorkspacePage() {
         <div className="flex flex-wrap items-center gap-3">
           <button
             type="button"
+            onClick={() => router.push(`/whiteboard?projectId=${projectId}`)}
+            className="flex items-center gap-2 rounded-xl border border-glass bg-glass-button px-4 py-2.5 text-sm font-semibold text-primary transition hover:border-accent/40 hover:text-accent"
+          >
+            <PenLine className="size-4" />
+            Whiteboard
+          </button>
+          <button
+            type="button"
             onClick={() => setIsTeamOpen(true)}
             className="rounded-xl border border-glass bg-glass-button px-4 py-2.5 text-sm font-semibold text-primary transition hover:border-accent/40 hover:text-accent"
           >
@@ -472,6 +504,7 @@ export default function ProjectWorkspacePage() {
             saving={saving}
             readOnly={!canEditTasks}
             projectRole={currentRole}
+            mentionUsers={mentionUsers}
             canAssignTasks={canAssignTasks}
             assigneeOptions={assigneeOptions}
             canAssignSubtasks={canAssignSubtasks}
@@ -497,7 +530,7 @@ export default function ProjectWorkspacePage() {
         onClose={() => setIsSuggestionsOpen(false)}
         title="Project Suggestions"
       >
-        <ProjectSuggestionsDrawer projectId={projectId} />
+        <ProjectSuggestionsDrawer projectId={projectId} mentionUsers={mentionUsers} />
       </SideDrawer>
 
       {project && (

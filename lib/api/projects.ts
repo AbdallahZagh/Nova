@@ -13,6 +13,7 @@ export type ApiProjectOwner = {
   id: string;
   fullName: string;
   email?: string;
+  username?: string;
   avatarUrl?: string | null;
   roleTitle?: string;
 };
@@ -23,6 +24,7 @@ export type ApiProjectMember = {
   fullName?: string;
   name?: string;
   email?: string;
+  username?: string;
   initials?: string;
   avatarUrl?: string | null;
   role?: string;
@@ -32,6 +34,8 @@ export type ApiProjectMember = {
     name?: string;
     email?: string;
     avatarUrl?: string | null;
+    username?: string | null;
+    roleTitle?: string;
   };
 };
 
@@ -103,6 +107,7 @@ function mapOwner(api: ApiProjectOwner): ProjectOwner {
     id: api.id,
     fullName: api.fullName,
     email: api.email,
+    username: api.username,
     avatarUrl: api.avatarUrl,
     roleTitle: api.roleTitle,
   };
@@ -121,6 +126,7 @@ function mapMember(m: ApiProjectMember): ProjectTeamMember {
     imageUrl: m.avatarUrl ?? user?.avatarUrl ?? undefined,
     name: fullName,
     email: m.email ?? user?.email,
+    username: m.username ?? user?.username ?? undefined,
     role: normalizeMemberRole(m.role),
   };
 }
@@ -138,6 +144,7 @@ function mapTeamMembers(api: ApiProject): ProjectTeamMember[] {
         name: api.owner.fullName,
         userId: api.owner.id,
         email: api.owner.email,
+        username: api.owner.username,
         role: "OWNER",
       },
     ];

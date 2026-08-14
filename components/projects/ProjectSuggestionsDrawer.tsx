@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Loader2, MessageSquarePlus, Pencil, Trash2, X } from "lucide-react";
+import { MentionComposer } from "@/components/mentions/MentionComposer";
+import { MentionText } from "@/components/mentions/MentionText";
 import { DeleteConfirmModal } from "@/components/ui/DeleteConfirmModal";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { Select } from "@/components/ui/Select";
@@ -18,10 +20,12 @@ import {
   type ProjectSuggestion,
   type ProjectSuggestionStatus,
 } from "@/lib/api/project-suggestions";
+import type { MentionUser } from "@/lib/mentions";
 import { cn } from "@/lib/cn";
 
 type ProjectSuggestionsDrawerProps = {
   projectId: string;
+  mentionUsers?: MentionUser[];
 };
 
 const statusStyles: Record<ProjectSuggestionStatus, string> = {
@@ -40,6 +44,7 @@ function suggestionSnapshot(suggestion: ProjectSuggestion) {
 
 export function ProjectSuggestionsDrawer({
   projectId,
+  mentionUsers = [],
 }: ProjectSuggestionsDrawerProps) {
   const { toast } = useToast();
   const [suggestions, setSuggestions] = useState<ProjectSuggestion[]>([]);
@@ -191,13 +196,12 @@ export function ProjectSuggestionsDrawer({
         <label className="mb-2 block text-xs font-medium uppercase tracking-wide text-primary/60">
           New suggestion
         </label>
-        <Textarea
-          variant="minimal"
+        <MentionComposer
           value={content}
-          onChange={(e) => setContent(e.target.value)}
+          onChange={setContent}
+          users={mentionUsers}
           rows={4}
-          placeholder="Add a project suggestion..."
-          className="resize-none focus:bg-glass-button/40"
+          placeholder="Add a project suggestion. Use @ to mention someone."
         />
         <button
           type="button"
@@ -274,14 +278,13 @@ export function ProjectSuggestionsDrawer({
 
                   {isEditing ? (
                     <div className="space-y-3">
-                      <Textarea
-                        variant="minimal"
+                      <MentionComposer
                         value={draft.content}
-                        onChange={(e) =>
-                          updateDraft(suggestion.id, { content: e.target.value })
+                        onChange={(value) =>
+                          updateDraft(suggestion.id, { content: value })
                         }
+                        users={mentionUsers}
                         rows={4}
-                        className="resize-none focus:bg-glass-button/40"
                       />
                       <Select
                         value={draft.status}
@@ -318,8 +321,8 @@ export function ProjectSuggestionsDrawer({
                     </div>
                   ) : (
                     <>
-                      <p className="whitespace-pre-wrap text-sm leading-relaxed text-primary/75">
-                        {suggestion.content}
+                      <p className="text-sm leading-relaxed text-primary/75">
+                        <MentionText content={suggestion.content} />
                       </p>
                       <div className="mt-4 flex gap-2">
                         <button

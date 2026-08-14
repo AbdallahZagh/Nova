@@ -19,6 +19,7 @@ type ProjectMemberPickerProps = {
   excludeUserIds?: string[];
   placeholder?: string;
   disabled?: boolean;
+  candidates?: SearchUser[];
 };
 
 const MEMBER_ROLE_OPTIONS = [
@@ -33,6 +34,7 @@ export function ProjectMemberPicker({
   excludeUserIds = [],
   placeholder = "Search by name or email...",
   disabled = false,
+  candidates,
 }: ProjectMemberPickerProps) {
   const generatedId = useId();
   const rootRef = useRef<HTMLDivElement>(null);
@@ -64,6 +66,19 @@ export function ProjectMemberPicker({
     const trimmed = query.trim();
     if (trimmed.length < 2) return;
 
+    if (candidates) {
+      const needle = trimmed.toLowerCase();
+      setResults(
+        candidates.filter(
+          (user) =>
+            user.fullName.toLowerCase().includes(needle) ||
+            user.email.toLowerCase().includes(needle),
+        ),
+      );
+      setResultQuery(trimmed);
+      return;
+    }
+
     const timeout = window.setTimeout(() => {
       setLoading(true);
       searchUsersApi(trimmed)
@@ -79,7 +94,7 @@ export function ProjectMemberPicker({
     }, 300);
 
     return () => window.clearTimeout(timeout);
-  }, [query]);
+  }, [candidates, query]);
 
   const selectedIds = new Set(value.map((member) => member.user.id));
   const excludedIds = new Set(excludeUserIds);

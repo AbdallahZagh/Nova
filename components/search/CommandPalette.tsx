@@ -6,6 +6,7 @@ import {
   CheckSquare,
   FolderKanban,
   Loader2,
+  PenLine,
   Search,
   UserRound,
 } from "lucide-react";
@@ -14,6 +15,7 @@ import {
   type SearchProject,
   type SearchTask,
   type SearchUser,
+  type SearchWhiteboard,
 } from "@/lib/api/search";
 import { cn } from "@/lib/cn";
 
@@ -46,6 +48,14 @@ type ResultItem =
       subtitle?: string;
       href: string;
       item: SearchUser;
+    }
+  | {
+      id: string;
+      type: "whiteboard";
+      label: string;
+      subtitle?: string;
+      href: string;
+      item: SearchWhiteboard;
     };
 
 function useDebouncedValue<T>(value: T, delay = 300) {
@@ -73,6 +83,7 @@ function taskProjectId(task: SearchTask) {
 
 function flattenResults(
   projects: SearchProject[],
+  whiteboards: SearchWhiteboard[],
   tasks: SearchTask[],
   users: SearchUser[],
 ): ResultItem[] {
@@ -84,6 +95,14 @@ function flattenResults(
       subtitle: project.description ?? project.status,
       href: `/projects/${project.id}`,
       item: project,
+    })),
+    ...whiteboards.map((board) => ({
+      id: `whiteboard-${board.id}`,
+      type: "whiteboard" as const,
+      label: board.title,
+      subtitle: board.project?.name ?? "Personal whiteboard",
+      href: `/whiteboard/${board.id}`,
+      item: board,
     })),
     ...tasks.map((task) => {
       const projectId = taskProjectId(task);
@@ -109,7 +128,13 @@ function flattenResults(
 
 function ResultIcon({ type }: { type: ResultItem["type"] }) {
   const Icon =
-    type === "project" ? FolderKanban : type === "task" ? CheckSquare : UserRound;
+    type === "project"
+      ? FolderKanban
+      : type === "whiteboard"
+        ? PenLine
+        : type === "task"
+          ? CheckSquare
+          : UserRound;
 
   return (
     <span className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-glass bg-glass-button text-accent">
@@ -125,14 +150,15 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
   const [query, setQuery] = useState("");
   const debouncedQuery = useDebouncedValue(query, 300);
   const [projects, setProjects] = useState<SearchProject[]>([]);
+  const [whiteboards, setWhiteboards] = useState<SearchWhiteboard[]>([]);
   const [tasks, setTasks] = useState<SearchTask[]>([]);
   const [users, setUsers] = useState<SearchUser[]>([]);
   const [loading, setLoading] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
 
   const items = useMemo(
-    () => flattenResults(projects, tasks, users),
-    [projects, tasks, users],
+    () => flattenResults(projects, whiteboards, tasks, users),
+    [projects, whiteboards, tasks, users],
   );
   const hasQuery = debouncedQuery.trim().length > 0;
   const hasResults = items.length > 0;
@@ -174,6 +200,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
     searchApi(q, controller.signal)
       .then((results) => {
         setProjects(results.projects);
+        setWhiteboards(results.whiteboards);
         setTasks(results.tasks);
         setUsers(results.users);
         setActiveIndex(0);
@@ -181,6 +208,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
       .catch((error) => {
         if (error instanceof DOMException && error.name === "AbortError") return;
         setProjects([]);
+        setWhiteboards([]);
         setTasks([]);
         setUsers([]);
         setActiveIndex(0);
@@ -194,6 +222,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
 
   const clearResults = () => {
     setProjects([]);
+    setWhiteboards([]);
     setTasks([]);
     setUsers([]);
     setActiveIndex(0);
@@ -288,6 +317,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
   };
 
   const projectItems = items.filter((item) => item.type === "project");
+  const whiteboardItems = items.filter((item) => item.type === "whiteboard");
   const taskItems = items.filter((item) => item.type === "task");
   const userItems = items.filter((item) => item.type === "user");
 
@@ -317,7 +347,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
             aria-expanded={open && hasResults}
             aria-controls="command-palette-results"
             aria-activedescendant={activeItem?.id}
-            placeholder="Search tasks, projects, users..."
+            placeholder="Search tasks, projects, whiteboards, users..."
             className="h-full w-full bg-transparent pl-10 pr-16 text-primary outline-none placeholder:text-primary/40"
           />
         ) : (
@@ -326,7 +356,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
             onClick={() => onOpenChange(true)}
             className="flex h-full w-full items-center pl-10 pr-16 text-left text-primary/45"
           >
-            <span className="truncate">Search tasks, projects, users...</span>
+            <span className="truncate">Search tasks, projects, whiteboards, users...</span>
           </button>
         )}
         {loading ? (
@@ -359,8 +389,21 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
           ) : (
             <>
               {renderSection("Projects", projectItems, 0)}
-              {renderSection("Tasks", taskItems, projectItems.length)}
-              {renderSection("Users", userItems, projectItems.length + taskItems.length)}
+              {renderSection(
+                "Whiteboards",
+                whiteboardItems,
+                projectItems.length,
+              )}
+              {renderSection(
+                "Tasks",
+                taskItems,
+                projectItems.length + whiteboardItems.length,
+              )}
+              {renderSection(
+                "Users",
+                userItems,
+                projectItems.length + whiteboardItems.length + taskItems.length,
+              )}
             </>
           )}
         </div>

@@ -51,6 +51,14 @@ function LoginFormContent() {
 
     try {
       const response = await loginApi(email, password);
+      const accessToken = response.accessToken ?? response.access_token;
+      if (!accessToken) {
+        throw new ApiError(
+          "Login succeeded but no access token was returned.",
+          500,
+          response,
+        );
+      }
       const loginUser = response.user as typeof response.user & {
         isActive?: boolean;
         isArchived?: boolean;
@@ -73,7 +81,7 @@ function LoginFormContent() {
         );
         return;
       }
-      setAccessToken(response.accessToken);
+      setAccessToken(accessToken);
       await establishSession();
 
       toast({ variant: "success", title: "Welcome back" });

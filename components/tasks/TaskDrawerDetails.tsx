@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Check, Loader2, Plus, Trash2, X } from "lucide-react";
+import { MentionComposer } from "@/components/mentions/MentionComposer";
+import { MentionText } from "@/components/mentions/MentionText";
 import { DatePicker, formatDueDate } from "@/components/ui/Calendar";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { Input, Textarea } from "@/components/ui/input";
@@ -23,6 +25,7 @@ import {
   type TaskComment,
 } from "@/lib/api/task-comments";
 import { cn } from "@/lib/cn";
+import type { MentionUser } from "@/lib/mentions";
 import type { ProjectMemberRole } from "@/lib/projects";
 import type { SelectOption } from "@/components/ui/fieldVariants";
 import {
@@ -60,6 +63,7 @@ type TaskDrawerDetailsProps = {
   saving?: boolean;
   readOnly?: boolean;
   projectRole?: ProjectMemberRole | null;
+  mentionUsers?: MentionUser[];
   canAssignTasks?: boolean;
   assigneeOptions?: SelectOption[];
   canAssignSubtasks?: boolean;
@@ -302,6 +306,7 @@ export function TaskDrawerDetails({
   saving = false,
   readOnly = false,
   projectRole = null,
+  mentionUsers = [],
   canAssignTasks = false,
   assigneeOptions = [],
   canAssignSubtasks = false,
@@ -1041,13 +1046,11 @@ export function TaskDrawerDetails({
 
         {canAddComment && (
           <div className="mt-3 space-y-2">
-            <Textarea
-              variant="minimal"
+            <MentionComposer
               value={commentContent}
-              onChange={(e) => setCommentContent(e.target.value)}
-              rows={3}
-              placeholder="Add a task comment..."
-              className="resize-none focus:bg-glass-button/40"
+              onChange={setCommentContent}
+              users={mentionUsers}
+              placeholder="Add a task comment. Use @ to mention someone."
               disabled={commentSubmitting}
             />
             <button
@@ -1112,8 +1115,8 @@ export function TaskDrawerDetails({
                     </span>
                   </div>
 
-                  <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-primary/75">
-                    {comment.content}
+                  <p className="mt-3 text-sm leading-relaxed text-primary/75">
+                    <MentionText content={comment.content} />
                   </p>
 
                   {comment.replyContent && (
@@ -1133,8 +1136,8 @@ export function TaskDrawerDetails({
                           {comment.repliedLabel ? ` - ${comment.repliedLabel}` : ""}
                         </p>
                       </div>
-                      <p className="mt-1.5 whitespace-pre-wrap text-sm leading-relaxed text-primary/75">
-                        {comment.replyContent}
+                      <p className="mt-1.5 text-sm leading-relaxed text-primary/75">
+                        <MentionText content={comment.replyContent} />
                       </p>
                     </div>
                   )}
@@ -1155,13 +1158,11 @@ export function TaskDrawerDetails({
 
                   {isReplying && canAct ? (
                     <div className="mt-3 space-y-2">
-                      <Textarea
-                        variant="minimal"
+                      <MentionComposer
                         value={replyContent}
-                        onChange={(e) => setReplyContent(e.target.value)}
-                        rows={3}
-                        placeholder="Write a reply..."
-                        className="resize-none focus:bg-glass-button/40"
+                        onChange={setReplyContent}
+                        users={mentionUsers}
+                        placeholder="Write a reply. Use @ to mention someone."
                         disabled={isBusy}
                       />
                       <div className="flex gap-2">

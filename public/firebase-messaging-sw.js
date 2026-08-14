@@ -30,11 +30,26 @@ messaging.onBackgroundMessage((payload) => {
     badge: "/logo.png",
     tag: data.notificationId || data.id || "nova-taskflow-notification",
     data: {
-      url: data.url || data.link || "/dashboard",
+      url: urlFromPayload(data),
       notificationId: data.notificationId || data.id || null,
     },
   });
 });
+
+function urlFromPayload(data) {
+  if (data.url) return data.url;
+  const type = data.type || "";
+  if (
+    type === "WHITEBOARD_DELETED" ||
+    type === "WHITEBOARD_MEMBER_REMOVED"
+  ) {
+    return "/whiteboard";
+  }
+  if (type.indexOf("WHITEBOARD_") === 0 && data.whiteboardId) {
+    return "/whiteboard/" + data.whiteboardId;
+  }
+  return "/dashboard";
+}
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();

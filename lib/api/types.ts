@@ -48,6 +48,7 @@ export type ApiUserProject = {
 
 export type LoginResponse = {
   accessToken: string;
+  access_token?: string;
   user: ApiUser;
 };
 

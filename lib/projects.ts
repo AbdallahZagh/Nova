@@ -15,6 +15,7 @@ export type ProjectMember = {
   imageUrl?: string;
   name?: string;
   email?: string;
+  username?: string;
   role: ProjectMemberRole;
 };
 
@@ -24,6 +25,7 @@ export type ProjectOwner = {
   id: string;
   fullName: string;
   email?: string;
+  username?: string;
   avatarUrl?: string | null;
   roleTitle?: string;
 };

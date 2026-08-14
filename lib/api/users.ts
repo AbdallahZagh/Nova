@@ -29,6 +29,7 @@ export type SearchUser = {
   id: string;
   fullName: string;
   email: string;
+  username?: string;
   avatarUrl?: string | null;
   roleTitle?: string;
 };
@@ -39,6 +40,7 @@ type ApiSearchUser = {
   fullName?: string;
   name?: string;
   email: string;
+  username?: string;
   avatarUrl?: string | null;
   roleTitle?: string;
   user?: {
@@ -46,6 +48,7 @@ type ApiSearchUser = {
     fullName?: string;
     name?: string;
     email?: string;
+    username?: string;
     avatarUrl?: string | null;
     roleTitle?: string;
   };
@@ -71,6 +74,7 @@ export async function searchUsersApi(query: string) {
         user?.email ??
         item.email,
       email: user?.email ?? item.email,
+      username: item.username ?? user?.username,
       avatarUrl: user?.avatarUrl ?? item.avatarUrl,
       roleTitle: user?.roleTitle ?? item.roleTitle,
     });

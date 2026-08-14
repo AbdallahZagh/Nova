@@ -8,6 +8,7 @@ import {
   GanttChart,
   LayoutDashboard,
   LogOut,
+  PenLine,
   X,
 } from "lucide-react";
 import { clearSessionCookie } from "@/app/actions/session";
@@ -20,6 +21,7 @@ import Image from "next/image";
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/projects", label: "Projects", icon: FolderKanban },
+  { href: "/whiteboard", label: "Whiteboard", icon: PenLine },
   { href: "/timeline", label: "Timeline", icon: GanttChart },
 ] as const;
 
