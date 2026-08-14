@@ -207,7 +207,7 @@ export function useNotificationSync(user: ApiUser | null) {
         }
 
         const token = await registerForPushNotifications(modules);
-        if (!token || cancelled) return;
+        if (!token || cancelled || user.isDemo) return;
         console.log("[Nova] mobile push token:", token);
         await saveDeviceTokenApi(token);
         await setDeviceToken(token);
@@ -222,5 +222,5 @@ export function useNotificationSync(user: ApiUser | null) {
       responseSubscription?.remove();
       if (channel) void supabase.removeChannel(channel);
     };
-  }, [pushRealtimeNotification, setDeviceToken, showSnackbar, user?.id]);
+  }, [pushRealtimeNotification, setDeviceToken, showSnackbar, user?.id, user?.isDemo]);
 }

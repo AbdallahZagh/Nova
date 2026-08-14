@@ -8,12 +8,14 @@ import {
   applyWhiteboardOpsApi,
   applyWhiteboardPageOpsApi,
   canDrawOnBoard,
+  canExportBoard,
   canManageBoard,
   canSaveBoardImage,
   deleteWhiteboardPageApi,
   emptyWhiteboardDocument,
   getWhiteboardApi,
   invertHistory,
+  mergeDocuments,
   presenceColorForUser,
   presenceSessionKey,
   uploadWhiteboardPageSnapshotApi,
@@ -28,6 +30,12 @@ import {
 } from "@/api/whiteboards";
 import { SUPABASE_ANON_KEY, SUPABASE_URL } from "@/config/notifications";
 import { useAuthStore } from "@/store/useAuthStore";
+import {
+  readWhiteboardSession,
+  writeWhiteboardSession,
+  type HistoryByPage,
+  type PendingByPage,
+} from "@/whiteboard/pendingStore";
 
 export type WhiteboardPresence = {
   userId: string;
@@ -99,10 +107,6 @@ function mergePending(current: WhiteboardOps, incoming: WhiteboardOps): Whiteboa
   };
 }
 
-function docsFromPages(pages: WhiteboardPage[]) {
-  return Object.fromEntries(pages.map((page) => [page.id, page.documentJson]));
-}
-
 export function useWhiteboardSync(whiteboardId: string) {
   const user = useAuthStore((state) => state.user);
   const [board, setBoard] = useState<Whiteboard | null>(null);
@@ -125,8 +129,12 @@ export function useWhiteboardSync(whiteboardId: string) {
   const documentRef = useRef(boardDoc);
   const pageIdRef = useRef<string | null>(null);
   const pagesDocRef = useRef<Record<string, WhiteboardDocument>>({});
-  const pendingOpsRef = useRef<WhiteboardOps>({});
+  const pendingByPageRef = useRef<PendingByPage>({});
+  const undoByPageRef = useRef<HistoryByPage>({});
+  const redoByPageRef = useRef<HistoryByPage>({});
   const persistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const flushingRef = useRef(false);
+  const flushAgainRef = useRef(false);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const undoRef = useRef<HistoryEntry[]>([]);
   const redoRef = useRef<HistoryEntry[]>([]);
@@ -142,6 +150,20 @@ export function useWhiteboardSync(whiteboardId: string) {
   const canDraw = canDrawOnBoard(myRole);
   const canSaveImage = canSaveBoardImage(myRole);
   const canManage = canManageBoard(myRole);
+  const canExport = canExportBoard(myRole);
+
+  const persistPending = useCallback(() => {
+    const currentPageId = pageIdRef.current;
+    if (currentPageId) {
+      undoByPageRef.current[currentPageId] = undoRef.current;
+      redoByPageRef.current[currentPageId] = redoRef.current;
+    }
+    void writeWhiteboardSession(whiteboardId, {
+      pending: pendingByPageRef.current,
+      undo: undoByPageRef.current,
+      redo: redoByPageRef.current,
+    });
+  }, [whiteboardId]);
 
   const refreshHistoryFlags = useCallback(() => {
     setCanUndo(undoRef.current.length > 0);
@@ -150,18 +172,23 @@ export function useWhiteboardSync(whiteboardId: string) {
 
   const adoptBoard = useCallback((row: Whiteboard, keepPageId?: string | null) => {
     setBoard(row);
-    pagesDocRef.current = {
-      ...pagesDocRef.current,
-      ...docsFromPages(row.pages),
-    };
+    const nextDocs: Record<string, WhiteboardDocument> = {};
+    for (const page of row.pages) {
+      const server = page.documentJson;
+      const local = pagesDocRef.current[page.id];
+      let merged = local ? mergeDocuments(server, local) : server;
+      const pending = pendingByPageRef.current[page.id];
+      if (pending) merged = applyOpsLocally(merged, pending);
+      nextDocs[page.id] = merged;
+    }
+    pagesDocRef.current = nextDocs;
     const nextPage =
       row.pages.find((page) => page.id === keepPageId) ??
       row.pages.find((page) => page.id === pageIdRef.current) ??
       row.pages[0] ??
       null;
     if (nextPage) {
-      const doc = pagesDocRef.current[nextPage.id] ?? nextPage.documentJson;
-      pagesDocRef.current[nextPage.id] = doc;
+      const doc = nextDocs[nextPage.id] ?? nextPage.documentJson;
       setPageId(nextPage.id);
       setBoardDoc(doc);
     }
@@ -212,32 +239,69 @@ export function useWhiteboardSync(whiteboardId: string) {
   }, []);
 
   const flushOps = useCallback(async () => {
-    const currentPageId = pageIdRef.current;
-    const ops = compactOps(pendingOpsRef.current);
-    pendingOpsRef.current = {};
-    if (!ops) return;
+    if (flushingRef.current) {
+      flushAgainRef.current = true;
+      return;
+    }
+    flushingRef.current = true;
     setSaveState("saving");
     try {
-      const updated = currentPageId
-        ? await applyWhiteboardPageOpsApi(whiteboardId, currentPageId, ops)
-        : await applyWhiteboardOpsApi(whiteboardId, ops);
-      adoptBoard(updated, currentPageId);
+      do {
+        flushAgainRef.current = false;
+        const pageIds = Object.keys(pendingByPageRef.current);
+        for (const targetPageId of pageIds) {
+          const ops = compactOps(pendingByPageRef.current[targetPageId] ?? {});
+          if (!ops) {
+            delete pendingByPageRef.current[targetPageId];
+            persistPending();
+            continue;
+          }
+          // Keep unacked ops on disk until the server confirms. In-memory
+          // pending is cleared so strokes drawn during the request queue again.
+          pendingByPageRef.current[targetPageId] = {};
+          try {
+            const updated = await applyWhiteboardPageOpsApi(
+              whiteboardId,
+              targetPageId,
+              ops,
+            );
+            persistPending();
+            adoptBoard(updated, pageIdRef.current);
+          } catch {
+            pendingByPageRef.current[targetPageId] = mergePending(
+              ops,
+              pendingByPageRef.current[targetPageId] ?? {},
+            );
+            persistPending();
+            setSaveState("error");
+            return;
+          }
+        }
+      } while (
+        flushAgainRef.current ||
+        Object.values(pendingByPageRef.current).some((ops) => compactOps(ops))
+      );
       setSaveState("saved");
-    } catch {
-      pendingOpsRef.current = mergePending(ops, pendingOpsRef.current);
-      setSaveState("error");
+    } finally {
+      flushingRef.current = false;
     }
-  }, [adoptBoard, whiteboardId]);
+  }, [adoptBoard, persistPending, whiteboardId]);
 
   const queueOps = useCallback(
     (ops: WhiteboardOps) => {
-      pendingOpsRef.current = mergePending(pendingOpsRef.current, ops);
+      const targetPageId = pageIdRef.current;
+      if (!targetPageId) return;
+      pendingByPageRef.current[targetPageId] = mergePending(
+        pendingByPageRef.current[targetPageId] ?? {},
+        ops,
+      );
+      persistPending();
       if (persistTimerRef.current) clearTimeout(persistTimerRef.current);
       persistTimerRef.current = setTimeout(() => {
         void flushOps();
       }, 800);
     },
-    [flushOps],
+    [flushOps, persistPending],
   );
 
   const applyLocal = useCallback(
@@ -249,10 +313,14 @@ export function useWhiteboardSync(whiteboardId: string) {
         undoRef.current.push(history);
         redoRef.current = [];
         refreshHistoryFlags();
+        sendBroadcast("history:push", {
+          pageId: currentPageId,
+          entry: history,
+        });
       }
       queueOps(ops);
     },
-    [applyPageDoc, queueOps, refreshHistoryFlags],
+    [applyPageDoc, queueOps, refreshHistoryFlags, sendBroadcast],
   );
 
   const saveSnapshot = useCallback(
@@ -290,24 +358,35 @@ export function useWhiteboardSync(whiteboardId: string) {
     setError(null);
     undoRef.current = [];
     redoRef.current = [];
-    pendingOpsRef.current = {};
     pagesDocRef.current = {};
-    void getWhiteboardApi(whiteboardId)
-      .then((row) => {
-        if (cancelled) return;
-        adoptBoard(row);
-        setLoading(false);
-        refreshHistoryFlags();
-      })
-      .catch((err: unknown) => {
-        if (cancelled) return;
-        setError(err instanceof Error ? err.message : "Could not load whiteboard");
-        setLoading(false);
-      });
+    void readWhiteboardSession(whiteboardId).then((session) => {
+      if (cancelled) return;
+      pendingByPageRef.current = session.pending;
+      undoByPageRef.current = session.undo;
+      redoByPageRef.current = session.redo;
+      void getWhiteboardApi(whiteboardId)
+        .then((row) => {
+          if (cancelled) return;
+          adoptBoard(row);
+          const current = pageIdRef.current;
+          if (current) {
+            undoRef.current = undoByPageRef.current[current] ?? [];
+            redoRef.current = redoByPageRef.current[current] ?? [];
+          }
+          setLoading(false);
+          refreshHistoryFlags();
+          void flushOps();
+        })
+        .catch((err: unknown) => {
+          if (cancelled) return;
+          setError(err instanceof Error ? err.message : "Could not load whiteboard");
+          setLoading(false);
+        });
+    });
     return () => {
       cancelled = true;
     };
-  }, [adoptBoard, refreshHistoryFlags, whiteboardId]);
+  }, [adoptBoard, flushOps, refreshHistoryFlags, whiteboardId]);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -331,6 +410,62 @@ export function useWhiteboardSync(whiteboardId: string) {
           return next;
         });
         if (targetPageId) applyPageDoc(targetPageId, { addedStrokes: [parsed.stroke] });
+      })
+      .on("broadcast", { event: "history:push" }, ({ payload }) => {
+        const body = payload as { pageId?: string; entry?: HistoryEntry };
+        if (!body.entry || !body.pageId) return;
+        if (body.pageId === pageIdRef.current) {
+          undoRef.current = [...undoRef.current, body.entry];
+          redoRef.current = [];
+          refreshHistoryFlags();
+        } else {
+          undoByPageRef.current[body.pageId] = [
+            ...(undoByPageRef.current[body.pageId] ?? []),
+            body.entry,
+          ];
+          redoByPageRef.current[body.pageId] = [];
+        }
+        persistPending();
+      })
+      .on("broadcast", { event: "history:undo" }, ({ payload }) => {
+        const pageId = (payload as { pageId?: string }).pageId ?? pageIdRef.current;
+        if (!pageId) return;
+        if (pageId === pageIdRef.current) {
+          const entry = undoRef.current.pop();
+          if (entry) redoRef.current.push(entry);
+          refreshHistoryFlags();
+        } else {
+          const stack = [...(undoByPageRef.current[pageId] ?? [])];
+          const entry = stack.pop();
+          if (entry) {
+            undoByPageRef.current[pageId] = stack;
+            redoByPageRef.current[pageId] = [
+              ...(redoByPageRef.current[pageId] ?? []),
+              entry,
+            ];
+          }
+        }
+        persistPending();
+      })
+      .on("broadcast", { event: "history:redo" }, ({ payload }) => {
+        const pageId = (payload as { pageId?: string }).pageId ?? pageIdRef.current;
+        if (!pageId) return;
+        if (pageId === pageIdRef.current) {
+          const entry = redoRef.current.pop();
+          if (entry) undoRef.current.push(entry);
+          refreshHistoryFlags();
+        } else {
+          const stack = [...(redoByPageRef.current[pageId] ?? [])];
+          const entry = stack.pop();
+          if (entry) {
+            redoByPageRef.current[pageId] = stack;
+            undoByPageRef.current[pageId] = [
+              ...(undoByPageRef.current[pageId] ?? []),
+              entry,
+            ];
+          }
+        }
+        persistPending();
       })
       .on("broadcast", { event: "stroke:remove" }, ({ payload }) => {
         const body = payload as { ids?: string[]; pageId?: string };
@@ -436,18 +571,20 @@ export function useWhiteboardSync(whiteboardId: string) {
       channelRef.current = null;
       void supabase.removeChannel(channel);
     };
-  }, [applyPageDoc, markDrawing, selfKey, user?.fullName, user?.id, whiteboardId]);
+  }, [applyPageDoc, markDrawing, persistPending, refreshHistoryFlags, selfKey, user?.fullName, user?.id, whiteboardId]);
 
   useEffect(() => {
-    const sub = AppState.addEventListener("change", (state) => {
-      if (state !== "active") void flushOps();
+    const sub = AppState.addEventListener("change", () => {
+      persistPending();
+      void flushOps();
     });
     return () => {
       sub.remove();
       if (persistTimerRef.current) clearTimeout(persistTimerRef.current);
+      persistPending();
       void flushOps();
     };
-  }, [flushOps]);
+  }, [flushOps, persistPending]);
 
   const addStroke = useCallback(
     (stroke: Stroke) => {
@@ -515,7 +652,9 @@ export function useWhiteboardSync(whiteboardId: string) {
     applyPageDoc(pageIdRef.current ?? "", ops);
     redoRef.current.push(entry);
     refreshHistoryFlags();
+    persistPending();
     queueOps(ops);
+    sendBroadcast("history:undo", { pageId: pageIdRef.current });
     if (ops.addedStrokes) {
       for (const stroke of ops.addedStrokes) {
         sendBroadcast("stroke:add", {
@@ -532,7 +671,7 @@ export function useWhiteboardSync(whiteboardId: string) {
         pageId: pageIdRef.current,
       });
     }
-  }, [applyPageDoc, canDraw, queueOps, refreshHistoryFlags, sendBroadcast]);
+  }, [applyPageDoc, canDraw, persistPending, queueOps, refreshHistoryFlags, sendBroadcast]);
 
   const redo = useCallback(() => {
     if (!canDraw) return;
@@ -542,7 +681,9 @@ export function useWhiteboardSync(whiteboardId: string) {
     applyPageDoc(pageIdRef.current ?? "", ops);
     undoRef.current.push(entry);
     refreshHistoryFlags();
+    persistPending();
     queueOps(ops);
+    sendBroadcast("history:redo", { pageId: pageIdRef.current });
     if (ops.addedStrokes) {
       for (const stroke of ops.addedStrokes) {
         sendBroadcast("stroke:add", {
@@ -559,7 +700,7 @@ export function useWhiteboardSync(whiteboardId: string) {
         pageId: pageIdRef.current,
       });
     }
-  }, [applyPageDoc, canDraw, queueOps, refreshHistoryFlags, sendBroadcast]);
+  }, [applyPageDoc, canDraw, persistPending, queueOps, refreshHistoryFlags, sendBroadcast]);
 
   const clearBoard = useCallback(() => {
     if (!canDraw) return;
@@ -585,19 +726,30 @@ export function useWhiteboardSync(whiteboardId: string) {
     async (nextPageId: string) => {
       if (nextPageId === pageIdRef.current) return;
       await flushOps();
-      undoRef.current = [];
-      redoRef.current = [];
+      const from = pageIdRef.current;
+      if (from) {
+        undoByPageRef.current[from] = undoRef.current;
+        redoByPageRef.current[from] = redoRef.current;
+      }
+      undoRef.current = undoByPageRef.current[nextPageId] ?? [];
+      redoRef.current = redoByPageRef.current[nextPageId] ?? [];
       refreshHistoryFlags();
+      persistPending();
       setRemoteDrafts({});
       setPageId(nextPageId);
       setBoardDoc(pagesDocRef.current[nextPageId] ?? emptyWhiteboardDocument());
     },
-    [flushOps, refreshHistoryFlags],
+    [flushOps, persistPending, refreshHistoryFlags],
   );
 
   const addPage = useCallback(async () => {
     if (!canDraw) return;
     await flushOps();
+    const from = pageIdRef.current;
+    if (from) {
+      undoByPageRef.current[from] = undoRef.current;
+      redoByPageRef.current[from] = redoRef.current;
+    }
     const updated = await addWhiteboardPageApi(whiteboardId);
     const created = updated.pages.find(
       (page) => !board?.pages.some((item) => item.id === page.id),
@@ -607,7 +759,8 @@ export function useWhiteboardSync(whiteboardId: string) {
     undoRef.current = [];
     redoRef.current = [];
     refreshHistoryFlags();
-  }, [adoptBoard, board?.pages, canDraw, flushOps, refreshHistoryFlags, sendBroadcast, whiteboardId]);
+    persistPending();
+  }, [adoptBoard, board?.pages, canDraw, flushOps, persistPending, refreshHistoryFlags, sendBroadcast, whiteboardId]);
 
   const removePage = useCallback(
     async (targetPageId: string) => {
@@ -615,13 +768,17 @@ export function useWhiteboardSync(whiteboardId: string) {
       await flushOps();
       const updated = await deleteWhiteboardPageApi(whiteboardId, targetPageId);
       delete pagesDocRef.current[targetPageId];
+      delete undoByPageRef.current[targetPageId];
+      delete redoByPageRef.current[targetPageId];
       adoptBoard(updated);
       sendBroadcast("page:remove", { pageId: targetPageId });
-      undoRef.current = [];
-      redoRef.current = [];
+      const nextId = pageIdRef.current;
+      undoRef.current = nextId ? (undoByPageRef.current[nextId] ?? []) : [];
+      redoRef.current = nextId ? (redoByPageRef.current[nextId] ?? []) : [];
       refreshHistoryFlags();
+      persistPending();
     },
-    [adoptBoard, canManage, flushOps, refreshHistoryFlags, sendBroadcast, whiteboardId],
+    [adoptBoard, canManage, flushOps, persistPending, refreshHistoryFlags, sendBroadcast, whiteboardId],
   );
 
   const people = useMemo<WhiteboardPresence[]>(() => {
@@ -662,6 +819,7 @@ export function useWhiteboardSync(whiteboardId: string) {
     canDraw,
     canSaveImage,
     canManage,
+    canExport,
     myRole,
     addStroke,
     broadcastDraft,

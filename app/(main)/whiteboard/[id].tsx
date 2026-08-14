@@ -10,12 +10,14 @@ import {
 } from "@/components/whiteboard/WhiteboardCanvas";
 import { WhiteboardActivityDrawer } from "@/components/whiteboard/WhiteboardActivityDrawer";
 import { WhiteboardCommentsDrawer } from "@/components/whiteboard/WhiteboardCommentsDrawer";
+import { WhiteboardExportDrawer } from "@/components/whiteboard/WhiteboardExportDrawer";
 import { WhiteboardMembersDrawer } from "@/components/whiteboard/WhiteboardMembersDrawer";
 import { WhiteboardPresenceStack } from "@/components/whiteboard/WhiteboardPresenceStack";
 import { WhiteboardToolbar } from "@/components/whiteboard/WhiteboardToolbar";
 import { WhiteboardToolsDock } from "@/components/whiteboard/WhiteboardToolsDock";
 import { ActionSheet } from "@/components/ActionSheet";
 import { WhiteboardEditorSkeleton } from "@/components/Skeleton";
+import { canViewBoardActivity } from "@/api/whiteboards";
 import { useWhiteboardSync } from "@/hooks/useWhiteboardSync";
 import { useAuthStore } from "@/store/useAuthStore";
 import { useSnackbarStore } from "@/store/useSnackbarStore";
@@ -24,7 +26,7 @@ import {
   WHITEBOARD_LEAVE_BACK,
   useWhiteboardLeave,
 } from "@/whiteboard/WhiteboardLeaveContext";
-import { exportErrorMessage, saveWhiteboardExport } from "@/whiteboard/export";
+import { exportErrorMessage, saveWhiteboardExport, type WhiteboardExportFormat } from "@/whiteboard/export";
 
 export default function WhiteboardEditorScreen() {
   const { dark, palette } = useAppPalette();
@@ -33,6 +35,7 @@ export default function WhiteboardEditorScreen() {
   const sync = useWhiteboardSync(id);
   const showSnackbar = useSnackbarStore((state) => state.showSnackbar);
   const currentUserId = useAuthStore((state) => state.user?.id);
+  const isDemo = Boolean(useAuthStore((state) => state.user?.isDemo));
   const canvasRef = useRef<WhiteboardCanvasHandle>(null);
   const navigation = useNavigation();
   const { register } = useWhiteboardLeave();
@@ -47,7 +50,9 @@ export default function WhiteboardEditorScreen() {
   const [moreOpen, setMoreOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [commentsOpen, setCommentsOpen] = useState(false);
-  const [exporting, setExporting] = useState<"pdf" | "zip" | "png" | null>(null);
+  const [exportOpen, setExportOpen] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [savingPng, setSavingPng] = useState(false);
   const paper = palette.main;
   const surround = palette.sidebar;
   const ink = palette.primary;
@@ -163,29 +168,78 @@ export default function WhiteboardEditorScreen() {
   };
   requestLeaveRef.current = requestLeave;
 
-  const handleExport = async (format: "pdf" | "zip" | "png") => {
+  const handleExport = async (
+    format: WhiteboardExportFormat,
+    pageIds: string[],
+  ) => {
     if (!sync.board || exporting) return;
-    setExporting(format);
-    setMoreOpen(false);
+    setExporting(true);
     try {
       const filename = await saveWhiteboardExport(
         sync.board.id,
         format,
-        format === "png" ? sync.pageId ?? undefined : undefined,
+        pageIds,
       );
+      setExportOpen(false);
       showSnackbar({
         variant: "success",
         title: "Downloaded",
-        message: `${filename} was saved to this device.`,
+        message:
+          `${filename} was saved to Downloads.`,
       });
     } catch (error) {
       showSnackbar({
         variant: "error",
-        title: "Export failed",
+        title: "Download failed",
         message: exportErrorMessage(error),
       });
     } finally {
-      setExporting(null);
+      setExporting(false);
+    }
+  };
+
+  const captureCurrentPage = async () => {
+    const base64 = await canvasRef.current?.capturePng();
+    if (!base64) throw new Error("Could not capture the board");
+    const FileSystem = await import("expo-file-system/legacy");
+    const path = `${FileSystem.cacheDirectory}whiteboard-${id}.png`;
+    await FileSystem.writeAsStringAsync(path, base64, {
+      encoding: FileSystem.EncodingType.Base64,
+    });
+    const uri = path.startsWith("file://") ? path : `file://${path}`;
+    await sync.saveSnapshot({
+      uri,
+      name: "snapshot.png",
+      type: "image/png",
+    });
+  };
+
+  const handleSavePng = async (pageIds: string[]) => {
+    if (!sync.canSaveImage || savingPng) return;
+    const originalPageId = sync.pageId;
+    setSavingPng(true);
+    try {
+      for (const targetPageId of pageIds) {
+        await sync.switchPage(targetPageId);
+        await new Promise((resolve) => setTimeout(resolve, 250));
+        await captureCurrentPage();
+      }
+      if (originalPageId) {
+        await sync.switchPage(originalPageId);
+      }
+      showSnackbar({
+        variant: "success",
+        title: "Saved as PNG",
+        message: "You can download those pages now.",
+      });
+    } catch {
+      showSnackbar({
+        variant: "error",
+        title: "Could not save PNG",
+        message: "Open the page and try again.",
+      });
+    } finally {
+      setSavingPng(false);
     }
   };
 
@@ -247,6 +301,11 @@ export default function WhiteboardEditorScreen() {
           <Ionicons name="ellipsis-horizontal" size={16} color={palette.primary} />
         </Pressable>
         <Text className="shrink-0 text-[11px] font-bold text-muted dark:text-dark-muted">{saveLabel}</Text>
+        {sync.myRole === "VIEWER" ? (
+          <Text className="shrink-0 text-[10px] font-black uppercase text-muted dark:text-dark-muted">
+            Viewer · comments only
+          </Text>
+        ) : null}
       </View>
 
       <View className="flex-row items-center gap-2 px-2 pb-1">
@@ -271,7 +330,7 @@ export default function WhiteboardEditorScreen() {
             </Text>
           </Pressable>
         ))}
-        {sync.canDraw ? (
+        {sync.canDraw && !isDemo ? (
           <Pressable
             onPress={() => void sync.addPage()}
             className="rounded-full bg-glass-button px-2 py-1 dark:bg-dark-glass-button"
@@ -279,7 +338,7 @@ export default function WhiteboardEditorScreen() {
             <Ionicons name="add" size={14} color={palette.primary} />
           </Pressable>
         ) : null}
-        {sync.canManage && sync.pages.length > 1 && sync.pageId ? (
+        {sync.canManage && !isDemo && sync.pages.length > 1 && sync.pageId ? (
           <Pressable
             onPress={() => void sync.removePage(sync.pageId!)}
             className="p-1"
@@ -341,15 +400,17 @@ export default function WhiteboardEditorScreen() {
       <WhiteboardMembersDrawer
         visible={membersOpen}
         board={sync.board}
-        canManage={sync.canManage}
+        canManage={sync.canManage && !isDemo}
         onClose={() => setMembersOpen(false)}
         onChanged={(next) => sync.setBoard(next)}
       />
-      <WhiteboardActivityDrawer
-        boardId={sync.board.id}
-        visible={historyOpen}
-        onClose={() => setHistoryOpen(false)}
-      />
+      {canViewBoardActivity(sync.myRole) ? (
+        <WhiteboardActivityDrawer
+          boardId={sync.board.id}
+          visible={historyOpen}
+          onClose={() => setHistoryOpen(false)}
+        />
+      ) : null}
       <WhiteboardCommentsDrawer
         board={sync.board}
         pageId={sync.pageId ?? undefined}
@@ -362,15 +423,19 @@ export default function WhiteboardEditorScreen() {
         title="Board"
         onClose={() => setMoreOpen(false)}
         actions={[
-          {
-            key: "history",
-            icon: "time-outline",
-            label: "History",
-            onPress: () => {
-              setMoreOpen(false);
-              setHistoryOpen(true);
-            },
-          },
+          ...(canViewBoardActivity(sync.myRole)
+            ? [
+                {
+                  key: "history",
+                  icon: "time-outline" as const,
+                  label: "History",
+                  onPress: () => {
+                    setMoreOpen(false);
+                    setHistoryOpen(true);
+                  },
+                },
+              ]
+            : []),
           {
             key: "comments",
             icon: "chatbubble-outline",
@@ -380,28 +445,33 @@ export default function WhiteboardEditorScreen() {
               setCommentsOpen(true);
             },
           },
-          {
-            key: "png",
-            icon: "image-outline",
-            label: exporting === "png" ? "Downloading..." : "Download PNG",
-            disabled: exporting !== null,
-            onPress: () => void handleExport("png"),
-          },
-          {
-            key: "pdf",
-            icon: "document-outline",
-            label: exporting === "pdf" ? "Downloading..." : "Download PDF",
-            disabled: exporting !== null,
-            onPress: () => void handleExport("pdf"),
-          },
-          {
-            key: "zip",
-            icon: "download-outline",
-            label: exporting === "zip" ? "Downloading..." : "Download ZIP",
-            disabled: exporting !== null,
-            onPress: () => void handleExport("zip"),
-          },
+          ...(sync.canExport
+            ? [
+                {
+                  key: "download",
+                  icon: "download-outline" as const,
+                  label: "Download",
+                  onPress: () => {
+                    setMoreOpen(false);
+                    setExportOpen(true);
+                  },
+                },
+              ]
+            : []),
         ]}
+      />
+      <WhiteboardExportDrawer
+        visible={exportOpen}
+        pages={sync.pages}
+        currentPageId={sync.pageId}
+        downloading={exporting}
+        savingPng={savingPng}
+        canSaveImage={sync.canSaveImage}
+        onClose={() => {
+          if (!exporting && !savingPng) setExportOpen(false);
+        }}
+        onDownload={(format, pageIds) => void handleExport(format, pageIds)}
+        onSavePng={(pageIds) => void handleSavePng(pageIds)}
       />
 
       <SaveSnapshotPopup

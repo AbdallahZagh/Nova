@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { AuthScreen } from "@/components/AuthScreen";
 import { FormField } from "@/components/FormField";
@@ -9,7 +9,7 @@ import {
   getApiErrorMessage,
   isInactiveAccountError,
 } from "@/api/apiClient";
-import { loginApi, reactivateApi } from "@/api/auth";
+import { loginApi, reactivateApi, getDemoCredentialsApi } from "@/api/auth";
 import { useAuthStore } from "@/store/useAuthStore";
 import { useSnackbarStore } from "@/store/useSnackbarStore";
 
@@ -20,6 +20,7 @@ export default function LoginScreen() {
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [demoLoading, setDemoLoading] = useState(false);
   const notice =
     params.reason === "session_expired"
       ? "Your session expired. Sign in again to continue."
@@ -99,6 +100,37 @@ export default function LoginScreen() {
     }
   };
 
+  const submitDemo = async () => {
+    setDemoLoading(true);
+    try {
+      const demo = await getDemoCredentialsApi();
+      const response = await loginApi(demo.email, demo.password);
+      if (response.user.isActive === false || response.user.isArchived === true) {
+        showSnackbar({
+          variant: "error",
+          title: "Demo unavailable",
+          message: "The demo account is not active right now.",
+        });
+        return;
+      }
+      await setSession(response);
+      showSnackbar({
+        variant: "success",
+        title: "Demo workspace",
+        message: "A short tour will explain what you can try.",
+      });
+      router.replace("/(main)");
+    } catch (requestError) {
+      showSnackbar({
+        variant: "error",
+        title: "Demo unavailable",
+        message: getApiErrorMessage(requestError, "Demo sign-in is unavailable right now."),
+      });
+    } finally {
+      setDemoLoading(false);
+    }
+  };
+
   return (
     <AuthScreen
       eyebrow="Welcome back"
@@ -141,7 +173,28 @@ export default function LoginScreen() {
             {notice}
           </Text>
         ) : null}
-        <PrimaryButton label="Sign in" loading={loading} onPress={submit} />
+        <PrimaryButton
+          label="Sign in"
+          loading={loading}
+          disabled={demoLoading}
+          onPress={submit}
+        />
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Try demo"
+          disabled={loading || demoLoading}
+          onPress={() => void submitDemo()}
+          className={`min-h-[50px] items-center justify-center rounded-nova border border-glass bg-glass-card dark:border-dark-glass dark:bg-dark-glass-card ${
+            loading || demoLoading ? "opacity-50" : "active:opacity-75"
+          }`}
+        >
+          <Text className="text-[15px] font-extrabold text-primary dark:text-dark-primary">
+            {demoLoading ? "Opening demo..." : "Try demo"}
+          </Text>
+        </Pressable>
+        <Text className="text-center text-xs font-bold text-muted dark:text-dark-muted">
+          Shared sandbox for portfolios. No email required.
+        </Text>
       </View>
     </AuthScreen>
   );

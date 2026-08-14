@@ -173,6 +173,18 @@ export function canDrawOnBoard(role: WhiteboardRole | null | undefined) {
   return role === "ADMIN" || role === "MEMBER";
 }
 
+export function canCommentOnBoard(role: WhiteboardRole | null | undefined) {
+  return canDrawOnBoard(role);
+}
+
+export function canViewBoardActivity(role: WhiteboardRole | null | undefined) {
+  return canDrawOnBoard(role);
+}
+
+export function canExportBoard(role: WhiteboardRole | null | undefined) {
+  return role === "ADMIN" || role === "MEMBER";
+}
+
 export function canSaveBoardImage(role: WhiteboardRole | null | undefined) {
   return role === "ADMIN";
 }
@@ -296,6 +308,28 @@ export function applyOpsLocally(
     canvas: ops.canvas ?? current.canvas,
     strokes: [...strokeMap.values()],
     regions: [...regionMap.values()],
+  };
+}
+
+export function mergeDocuments(
+  server: WhiteboardDocument,
+  local: WhiteboardDocument,
+): WhiteboardDocument {
+  const strokes = new Map(server.strokes.map((stroke) => [stroke.id, stroke]));
+  for (const stroke of local.strokes) {
+    const existing = strokes.get(stroke.id);
+    if (!existing || stroke.points.length >= existing.points.length) {
+      strokes.set(stroke.id, stroke);
+    }
+  }
+  const regions = new Map(server.regions.map((region) => [region.id, region]));
+  for (const region of local.regions) {
+    if (!regions.has(region.id)) regions.set(region.id, region);
+  }
+  return {
+    canvas: local.canvas ?? server.canvas,
+    strokes: [...strokes.values()],
+    regions: [...regions.values()],
   };
 }
 
@@ -527,9 +561,11 @@ export async function acceptWhiteboardInviteApi(token: string) {
 export async function downloadWhiteboardExportApi(
   id: string,
   format: "pdf" | "zip" | "png",
-  pageId?: string,
+  pageIds?: string[],
 ) {
-  const query = pageId ? `?pageId=${encodeURIComponent(pageId)}` : "";
+  const query = pageIds?.length
+    ? `?pageIds=${encodeURIComponent(pageIds.join(","))}`
+    : "";
   const response = await apiClient.get<ArrayBuffer>(
     `/api/whiteboards/${id}/export/${format}${query}`,
     { responseType: "arraybuffer", timeout: 60_000 },

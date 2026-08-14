@@ -92,6 +92,13 @@ export async function reactivateApi(email: string) {
   return data;
 }
 
+export async function getDemoCredentialsApi() {
+  const { data } = await publicApiClient.get<{ email: string; password: string }>(
+    "/api/auth/demo",
+  );
+  return data;
+}
+
 export async function getMeApi(accessToken?: string) {
   const client = accessToken ? publicApiClient : apiClient;
   const { data } = await client.get<ApiUser>("/api/users/me", {

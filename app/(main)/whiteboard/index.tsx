@@ -23,12 +23,14 @@ import {
 import { BottomDrawer } from "@/components/BottomDrawer";
 import { ConfirmationPopup } from "@/components/ConfirmationPopup";
 import { PageSkeleton } from "@/components/Skeleton";
+import { useAuthStore } from "@/store/useAuthStore";
 import { useSnackbarStore } from "@/store/useSnackbarStore";
 import { useAppPalette } from "@/theme/useAppPalette";
 
 export default function WhiteboardListScreen() {
   const { palette } = useAppPalette();
   const showSnackbar = useSnackbarStore((state) => state.showSnackbar);
+  const isDemo = Boolean(useAuthStore((state) => state.user?.isDemo));
   const params = useLocalSearchParams<{ projectId?: string }>();
   const projectFilter = typeof params.projectId === "string" ? params.projectId : "";
 
@@ -164,9 +166,10 @@ export default function WhiteboardListScreen() {
             <Text className="mt-2 text-sm text-muted dark:text-dark-muted">
               {projectFilter
                 ? `Boards for ${projectNameById[projectFilter] ?? "this project"}.`
-                : "Draw together. Strokes are saved for later OCR training."}
+                : "Draw together. Changes sync live."}
             </Text>
           </View>
+          {isDemo ? null : (
           <Pressable
             onPress={() => setCreateOpen(true)}
             className="min-h-[44px] flex-row items-center gap-1 rounded-nova bg-accent px-3 dark:bg-dark-accent"
@@ -174,6 +177,7 @@ export default function WhiteboardListScreen() {
             <Ionicons name="add" size={18} color={palette.white} />
             <Text className="font-black text-white">New</Text>
           </Pressable>
+          )}
         </View>
 
         {boards.length === 0 ? (
@@ -227,6 +231,7 @@ export default function WhiteboardListScreen() {
                     {` · ${new Date(board.lastEditedAt || board.updatedAt).toLocaleDateString()}`}
                   </Text>
                 </Pressable>
+                {isDemo ? null : (
                 <View className="flex-row items-center">
                   <Pressable
                     disabled={duplicatingId === board.id}
@@ -250,6 +255,7 @@ export default function WhiteboardListScreen() {
                 </Pressable>
                   ) : null}
                 </View>
+                )}
               </View>
             </View>
           ))

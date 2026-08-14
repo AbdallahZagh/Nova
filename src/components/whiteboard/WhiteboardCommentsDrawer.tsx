@@ -111,7 +111,11 @@ export function WhiteboardCommentsDrawer({
     <BottomDrawer
       visible={visible}
       title="Comments"
-      subtitle="Use @ to mention someone on this board."
+      subtitle={
+        canComment
+          ? "Use @ to mention someone on this board."
+          : "You can read comments. Only members can post."
+      }
       onClose={onClose}
       footer={
         canComment ? (

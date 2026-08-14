@@ -695,6 +695,7 @@ export default function ProfileScreen() {
   });
 
   const counts = extractCounts(profile);
+  const isDemo = Boolean(profile?.isDemo ?? storedUser?.isDemo);
   const activityGroups: { date: string; tasks: ActivityItem[] }[] = [];
   const projects = profile?.projects ?? [];
 
@@ -890,6 +891,7 @@ export default function ProfileScreen() {
         </View>
       </View>
 
+      {isDemo ? null : (
       <View className="rounded-nova-xl border border-glass bg-sidebar p-5 dark:border-dark-glass dark:bg-dark-sidebar">
         <SectionHeader
           icon="person-outline"
@@ -942,6 +944,7 @@ export default function ProfileScreen() {
           />
         </View>
       </View>
+      )}
 
       {error ? (
         <View className="rounded-nova border border-danger bg-danger/10 p-3 dark:border-dark-danger dark:bg-dark-danger/10">
@@ -1131,6 +1134,7 @@ export default function ProfileScreen() {
             </View>
           </View>
 
+          {isDemo ? null : (
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Change password"
@@ -1148,7 +1152,9 @@ export default function ProfileScreen() {
             </View>
             <Ionicons name="chevron-forward" size={18} color={palette.muted} />
           </Pressable>
+          )}
 
+          {isDemo ? null : (
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Deactivate account"
@@ -1166,6 +1172,7 @@ export default function ProfileScreen() {
               </Text>
             </View>
           </Pressable>
+          )}
 
           <Pressable
             accessibilityRole="button"

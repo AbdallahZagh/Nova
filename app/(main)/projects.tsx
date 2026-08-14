@@ -619,11 +619,12 @@ export default function ProjectsScreen() {
   }, [activeFilter, projects]);
 
   const canCreateProjects = useMemo(() => {
+    if (user?.isDemo) return false;
     if (projects.length === 0) return true;
     return projects.some((project) =>
       canEditProjectDetails(getProjectMemberRole(project, user?.id)),
     );
-  }, [projects, user?.id]);
+  }, [projects, user?.id, user?.isDemo]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -812,7 +813,7 @@ export default function ProjectsScreen() {
                   key={project.id}
                   project={project}
                   canEdit={canEditProjectDetails(role)}
-                  canDelete={canDeleteProject(role)}
+                  canDelete={!user?.isDemo && canDeleteProject(role)}
                   onEdit={openEditDrawer}
                   onOpen={(item) =>
                     router.push({ pathname: "/project/[id]", params: { id: item.id } })

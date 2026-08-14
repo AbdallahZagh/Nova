@@ -512,7 +512,7 @@ export default function ProjectDetailScreen() {
   );
   const editable = canEditTasks(role);
   const assignable = canAssignTasks(role);
-  const manageableTeam = canManageTeam(role);
+  const manageableTeam = !user?.isDemo && canManageTeam(role);
   const mentionUsers = useMemo(
     () =>
       mentionUsersFromPeople([

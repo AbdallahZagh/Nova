@@ -12,6 +12,8 @@ import { router, usePathname } from "expo-router";
 import { useColorScheme } from "nativewind";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { DynamicLogo } from "@/components/UI/DynamicLogo";
+import { OfflineBanner } from "@/components/OfflineBanner";
+import { DemoTourModal } from "@/components/DemoTourModal";
 import { useNotificationSync } from "@/hooks/useNotificationSync";
 import { useAuthStore } from "@/store/useAuthStore";
 import { useNotificationStore } from "@/store/useNotificationStore";
@@ -112,6 +114,8 @@ export function AppFrame({ children }: PropsWithChildren) {
           </Pressable> */}
         </View>
       </View>
+      <OfflineBanner />
+      <DemoTourModal />
 
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}

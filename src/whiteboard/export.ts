@@ -1,8 +1,13 @@
 import { Platform } from "react-native";
+import * as SecureStore from "expo-secure-store";
 import { getApiErrorMessage } from "@/api/apiClient";
 import { downloadWhiteboardExportApi } from "@/api/whiteboards";
 
 export type WhiteboardExportFormat = "pdf" | "zip" | "png";
+
+const DOWNLOAD_DIR_KEY = "nova.whiteboard.downloadDir";
+const ANDROID_DOWNLOADS_TREE =
+  "content://com.android.externalstorage.documents/tree/primary%3ADownload";
 
 function toBase64(data: ArrayBuffer | ArrayBufferView | string) {
   if (typeof data === "string") {
@@ -20,44 +25,98 @@ function toBase64(data: ArrayBuffer | ArrayBufferView | string) {
   return btoa(binary);
 }
 
-function mimeFor(format: WhiteboardExportFormat) {
-  if (format === "pdf") return "application/pdf";
-  if (format === "zip") return "application/zip";
+function mimeFor(filename: string, format: WhiteboardExportFormat) {
+  if (filename.endsWith(".pdf") || format === "pdf") return "application/pdf";
+  if (filename.endsWith(".zip") || format === "zip") return "application/zip";
   return "image/png";
+}
+
+async function writeToDirectory(
+  FileSystem: typeof import("expo-file-system/legacy"),
+  directoryUri: string,
+  filename: string,
+  mime: string,
+  base64: string,
+) {
+  const uri = await FileSystem.StorageAccessFramework.createFileAsync(
+    directoryUri,
+    filename,
+    mime,
+  );
+  await FileSystem.writeAsStringAsync(uri, base64, {
+    encoding: FileSystem.EncodingType.Base64,
+  });
+}
+
+async function androidDownloadDirectory(
+  FileSystem: typeof import("expo-file-system/legacy"),
+  forcePicker = false,
+) {
+  const stored = forcePicker
+    ? null
+    : await SecureStore.getItemAsync(DOWNLOAD_DIR_KEY);
+  if (stored) return stored;
+
+  const permissions =
+    await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync(
+      ANDROID_DOWNLOADS_TREE,
+    );
+  if (!permissions.granted) {
+    throw new Error("Allow access to Downloads to save the file.");
+  }
+  await SecureStore.setItemAsync(DOWNLOAD_DIR_KEY, permissions.directoryUri);
+  return permissions.directoryUri;
 }
 
 export async function saveWhiteboardExport(
   id: string,
   format: WhiteboardExportFormat,
-  pageId?: string,
+  pageIds?: string[],
 ) {
-  const file = await downloadWhiteboardExportApi(id, format, pageId);
+  const file = await downloadWhiteboardExportApi(id, format, pageIds);
   const FileSystem = await import("expo-file-system/legacy");
   const base64 = toBase64(file.buffer);
+  const mime = mimeFor(file.filename, format);
 
   if (Platform.OS === "android" && FileSystem.StorageAccessFramework) {
-    const permissions =
-      await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
-    if (permissions.granted) {
-      const uri = await FileSystem.StorageAccessFramework.createFileAsync(
-        permissions.directoryUri,
+    try {
+      const directoryUri = await androidDownloadDirectory(FileSystem);
+      await writeToDirectory(
+        FileSystem,
+        directoryUri,
         file.filename,
-        mimeFor(format),
+        mime,
+        base64,
       );
-      await FileSystem.writeAsStringAsync(uri, base64, {
-        encoding: FileSystem.EncodingType.Base64,
-      });
+      return file.filename;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "";
+      if (message.includes("Allow access to Downloads")) throw error;
+      await SecureStore.deleteItemAsync(DOWNLOAD_DIR_KEY);
+      const directoryUri = await androidDownloadDirectory(FileSystem, true);
+      await writeToDirectory(
+        FileSystem,
+        directoryUri,
+        file.filename,
+        mime,
+        base64,
+      );
       return file.filename;
     }
   }
 
-  const path = `${FileSystem.documentDirectory ?? FileSystem.cacheDirectory}${file.filename}`;
-  await FileSystem.writeAsStringAsync(path, base64, {
+  const folder =
+    `${FileSystem.documentDirectory ?? FileSystem.cacheDirectory}Download/`;
+  const folderInfo = await FileSystem.getInfoAsync(folder);
+  if (!folderInfo.exists) {
+    await FileSystem.makeDirectoryAsync(folder, { intermediates: true });
+  }
+  await FileSystem.writeAsStringAsync(`${folder}${file.filename}`, base64, {
     encoding: FileSystem.EncodingType.Base64,
   });
   return file.filename;
 }
 
 export function exportErrorMessage(error: unknown) {
-  return getApiErrorMessage(error, "Save the board as images first.");
+  return getApiErrorMessage(error, "Save the selected pages as images first.");
 }
