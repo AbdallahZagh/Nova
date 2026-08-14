@@ -1116,12 +1116,13 @@ export class WhiteboardsService {
     userId: string,
     id: string,
     format: 'pdf' | 'zip' | 'png',
-    pageId?: string,
+    pageIds?: string[],
   ) {
     const row = await this.loadBoard(id);
     await this.ensureWhiteboardAccess(userId, row);
 
     const pages = [...row.pages].sort((a, b) => a.index - b.index);
+    const wanted = new Set((pageIds ?? []).filter(Boolean));
     const images: {
       pageId: string;
       name: string;
@@ -1131,6 +1132,7 @@ export class WhiteboardsService {
     }[] = [];
 
     for (const page of pages) {
+      if (wanted.size > 0 && !wanted.has(page.id)) continue;
       if (!page.snapshot?.storagePath) continue;
       const buffer = await this.storage.downloadSnapshot(page.snapshot.storagePath);
       if (!buffer) continue;
@@ -1145,7 +1147,7 @@ export class WhiteboardsService {
 
     if (images.length === 0) {
       throw new BadRequestException(
-        'Save the board as images first, then export.',
+        'Save the selected pages as images first, then export.',
       );
     }
 
@@ -1156,17 +1158,23 @@ export class WhiteboardsService {
 
     await this.recordActivity(id, userId, WhiteboardActivityType.EXPORTED, {
       format,
+      pageCount: images.length,
     });
 
     if (format === 'png') {
-      const image = pageId
-        ? images.find((item) => item.pageId === pageId)
-        : images[0];
-      if (!image) {
-        throw new BadRequestException(
-          'Save this page as an image first, then export.',
+      if (images.length > 1) {
+        const zip = new JSZip();
+        for (const image of images) zip.file(image.name, image.buffer);
+        const buffer = Buffer.from(
+          await zip.generateAsync({ type: 'nodebuffer' }),
         );
+        return {
+          buffer,
+          filename: `${slug}.zip`,
+          mime: 'application/zip',
+        };
       }
+      const image = images[0];
       return {
         buffer: image.buffer,
         filename: `${slug}.png`,

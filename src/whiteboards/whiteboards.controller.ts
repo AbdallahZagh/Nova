@@ -4,7 +4,6 @@ import {
   Controller,
   Delete,
   Get,
-  Header,
   Param,
   ParseUUIDPipe,
   Patch,
@@ -46,6 +45,17 @@ const snapshotUpload = FileInterceptor('file', {
   storage: memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024 },
 });
+
+function parseExportPageIds(pageIds?: string, pageId?: string) {
+  return [
+    ...new Set(
+      [
+        ...(pageIds?.split(',').map((value) => value.trim()) ?? []),
+        pageId ?? '',
+      ].filter(Boolean),
+    ),
+  ];
+}
 
 @ApiTags('Whiteboards')
 @ApiBearerAuth('access-token')
@@ -167,18 +177,18 @@ export class WhiteboardsController {
   }
 
   @Get('whiteboards/:id/export/png')
-  @ApiOperation({ summary: 'Export a whiteboard page as PNG' })
-  @Header('Content-Type', 'image/png')
+  @ApiOperation({ summary: 'Export whiteboard pages as PNG' })
   async exportPng(
     @CurrentUser('id') userId: string,
     @Param('id', ParseUUIDPipe) id: string,
     @Query('pageId') pageId?: string,
+    @Query('pageIds') pageIds?: string,
   ) {
     const file = await this.whiteboardsService.exportBoard(
       userId,
       id,
       'png',
-      pageId,
+      parseExportPageIds(pageIds, pageId),
     );
     return new StreamableFile(file.buffer, {
       type: file.mime,
@@ -188,12 +198,18 @@ export class WhiteboardsController {
 
   @Get('whiteboards/:id/export/pdf')
   @ApiOperation({ summary: 'Export whiteboard pages as PDF' })
-  @Header('Content-Type', 'application/pdf')
   async exportPdf(
     @CurrentUser('id') userId: string,
     @Param('id', ParseUUIDPipe) id: string,
+    @Query('pageId') pageId?: string,
+    @Query('pageIds') pageIds?: string,
   ) {
-    const file = await this.whiteboardsService.exportBoard(userId, id, 'pdf');
+    const file = await this.whiteboardsService.exportBoard(
+      userId,
+      id,
+      'pdf',
+      parseExportPageIds(pageIds, pageId),
+    );
     return new StreamableFile(file.buffer, {
       type: file.mime,
       disposition: `attachment; filename="${file.filename}"`,
@@ -202,12 +218,18 @@ export class WhiteboardsController {
 
   @Get('whiteboards/:id/export/zip')
   @ApiOperation({ summary: 'Export whiteboard page PNGs as ZIP' })
-  @Header('Content-Type', 'application/zip')
   async exportZip(
     @CurrentUser('id') userId: string,
     @Param('id', ParseUUIDPipe) id: string,
+    @Query('pageId') pageId?: string,
+    @Query('pageIds') pageIds?: string,
   ) {
-    const file = await this.whiteboardsService.exportBoard(userId, id, 'zip');
+    const file = await this.whiteboardsService.exportBoard(
+      userId,
+      id,
+      'zip',
+      parseExportPageIds(pageIds, pageId),
+    );
     return new StreamableFile(file.buffer, {
       type: file.mime,
       disposition: `attachment; filename="${file.filename}"`,
