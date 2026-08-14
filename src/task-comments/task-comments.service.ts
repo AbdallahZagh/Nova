@@ -48,14 +48,18 @@ export class TaskCommentsService {
     });
 
     const actorName = comment.createdBy?.fullName || 'Someone';
-    await this.notificationsService.notifyTaskCommentMention(
-      mentionedIds.filter((id) => id !== userId),
-      actorName,
-      comment.task.title,
-      task.id,
-      task.projectId,
-      comment.id,
-    );
+    try {
+      await this.notificationsService.notifyTaskCommentMention(
+        mentionedIds.filter((id) => id !== userId),
+        actorName,
+        comment.task.title,
+        task.id,
+        task.projectId,
+        comment.id,
+      );
+    } catch {
+      // Comment is saved even if the mention notification fails.
+    }
 
     await this.notificationsService.notifyProjectMembers(
       task.projectId,
@@ -99,14 +103,18 @@ export class TaskCommentsService {
     });
 
     const actorName = updated.repliedBy?.fullName || 'Someone';
-    await this.notificationsService.notifyTaskCommentMention(
-      mentionedIds.filter((mentionedId) => mentionedId !== userId),
-      actorName,
-      updated.task.title,
-      updated.task.id,
-      updated.task.projectId,
-      updated.id,
-    );
+    try {
+      await this.notificationsService.notifyTaskCommentMention(
+        mentionedIds.filter((mentionedId) => mentionedId !== userId),
+        actorName,
+        updated.task.title,
+        updated.task.id,
+        updated.task.projectId,
+        updated.id,
+      );
+    } catch {
+      // Reply is saved even if the mention notification fails.
+    }
 
     if (updated.createdById && updated.createdById !== userId) {
       await this.notificationsService.notifyTaskCommentReply(
@@ -161,9 +169,9 @@ export class TaskCommentsService {
     });
     if (!project) return [];
     const byId = new Map<string, MentionCandidate>();
-    if (project.owner) byId.set(project.owner.id, project.owner);
+    if (project.owner?.username) byId.set(project.owner.id, project.owner);
     for (const member of project.members) {
-      if (member.user) byId.set(member.user.id, member.user);
+      if (member.user?.username) byId.set(member.user.id, member.user);
     }
     return [...byId.values()];
   }

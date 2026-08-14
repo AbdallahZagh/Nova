@@ -51,13 +51,17 @@ export class ProjectSuggestionsService {
     });
 
     const actorName = suggestion.createdBy?.fullName || 'Someone';
-    await this.notificationsService.notifySuggestionMention(
-      mentionedIds.filter((id) => id !== userId),
-      actorName,
-      project.name,
-      dto.projectId,
-      suggestion.id,
-    );
+    try {
+      await this.notificationsService.notifySuggestionMention(
+        mentionedIds.filter((id) => id !== userId),
+        actorName,
+        project.name,
+        dto.projectId,
+        suggestion.id,
+      );
+    } catch {
+      // Suggestion is saved even if the mention notification fails.
+    }
 
     await this.notificationsService.notifyProjectManagers(
       dto.projectId,
@@ -113,13 +117,17 @@ export class ProjectSuggestionsService {
       const mentionedIds = Array.isArray(data.mentionedUserIds)
         ? (data.mentionedUserIds as string[])
         : [];
-      await this.notificationsService.notifySuggestionMention(
-        mentionedIds.filter((id) => id !== userId),
-        updated.createdBy?.fullName || 'Someone',
-        updated.project.name,
-        updated.projectId,
-        updated.id,
-      );
+      try {
+        await this.notificationsService.notifySuggestionMention(
+          mentionedIds.filter((id) => id !== userId),
+          updated.createdBy?.fullName || 'Someone',
+          updated.project.name,
+          updated.projectId,
+          updated.id,
+        );
+      } catch {
+        // Suggestion is saved even if the mention notification fails.
+      }
     }
 
     if (
@@ -209,9 +217,9 @@ export class ProjectSuggestionsService {
     });
     if (!project) return [];
     const byId = new Map<string, MentionCandidate>();
-    if (project.owner) byId.set(project.owner.id, project.owner);
+    if (project.owner?.username) byId.set(project.owner.id, project.owner);
     for (const member of project.members) {
-      if (member.user) byId.set(member.user.id, member.user);
+      if (member.user?.username) byId.set(member.user.id, member.user);
     }
     return [...byId.values()];
   }

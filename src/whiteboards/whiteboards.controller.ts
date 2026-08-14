@@ -10,6 +10,7 @@ import {
   Patch,
   Post,
   Put,
+  Query,
   StreamableFile,
   UploadedFile,
   UseGuards,
@@ -163,6 +164,26 @@ export class WhiteboardsController {
     @Param('token') token: string,
   ) {
     return this.whiteboardsService.acceptInvite(userId, token);
+  }
+
+  @Get('whiteboards/:id/export/png')
+  @ApiOperation({ summary: 'Export a whiteboard page as PNG' })
+  @Header('Content-Type', 'image/png')
+  async exportPng(
+    @CurrentUser('id') userId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('pageId') pageId?: string,
+  ) {
+    const file = await this.whiteboardsService.exportBoard(
+      userId,
+      id,
+      'png',
+      pageId,
+    );
+    return new StreamableFile(file.buffer, {
+      type: file.mime,
+      disposition: `attachment; filename="${file.filename}"`,
+    });
   }
 
   @Get('whiteboards/:id/export/pdf')

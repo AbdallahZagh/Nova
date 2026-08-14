@@ -1112,19 +1112,30 @@ export class WhiteboardsService {
     return this.formatWhiteboard(await this.loadBoard(board.id), userId, true);
   }
 
-  async exportBoard(userId: string, id: string, format: 'pdf' | 'zip') {
+  async exportBoard(
+    userId: string,
+    id: string,
+    format: 'pdf' | 'zip' | 'png',
+    pageId?: string,
+  ) {
     const row = await this.loadBoard(id);
     await this.ensureWhiteboardAccess(userId, row);
 
     const pages = [...row.pages].sort((a, b) => a.index - b.index);
-    const images: { name: string; buffer: Buffer; width: number; height: number }[] =
-      [];
+    const images: {
+      pageId: string;
+      name: string;
+      buffer: Buffer;
+      width: number;
+      height: number;
+    }[] = [];
 
     for (const page of pages) {
       if (!page.snapshot?.storagePath) continue;
       const buffer = await this.storage.downloadSnapshot(page.snapshot.storagePath);
       if (!buffer) continue;
       images.push({
+        pageId: page.id,
         name: `page-${page.index + 1}.png`,
         buffer,
         width: page.snapshot.width,
@@ -1146,6 +1157,22 @@ export class WhiteboardsService {
     await this.recordActivity(id, userId, WhiteboardActivityType.EXPORTED, {
       format,
     });
+
+    if (format === 'png') {
+      const image = pageId
+        ? images.find((item) => item.pageId === pageId)
+        : images[0];
+      if (!image) {
+        throw new BadRequestException(
+          'Save this page as an image first, then export.',
+        );
+      }
+      return {
+        buffer: image.buffer,
+        filename: `${slug}.png`,
+        mime: 'image/png',
+      };
+    }
 
     if (format === 'zip') {
       const zip = new JSZip();
@@ -1190,11 +1217,13 @@ export class WhiteboardsService {
   }
 
   private mentionCandidates(row: BoardRow) {
-    return row.members.map((member) => ({
-      id: member.userId,
-      username: member.user.username,
-      fullName: member.user.fullName,
-    }));
+    return row.members
+      .filter((member) => member.user.username)
+      .map((member) => ({
+        id: member.userId,
+        username: member.user.username,
+        fullName: member.user.fullName,
+      }));
   }
 
   private formatComment(item: {
