@@ -52,11 +52,12 @@ export default function ProjectsPage() {
   }, [activeFilter, projects]);
 
   const canCreateProjects = useMemo(() => {
+    if (profile?.isDemo) return false;
     if (projects.length === 0) return true;
     return projects.some((project) =>
       canEditProjectDetails(getProjectMemberRole(project, profile?.id)),
     );
-  }, [profile?.id, projects]);
+  }, [profile?.id, profile?.isDemo, projects]);
 
   const openCreateModal = () => {
     if (!canCreateProjects) return;
@@ -212,7 +213,7 @@ export default function ProjectsPage() {
                 onEdit={openEditModal}
                 onDelete={setDeleteTarget}
                 canEdit={canEditProjectDetails(role)}
-                canDelete={canDeleteProject(role)}
+                canDelete={!profile?.isDemo && canDeleteProject(role)}
               />
             );
           })}

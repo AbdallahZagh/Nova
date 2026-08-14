@@ -43,6 +43,7 @@ export type UserProfile = {
   role: string;
   bio: string;
   avatarUrl: string | null;
+  isDemo: boolean;
   projectCount: number;
   taskCount: number;
   activity: ActivityMap;

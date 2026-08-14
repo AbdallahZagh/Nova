@@ -6,6 +6,7 @@ import { Sparkles, X } from "lucide-react";
 import { Input, Textarea } from "@/components/ui/input";
 import { Select } from "@/components/ui/Select";
 import { useToast } from "@/components/ui/Toast";
+import { useUser } from "@/components/providers/UserProvider";
 import {
   ProjectMemberPicker,
   type SelectedProjectMember,
@@ -70,6 +71,7 @@ function ProjectForm({
   submitting?: boolean;
 }) {
   const { toast } = useToast();
+  const { profile } = useUser();
   const [title, setTitle] = useState(project?.title ?? "");
   const [description, setDescription] = useState(project?.description ?? "");
   const [status, setStatus] = useState<ProjectStatus>(project?.status ?? "Active");
@@ -190,6 +192,7 @@ function ProjectForm({
             required
             placeholder="e.g. Elegance Hub Redesign"
           />
+          {profile?.isDemo ? null : (
           <button
             type="button"
             onClick={handleAiDescription}
@@ -221,6 +224,7 @@ function ProjectForm({
               AI
             </span>
           </button>
+          )}
         </div>
 
         <div>

@@ -36,13 +36,13 @@ export default function LoginPage() {
             Create one
           </Link>
         </p>
-        <p className="mt-6 rounded-xl border border-glass bg-main/50 px-4 py-3 text-xs text-primary/60">
+        {/* <p className="mt-6 rounded-xl border border-glass bg-main/50 px-4 py-3 text-xs text-primary/60">
           <span className="font-medium text-primary">Demo credentials</span>
           <br />
           Email: {DEMO_EMAIL}
           <br />
           Password: {DEMO_PASSWORD}
-        </p>
+        </p> */}
       </GlassCard>
     </div>
   );

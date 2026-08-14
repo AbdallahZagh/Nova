@@ -2,11 +2,12 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, Clock, Download, Image as ImageIcon, MessageSquare, MoreHorizontal } from "lucide-react";
+import { ArrowLeft, Download, MoreHorizontal, PanelRight } from "lucide-react";
 import { WhiteboardEditorSkeleton } from "@/components/skeletons/WhiteboardEditorSkeleton";
 import { SaveSnapshotModal } from "@/components/whiteboard/SaveSnapshotModal";
 import { WhiteboardCanvas } from "@/components/whiteboard/WhiteboardCanvas";
-import { WhiteboardDetailsDrawer, type WhiteboardDetailsTab } from "@/components/whiteboard/WhiteboardDetailsDrawer";
+import { WhiteboardDetailsDrawer } from "@/components/whiteboard/WhiteboardDetailsDrawer";
+import { WhiteboardExportModal } from "@/components/whiteboard/WhiteboardExportModal";
 import { WhiteboardMembersModal } from "@/components/whiteboard/WhiteboardMembersModal";
 import { WhiteboardPagesBar } from "@/components/whiteboard/WhiteboardPagesBar";
 import { WhiteboardPresenceBar } from "@/components/whiteboard/WhiteboardPresenceBar";
@@ -39,9 +40,10 @@ export default function WhiteboardEditorPage() {
   const [toolsOpen, setToolsOpen] = useState(false);
   const [membersOpen, setMembersOpen] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
-  const [detailsTab, setDetailsTab] = useState<WhiteboardDetailsTab>("history");
+  const [exportOpen, setExportOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [exporting, setExporting] = useState<"pdf" | "zip" | "png" | null>(null);
+  const [exporting, setExporting] = useState(false);
+  const [savingPng, setSavingPng] = useState(false);
 
   const lastInkRef = useRef(theme.ink);
   const inkReadyRef = useRef(false);
@@ -165,14 +167,16 @@ export default function WhiteboardEditorPage() {
     );
   }
 
-  const handleExport = async (format: "pdf" | "zip" | "png") => {
-    setMenuOpen(false);
-    setExporting(format);
+  const handleExport = async (
+    format: "pdf" | "zip" | "png",
+    pageIds: string[],
+  ) => {
+    setExporting(true);
     try {
       const file = await downloadWhiteboardExportApi(
         sync.board!.id,
         format,
-        format === "png" ? sync.pageId ?? undefined : undefined,
+        pageIds,
       );
       const href = URL.createObjectURL(file.blob);
       const link = document.createElement("a");
@@ -180,6 +184,7 @@ export default function WhiteboardEditorPage() {
       link.download = file.filename;
       link.click();
       URL.revokeObjectURL(href);
+      setExportOpen(false);
     } catch (err) {
       toast({
         variant: "error",
@@ -187,7 +192,27 @@ export default function WhiteboardEditorPage() {
         message: err instanceof ApiError ? err.message : "Save snapshots first, then export.",
       });
     } finally {
-      setExporting(null);
+      setExporting(false);
+    }
+  };
+
+  const handleSavePng = async (pageIds: string[]) => {
+    setSavingPng(true);
+    try {
+      await sync.saveSnapshotsForPages(pageIds, theme.paper, theme.dark);
+      toast({
+        variant: "success",
+        title: "Saved as PNG",
+        message: "You can download those pages now.",
+      });
+    } catch (err) {
+      toast({
+        variant: "error",
+        title: "Could not save PNG",
+        message: err instanceof ApiError ? err.message : "Try again.",
+      });
+    } finally {
+      setSavingPng(false);
     }
   };
 
@@ -246,6 +271,11 @@ export default function WhiteboardEditorPage() {
         >
           {saveLabel}
         </span>
+        {sync.myRole === "VIEWER" ? (
+          <span className="rounded-full bg-glass-button px-2.5 py-1 text-xs font-medium text-primary/55">
+            Viewer · comments only
+          </span>
+        ) : null}
         <div className="ml-auto flex min-w-0 items-center gap-2">
           <WhiteboardPresenceBar people={sync.people} />
           <div className="relative">
@@ -263,48 +293,24 @@ export default function WhiteboardEditorPage() {
                   type="button"
                   onClick={() => {
                     setMenuOpen(false);
-                    setDetailsTab("history");
                     setDetailsOpen(true);
                   }}
                   className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-glass-button"
                 >
-                  <Clock className="size-4" /> History
+                  <PanelRight className="size-4" /> Board details
                 </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMenuOpen(false);
-                    setDetailsTab("comments");
-                    setDetailsOpen(true);
-                  }}
-                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-glass-button"
-                >
-                  <MessageSquare className="size-4" /> Comments
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void handleExport("png")}
-                  disabled={exporting !== null}
-                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-glass-button disabled:opacity-50"
-                >
-                  <ImageIcon className="size-4" /> {exporting === "png" ? "Exporting..." : "Export PNG"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void handleExport("pdf")}
-                  disabled={exporting !== null}
-                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-glass-button disabled:opacity-50"
-                >
-                  <Download className="size-4" /> {exporting === "pdf" ? "Exporting..." : "Export PDF"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void handleExport("zip")}
-                  disabled={exporting !== null}
-                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-glass-button disabled:opacity-50"
-                >
-                  <Download className="size-4" /> {exporting === "zip" ? "Exporting..." : "Export ZIP"}
-                </button>
+                {sync.canExport ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMenuOpen(false);
+                      setExportOpen(true);
+                    }}
+                    className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-glass-button"
+                  >
+                    <Download className="size-4" /> Download
+                  </button>
+                ) : null}
               </div>
             ) : null}
           </div>
@@ -321,8 +327,8 @@ export default function WhiteboardEditorPage() {
       <WhiteboardPagesBar
         pages={sync.pages}
         pageId={sync.pageId}
-        canAdd={sync.canDraw}
-        canDelete={sync.canManage}
+        canAdd={sync.canDraw && !profile?.isDemo}
+        canDelete={sync.canManage && !profile?.isDemo}
         onSelect={(next) => void sync.switchPage(next)}
         onAdd={() => void sync.addPage()}
         onDelete={(target) => void sync.removePage(target)}
@@ -380,7 +386,7 @@ export default function WhiteboardEditorPage() {
       <WhiteboardMembersModal
         isOpen={membersOpen}
         board={sync.board}
-        canManage={sync.canManage}
+        canManage={sync.canManage && !profile?.isDemo}
         onClose={() => setMembersOpen(false)}
         onChanged={(next) => sync.setBoard(next)}
       />
@@ -388,10 +394,21 @@ export default function WhiteboardEditorPage() {
         board={sync.board}
         pageId={sync.pageId ?? undefined}
         open={detailsOpen}
-        tab={detailsTab}
         currentUserId={profile?.id}
-        onTabChange={setDetailsTab}
         onClose={() => setDetailsOpen(false)}
+      />
+      <WhiteboardExportModal
+        isOpen={exportOpen}
+        pages={sync.pages}
+        currentPageId={sync.pageId}
+        downloading={exporting}
+        savingPng={savingPng}
+        canSaveImage={sync.canSaveImage}
+        onClose={() => {
+          if (!exporting && !savingPng) setExportOpen(false);
+        }}
+        onDownload={(format, pageIds) => void handleExport(format, pageIds)}
+        onSavePng={(pageIds) => void handleSavePng(pageIds)}
       />
 
       <SaveSnapshotModal

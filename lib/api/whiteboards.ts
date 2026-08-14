@@ -229,12 +229,14 @@ export async function acceptWhiteboardInviteApi(token: string) {
 export async function downloadWhiteboardExportApi(
   id: string,
   format: "pdf" | "zip" | "png",
-  pageId?: string,
+  pageIds?: string[],
 ) {
   const { getAccessToken, apiUrl, ApiError } = await import("@/lib/api/client");
   const axios = (await import("axios")).default;
   const token = getAccessToken();
-  const query = pageId ? `?pageId=${encodeURIComponent(pageId)}` : "";
+  const params = new URLSearchParams();
+  if (pageIds?.length) params.set("pageIds", pageIds.join(","));
+  const query = params.toString() ? `?${params.toString()}` : "";
   const response = await axios.request<Blob>({
     url: apiUrl(`/api/whiteboards/${id}/export/${format}${query}`),
     method: "GET",

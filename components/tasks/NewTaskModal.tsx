@@ -8,6 +8,7 @@ import { Input, Textarea } from "@/components/ui/input";
 import { MultiSelect } from "@/components/ui/MultiSelect";
 import { Select } from "@/components/ui/Select";
 import { useToast } from "@/components/ui/Toast";
+import { useUser } from "@/components/providers/UserProvider";
 import { apiFetch } from "@/lib/api/client";
 import { cn } from "@/lib/cn";
 import {
@@ -187,6 +188,7 @@ function NewTaskForm({
   submitting?: boolean;
 }) {
   const { toast } = useToast();
+  const { profile } = useUser();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [priority, setPriority] = useState<TaskPriority>("Medium");
@@ -380,6 +382,7 @@ function NewTaskForm({
             required
             placeholder="e.g. Design onboarding flow"
           />
+          {profile?.isDemo ? null : (
           <button
             type="button"
             onClick={handleAiSuggest}
@@ -404,6 +407,7 @@ function NewTaskForm({
               AI
             </span>
           </button>
+          )}
         </div>
 
         <div>

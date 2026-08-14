@@ -47,6 +47,28 @@ export function applyOpsLocally(
   };
 }
 
+export function mergeDocuments(
+  server: WhiteboardDocument,
+  local: WhiteboardDocument,
+): WhiteboardDocument {
+  const strokes = new Map(server.strokes.map((stroke) => [stroke.id, stroke]));
+  for (const stroke of local.strokes) {
+    const existing = strokes.get(stroke.id);
+    if (!existing || stroke.points.length >= existing.points.length) {
+      strokes.set(stroke.id, stroke);
+    }
+  }
+  const regions = new Map(server.regions.map((region) => [region.id, region]));
+  for (const region of local.regions) {
+    if (!regions.has(region.id)) regions.set(region.id, region);
+  }
+  return {
+    canvas: local.canvas ?? server.canvas,
+    strokes: [...strokes.values()],
+    regions: [...regions.values()],
+  };
+}
+
 export function mergeStroke(current: Stroke | null, point: Stroke["points"][number]): Stroke {
   if (!current) {
     throw new Error("Cannot merge into an empty stroke");

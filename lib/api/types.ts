@@ -22,6 +22,7 @@ export type ApiUser = {
   projects?: ApiUserProject[];
   _meta?: Record<string, unknown>;
   stats?: Record<string, unknown>;
+  isDemo?: boolean;
 };
 
 export type ApiUserActivityTask = {

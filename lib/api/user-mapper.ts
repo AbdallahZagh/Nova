@@ -65,6 +65,7 @@ export function apiUserToProfile(user: ApiUser): UserProfile {
     role: user.roleTitle,
     bio: user.bio ?? "",
     avatarUrl: user.avatarUrl ?? null,
+    isDemo: Boolean(user.isDemo),
     projectCount,
     taskCount,
     activity: user.activity ?? {},

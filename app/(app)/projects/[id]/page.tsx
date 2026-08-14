@@ -51,7 +51,8 @@ export default function ProjectWorkspacePage() {
   const canEditTasks = canEditProjectTasks(currentRole);
   const canAssignTasks = canAssignProjectTasks(currentRole);
   const canAssignSubtasks = canEditTasks;
-  const canManageTeam = canManageProjectTeam(currentRole);
+  const canManageTeam =
+    !profile?.isDemo && canManageProjectTeam(currentRole);
 
   const {
     getProject,

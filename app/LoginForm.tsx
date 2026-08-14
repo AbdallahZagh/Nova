@@ -6,6 +6,7 @@ import { establishSession } from "@/app/actions/session";
 import { Input, PasswordInput } from "@/components/ui/input";
 import { useToast } from "@/components/ui/Toast";
 import { loginApi, reactivateApi } from "@/lib/api/auth";
+import { getDemoCredentialsApi } from "@/lib/demo";
 import { ApiError, setAccessToken } from "@/lib/api/client";
 
 function isInactiveAccountError(err: unknown) {
@@ -26,6 +27,7 @@ function LoginFormContent() {
   const searchParams = useSearchParams();
   const { toast } = useToast();
   const [pending, setPending] = useState(false);
+  const [demoPending, setDemoPending] = useState(false);
   const [error, setError] = useState<string | undefined>();
   const showedExpiredToast = useRef(false);
 
@@ -122,6 +124,37 @@ function LoginFormContent() {
     }
   }
 
+  async function handleDemoLogin() {
+    setError(undefined);
+    setDemoPending(true);
+    try {
+      const demo = await getDemoCredentialsApi();
+      const response = await loginApi(demo.email, demo.password);
+      const accessToken = response.accessToken ?? response.access_token;
+      if (!accessToken) {
+        throw new ApiError("Demo login did not return a token.", 500, response);
+      }
+      setAccessToken(accessToken);
+      await establishSession();
+      toast({
+        variant: "success",
+        title: "Demo workspace",
+        message: "A short tour will explain what you can try.",
+      });
+      router.push("/dashboard");
+      router.refresh();
+    } catch (err) {
+      const message =
+        err instanceof ApiError
+          ? err.message
+          : "Demo sign-in is unavailable right now.";
+      setError(message);
+      toast({ variant: "error", title: "Demo unavailable", message });
+    } finally {
+      setDemoPending(false);
+    }
+  }
+
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div>
@@ -177,11 +210,22 @@ function LoginFormContent() {
 
       <button
         type="submit"
-        disabled={pending}
+        disabled={pending || demoPending}
         className="w-full rounded-xl bg-accent px-4 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-60"
       >
         {pending ? "Signing in..." : "Sign in"}
       </button>
+      <button
+        type="button"
+        disabled={pending || demoPending}
+        onClick={() => void handleDemoLogin()}
+        className="w-full rounded-xl border border-glass bg-glass-button px-4 py-2.5 text-sm font-semibold text-primary transition hover:text-accent disabled:opacity-60"
+      >
+        {demoPending ? "Opening demo..." : "Try demo"}
+      </button>
+      <p className="text-center text-xs text-primary/50">
+        Shared sandbox for portfolios. No email required.
+      </p>
     </form>
   );
 }

@@ -157,6 +157,18 @@ export function canDrawOnBoard(role: WhiteboardRole | null | undefined) {
   return role === "ADMIN" || role === "MEMBER";
 }
 
+export function canCommentOnBoard(role: WhiteboardRole | null | undefined) {
+  return canDrawOnBoard(role);
+}
+
+export function canViewBoardActivity(role: WhiteboardRole | null | undefined) {
+  return canDrawOnBoard(role);
+}
+
+export function canExportBoard(role: WhiteboardRole | null | undefined) {
+  return role === "ADMIN" || role === "MEMBER";
+}
+
 export function canSaveBoardImage(role: WhiteboardRole | null | undefined) {
   return role === "ADMIN";
 }

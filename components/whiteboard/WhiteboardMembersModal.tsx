@@ -39,9 +39,9 @@ type WhiteboardMembersModalProps = {
 };
 
 const ROLE_OPTIONS = [
-  { value: "ADMIN", label: "Admin" },
-  { value: "MEMBER", label: "Member" },
-  { value: "VIEWER", label: "Viewer" },
+  { value: "ADMIN", label: "Admin", description: "Draw, manage people, save images, download" },
+  { value: "MEMBER", label: "Member", description: "Draw, comment, and download" },
+  { value: "VIEWER", label: "Viewer", description: "View the board and comments only" },
 ];
 
 const roleStyles: Record<WhiteboardRole, string> = {

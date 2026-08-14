@@ -855,9 +855,11 @@ export default function ProfilePage() {
             <div className="flex size-24 items-center justify-center rounded-2xl bg-linear-135 from-accent to-accent/60 text-3xl font-bold text-white shadow-lg shadow-accent/25">
               {initials}
             </div>
-            <div className="absolute -bottom-1.5 -right-1.5 flex size-8 items-center justify-center rounded-full border-2 border-sidebar bg-glass-button text-primary/50 transition hover:text-accent cursor-pointer">
-              <Camera className="size-3.5" />
-            </div>
+            {profile.isDemo ? null : (
+              <div className="absolute -bottom-1.5 -right-1.5 flex size-8 items-center justify-center rounded-full border-2 border-sidebar bg-glass-button text-primary/50 transition hover:text-accent cursor-pointer">
+                <Camera className="size-3.5" />
+              </div>
+            )}
           </div>
 
           {/* Info */}
@@ -891,17 +893,15 @@ export default function ProfilePage() {
         </div>
       </GlassCard>
 
-      {/* ── Edit profile ── */}
-      <EditProfileSection />
+      {profile.isDemo ? null : <EditProfileSection />}
 
-      {/* ── Change password ── */}
-      <ChangePasswordSection />
+      {profile.isDemo ? null : <ChangePasswordSection />}
 
       <ProfileActivitySection />
 
       <ProfileProjectsSection />
 
-      {/* ── Danger zone ── */}
+      {profile.isDemo ? null : (
       <GlassCard className="p-6">
         <div className="mb-5 flex items-center gap-3">
           <div className="flex size-9 items-center justify-center rounded-xl bg-red-500/15 text-red-400 light:text-red-600">
@@ -932,6 +932,7 @@ export default function ProfilePage() {
           </div>
         </div>
       </GlassCard>
+      )}
 
       {/* ── Delete confirm modal ── */}
       <DeleteConfirmModal

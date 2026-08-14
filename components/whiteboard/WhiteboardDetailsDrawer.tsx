@@ -21,9 +21,7 @@ import { normalizeMention, type MentionUser } from "@/lib/mentions";
 import { formatActivityTime } from "@/lib/tasks";
 import { whiteboardActivityMessage } from "@/lib/whiteboard/activity";
 import type { Whiteboard } from "@/lib/whiteboard/types";
-import { canDrawOnBoard } from "@/lib/whiteboard/types";
-
-export type WhiteboardDetailsTab = "history" | "comments";
+import { canCommentOnBoard, canViewBoardActivity } from "@/lib/whiteboard/types";
 
 function DetailsSkeleton() {
   return (
@@ -47,16 +45,13 @@ export function WhiteboardDetailsDrawer({
   board,
   pageId,
   open,
-  tab,
   currentUserId,
   onClose,
 }: {
   board: Whiteboard;
   pageId?: string;
   open: boolean;
-  tab: WhiteboardDetailsTab;
   currentUserId?: string;
-  onTabChange?: (tab: WhiteboardDetailsTab) => void;
   onClose: () => void;
 }) {
   const { toast } = useToast();
@@ -65,7 +60,8 @@ export function WhiteboardDetailsDrawer({
   const [loading, setLoading] = useState(false);
   const [content, setContent] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const canComment = canDrawOnBoard(board.myRole);
+  const canComment = canCommentOnBoard(board.myRole);
+  const canViewActivity = canViewBoardActivity(board.myRole);
   const users = useMemo<MentionUser[]>(
     () =>
       board.members
@@ -84,7 +80,9 @@ export function WhiteboardDetailsDrawer({
     // eslint-disable-next-line react-hooks/set-state-in-effect -- reset loading when the drawer opens
     setLoading(true);
     void Promise.all([
-      listWhiteboardActivityApi(board.id),
+      canViewActivity
+        ? listWhiteboardActivityApi(board.id)
+        : Promise.resolve([] as WhiteboardActivity[]),
       listWhiteboardCommentsApi(board.id),
     ])
       .then(([history, rows]) => {
@@ -105,7 +103,7 @@ export function WhiteboardDetailsDrawer({
     return () => {
       cancelled = true;
     };
-  }, [board.id, open, toast]);
+  }, [board.id, canViewActivity, open, toast]);
 
   const submit = async () => {
     const next = content.trim();
@@ -168,7 +166,11 @@ export function WhiteboardDetailsDrawer({
             {submitting ? "Posting..." : "Add Comment"}
           </button>
         </div>
-      ) : null}
+      ) : (
+        <p className="mt-3 text-sm text-primary/50">
+          You can read comments. Only members can post.
+        </p>
+      )}
       {loading ? (
         <div className="mt-4">
           <DetailsSkeleton />
@@ -262,17 +264,8 @@ export function WhiteboardDetailsDrawer({
   return (
     <SideDrawer isOpen={open} onClose={onClose} title="Board Details">
       <div className="space-y-4">
-        {tab === "comments" ? (
-          <>
-            {commentsCard}
-            {historyCard}
-          </>
-        ) : (
-          <>
-            {historyCard}
-            {commentsCard}
-          </>
-        )}
+        {commentsCard}
+        {canViewActivity ? historyCard : null}
       </div>
     </SideDrawer>
   );

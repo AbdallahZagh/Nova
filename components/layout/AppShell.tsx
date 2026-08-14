@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { Header } from "@/components/ui/Header";
 import { Sidebar } from "@/components/ui/Sidebar";
+import { OfflineBanner } from "@/components/offline/OfflineBanner";
+import { DemoTourModal } from "@/components/demo/DemoTourModal";
 
 type AppShellProps = {
   children: React.ReactNode;
@@ -22,9 +24,11 @@ export function AppShell({ children }: AppShellProps) {
           searchOpen={searchOpen}
           onSearchOpenChange={setSearchOpen}
         />
-        <main className="mt-16 h-[calc(100dvh-4rem)] overflow-y-auto p-6 md:p-8">
-          {children}
+        <main className="mt-16 h-[calc(100dvh-4rem)] overflow-y-auto">
+          <OfflineBanner />
+          <div className="p-6 md:p-8">{children}</div>
         </main>
+        <DemoTourModal />
       </div>
     </div>
   );

@@ -6,9 +6,11 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { PenLine, Plus } from "lucide-react";
 import { WhiteboardsSkeleton } from "@/components/skeletons/WhiteboardsSkeleton";
 import { DeleteConfirmModal } from "@/components/ui/DeleteConfirmModal";
+import { Select } from "@/components/ui/Select";
 import { WhiteboardCardMenu } from "@/components/whiteboard/WhiteboardCardMenu";
 import { useToast } from "@/components/ui/Toast";
 import { useAppData } from "@/components/providers/AppDataProvider";
+import { useUser } from "@/components/providers/UserProvider";
 import { ApiError } from "@/lib/api/client";
 import {
   createWhiteboardApi,
@@ -24,6 +26,7 @@ function WhiteboardListPage() {
   const searchParams = useSearchParams();
   const { toast } = useToast();
   const { projects } = useAppData();
+  const { profile } = useUser();
   const projectFilter = searchParams.get("projectId");
 
   const [boards, setBoards] = useState<Whiteboard[]>([]);
@@ -67,6 +70,17 @@ function WhiteboardListPage() {
 
   const projectNameById = useMemo(
     () => Object.fromEntries(projects.map((project) => [project.id, project.title])),
+    [projects],
+  );
+
+  const boardTypeOptions = useMemo(
+    () => [
+      { value: "", label: "Personal board" },
+      ...projects.map((project) => ({
+        value: project.id,
+        label: project.title,
+      })),
+    ],
     [projects],
   );
 
@@ -147,14 +161,16 @@ function WhiteboardListPage() {
               : "Personal and project boards. Draw together; strokes are saved for later OCR training."}
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => setShowCreate(true)}
-          className="flex items-center gap-2 rounded-xl bg-linear-90 from-accent/75 to-accent/35 px-4 py-2.5 text-sm font-semibold text-primary transition hover:opacity-90"
-        >
-          <Plus className="size-4" />
-          New board
-        </button>
+        {profile?.isDemo ? null : (
+          <button
+            type="button"
+            onClick={() => setShowCreate(true)}
+            className="flex items-center gap-2 rounded-xl bg-linear-90 from-accent/75 to-accent/35 px-4 py-2.5 text-sm font-semibold text-primary transition hover:opacity-90"
+          >
+            <Plus className="size-4" />
+            New board
+          </button>
+        )}
       </div>
 
       {showCreate ? (
@@ -166,18 +182,14 @@ function WhiteboardListPage() {
               placeholder="Board title"
               className="rounded-xl border border-glass bg-glass-button px-3 py-2.5 text-sm text-primary outline-none placeholder:text-primary/40 focus:border-accent/50"
             />
-            <select
+            <Select
               value={projectId}
-              onChange={(event) => setProjectId(event.target.value)}
-              className="rounded-xl border border-glass bg-glass-button px-3 py-2.5 text-sm text-primary outline-none focus:border-accent/50"
-            >
-              <option value="">Personal board</option>
-              {projects.map((project) => (
-                <option key={project.id} value={project.id}>
-                  {project.title}
-                </option>
-              ))}
-            </select>
+              onChange={setProjectId}
+              options={boardTypeOptions}
+              placeholder="Board type"
+              aria-label="Board type"
+              className="w-full"
+            />
             <div className="flex gap-2">
               <button
                 type="button"
@@ -203,13 +215,15 @@ function WhiteboardListPage() {
         <div className="rounded-2xl border border-glass bg-glass-card p-10 text-center">
           <PenLine className="mx-auto size-8 text-accent/70" />
           <p className="mt-3 text-sm text-primary/60">No whiteboards yet.</p>
-          <button
-            type="button"
-            onClick={() => setShowCreate(true)}
-            className="mt-4 text-sm font-medium text-accent hover:underline"
-          >
-            Create your first board
-          </button>
+          {profile?.isDemo ? null : (
+            <button
+              type="button"
+              onClick={() => setShowCreate(true)}
+              className="mt-4 text-sm font-medium text-accent hover:underline"
+            >
+              Create your first board
+            </button>
+          )}
         </div>
       ) : (
         <div className="grid auto-rows-fr grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
@@ -253,12 +267,14 @@ function WhiteboardListPage() {
                     {new Date(board.lastEditedAt || board.updatedAt).toLocaleDateString()}
                   </p>
                 </div>
-                <WhiteboardCardMenu
-                  board={board}
-                  duplicating={duplicatingId === board.id}
-                  onDuplicate={(item) => void handleDuplicate(item)}
-                  onDelete={setDeleteTarget}
-                />
+                {profile?.isDemo ? null : (
+                  <WhiteboardCardMenu
+                    board={board}
+                    duplicating={duplicatingId === board.id}
+                    onDuplicate={(item) => void handleDuplicate(item)}
+                    onDelete={setDeleteTarget}
+                  />
+                )}
               </div>
             </article>
           ))}

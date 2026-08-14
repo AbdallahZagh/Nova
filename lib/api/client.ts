@@ -1,4 +1,15 @@
 import axios, { isAxiosError, type AxiosRequestConfig, type Method } from "axios";
+import {
+  enqueueMutation,
+  flushOfflineQueue,
+  isLikelyOffline,
+  isNetworkFailure,
+  optimisticMutationResponse,
+  readCachedGet,
+  setOfflineStatus,
+  shouldBypassOffline,
+  writeCachedGet,
+} from "@/lib/offline/store";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "";
 
@@ -69,6 +80,7 @@ export class ApiError extends Error {
 
 type ApiFetchOptions = RequestInit & {
   auth?: boolean;
+  skipOfflineQueue?: boolean;
 };
 
 function headersToObject(headers: Headers): Record<string, string> {
@@ -89,7 +101,14 @@ function getApiErrorMessage(payload: unknown, status: number) {
 }
 
 export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): Promise<T> {
-  const { auth = true, headers: providedHeaders, body, ...rest } = options;
+  const {
+    auth = true,
+    skipOfflineQueue = false,
+    headers: providedHeaders,
+    body,
+    ...rest
+  } = options;
+  const method = ((rest.method ?? "GET") as string).toUpperCase();
   const headers = new Headers(providedHeaders);
 
   if (body && !(body instanceof FormData) && !headers.has("Content-Type")) {
@@ -103,14 +122,44 @@ export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): 
     }
   }
 
+  const serializedBody =
+    typeof body === "string"
+      ? body
+      : body && !(body instanceof FormData)
+        ? JSON.stringify(body)
+        : undefined;
+
   const config: AxiosRequestConfig = {
     url: apiUrl(path),
-    method: (rest.method ?? "GET") as Method,
+    method: method as Method,
     headers: headersToObject(headers),
     data: body,
     signal: rest.signal ?? undefined,
     validateStatus: () => true,
   };
+
+  const serveOffline = async () => {
+    if (method === "GET") {
+      const cached = readCachedGet<T>(path);
+      if (cached !== null) {
+        setOfflineStatus(false);
+        return cached;
+      }
+    }
+    if (
+      !skipOfflineQueue &&
+      method !== "GET" &&
+      !shouldBypassOffline(path, body)
+    ) {
+      enqueueMutation({ method, path, body: serializedBody });
+      return optimisticMutationResponse(method, path, serializedBody) as T;
+    }
+    throw new ApiError("You're offline. Connect to sync.", 0);
+  };
+
+  if (isLikelyOffline() && !skipOfflineQueue) {
+    return serveOffline();
+  }
 
   try {
     const response = await axios.request<T>(config);
@@ -127,20 +176,43 @@ export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): 
       );
     }
 
+    setOfflineStatus(true);
+    if (method === "GET") writeCachedGet(path, response.data);
+    if (!skipOfflineQueue) {
+      void flushOfflineQueue(async (item) => {
+        await apiFetch(item.path, {
+          method: item.method,
+          body: item.body,
+          skipOfflineQueue: true,
+        });
+      });
+    }
     return response.data as T;
   } catch (error) {
-    if (error instanceof ApiError) throw error;
+    if (error instanceof ApiError) {
+      if (isNetworkFailure(error, error.status) && !skipOfflineQueue) {
+        return serveOffline();
+      }
+      throw error;
+    }
 
     if (isAxiosError(error)) {
       const status = error.response?.status ?? 0;
       if (auth && status === 401) {
         redirectToLoginForExpiredSession();
       }
+      if (isNetworkFailure(error, status) && !skipOfflineQueue) {
+        return serveOffline();
+      }
       throw new ApiError(
         getApiErrorMessage(error.response?.data, status || 500),
         status || 500,
         error.response?.data,
       );
+    }
+
+    if (isNetworkFailure(error) && !skipOfflineQueue) {
+      return serveOffline();
     }
 
     throw error;
