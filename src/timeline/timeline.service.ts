@@ -112,8 +112,7 @@ export class TimelineService {
           description: task.description,
           status: task.status,
           priority: task.priority,
-          // No stored start date — Gantt plots the due day, not createdAt→due.
-          startDate: due.toISOString(),
+          startDate: new Date(task.createdAt).toISOString(),
           dueDate: due.toISOString(),
           completedAt: task.completedAt ?? null,
           overdue: open && due < todayStart,

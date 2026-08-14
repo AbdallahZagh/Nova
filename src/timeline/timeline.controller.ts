@@ -22,7 +22,7 @@ export class TimelineController {
     summary: 'Fetch tasks mapped for the Gantt calendar window',
     description:
       'Returns tasks whose due date falls inside the requested calendar window, ' +
-      'ordered by deadline ascending. Bars are due-date anchored (there is no stored start date).\n\n' +
+      'ordered by deadline ascending. startDate is createdAt for Gantt bars; dueDate is the deadline for the calendar.\n\n' +
       '**projectId** (optional) — filter to a single project board. Omit to see tasks across all your projects.\n\n' +
       '**tzOffsetMinutes** (optional) — `Date#getTimezoneOffset()` from the client so today/week/month match the Gantt.\n\n' +
       '**filter** (optional, default: `monthly`) — calendar window in the caller timezone:\n' +
@@ -58,7 +58,7 @@ export class TimelineController {
     status: 200,
     description:
       'Task list scoped to the calendar window. ' +
-      'Each item: { id, title, description, status, priority, startDate, dueDate, completedAt, overdue, project, assignee, windowStart, windowEnd, windowLabel }',
+      'Each item: { id, title, description, status, priority, startDate (createdAt), dueDate, completedAt, overdue, project, assignee, windowStart, windowEnd, windowLabel }',
     schema: {
       example: [
         {
