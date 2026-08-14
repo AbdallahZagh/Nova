@@ -425,30 +425,17 @@ export class WhiteboardsService {
       throw new BadRequestException('At least one whiteboard op is required');
     }
 
-    const documentJson = hasDocumentOps
-      ? applyWhiteboardOps(page.documentJson, dto)
-      : undefined;
+    if (hasDocumentOps) {
+      await this.commitPageOps(whiteboardId, pageId, dto);
+    }
 
-    await this.prisma.$transaction([
-      ...(documentJson
-        ? [
-            this.prisma.whiteboardPage.update({
-              where: { id: pageId },
-              data: {
-                documentJson: documentJson as object,
-                version: { increment: 1 },
-              },
-            }),
-          ]
-        : []),
-      this.prisma.whiteboard.update({
-        where: { id: whiteboardId },
-        data: {
-          ...(dto.title !== undefined ? { title: dto.title } : {}),
-          updatedAt: new Date(),
-        },
-      }),
-    ]);
+    await this.prisma.whiteboard.update({
+      where: { id: whiteboardId },
+      data: {
+        ...(dto.title !== undefined ? { title: dto.title } : {}),
+        updatedAt: new Date(),
+      },
+    });
 
     if (dto.title !== undefined && dto.title !== row.title) {
       await this.recordActivity(
@@ -464,6 +451,36 @@ export class WhiteboardsService {
     await this.touchLastEdited(whiteboardId, userId);
 
     return this.formatWhiteboard(await this.loadBoard(whiteboardId), userId, true);
+  }
+
+  /** Merge ops onto the latest page document using version as a compare-and-swap. */
+  private async commitPageOps(
+    whiteboardId: string,
+    pageId: string,
+    dto: ApplyWhiteboardOpsDto,
+  ) {
+    for (let attempt = 0; attempt < 8; attempt++) {
+      const page = await this.prisma.whiteboardPage.findUnique({
+        where: { id: pageId },
+      });
+      if (!page || page.whiteboardId !== whiteboardId) {
+        throw new NotFoundException('Whiteboard page not found');
+      }
+
+      const documentJson = applyWhiteboardOps(page.documentJson, dto);
+      const result = await this.prisma.whiteboardPage.updateMany({
+        where: { id: pageId, version: page.version },
+        data: {
+          documentJson: documentJson as object,
+          version: { increment: 1 },
+        },
+      });
+      if (result.count === 1) return;
+    }
+
+    throw new ConflictException(
+      'This page was updated at the same time. Retry the merge.',
+    );
   }
 
   async addPage(userId: string, whiteboardId: string) {
@@ -1119,7 +1136,10 @@ export class WhiteboardsService {
     pageIds?: string[],
   ) {
     const row = await this.loadBoard(id);
-    await this.ensureWhiteboardAccess(userId, row);
+    const member = await this.ensureWhiteboardAccess(userId, row);
+    if (member.role === WhiteboardRole.VIEWER) {
+      throw new ForbiddenException('Viewers cannot export this whiteboard');
+    }
 
     const pages = [...row.pages].sort((a, b) => a.index - b.index);
     const wanted = new Set((pageIds ?? []).filter(Boolean));
