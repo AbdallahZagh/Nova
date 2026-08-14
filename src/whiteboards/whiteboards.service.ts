@@ -3,9 +3,11 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { ProjectRole } from '../common/decorators/require-project-role.decorator';
+import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { StorageService } from '../storage/storage.service';
 import { AddWhiteboardMembersDto } from './dto/add-whiteboard-members.dto';
@@ -92,9 +94,12 @@ type BoardRow = {
 
 @Injectable()
 export class WhiteboardsService {
+  private readonly logger = new Logger(WhiteboardsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly storage: StorageService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   private formatSnapshot(row: NonNullable<SnapshotRow>) {
@@ -471,7 +476,21 @@ export class WhiteboardsService {
       .filter((path): path is string => Boolean(path));
     await this.storage.deleteSnapshots(paths);
 
+    const recipientIds = [
+      ...row.members.map((member) => member.userId),
+      row.createdById,
+    ].filter((recipientId) => recipientId && recipientId !== userId);
+
     await this.prisma.whiteboard.delete({ where: { id } });
+
+    await this.notifySafely(() =>
+      this.notifications.notifyWhiteboardDeleted(
+        recipientIds,
+        id,
+        this.boardTitle(row),
+        row.projectId,
+      ),
+    );
 
     return { success: true };
   }
@@ -587,6 +606,31 @@ export class WhiteboardsService {
       })),
     });
 
+    const inviterName =
+      actor.user.fullName.trim() ||
+      (
+        await this.prisma.user.findUnique({
+          where: { id: userId },
+          select: { fullName: true },
+        })
+      )?.fullName?.trim() ||
+      'Someone';
+
+    await Promise.all(
+      membersToAdd.map((input) =>
+        this.notifySafely(() =>
+          this.notifications.notifyWhiteboardMemberAdded(
+            input.userId,
+            whiteboardId,
+            this.boardTitle(row),
+            inviterName,
+            input.role,
+            row.projectId,
+          ),
+        ),
+      ),
+    );
+
     return this.formatWhiteboard(await this.loadBoard(whiteboardId), userId, true);
   }
 
@@ -616,6 +660,17 @@ export class WhiteboardsService {
       data: { role: dto.role },
     });
 
+    if (target.role !== dto.role) {
+      await this.notifySafely(() =>
+        this.notifications.notifyWhiteboardRoleChanged(
+          userId,
+          whiteboardId,
+          this.boardTitle(row),
+          dto.role,
+        ),
+      );
+    }
+
     return this.formatWhiteboard(await this.loadBoard(whiteboardId), actorId, true);
   }
 
@@ -635,6 +690,32 @@ export class WhiteboardsService {
       where: { userId_whiteboardId: { userId, whiteboardId } },
     });
 
+    if (userId !== actorId) {
+      await this.notifySafely(() =>
+        this.notifications.notifyWhiteboardMemberRemoved(
+          userId,
+          whiteboardId,
+          this.boardTitle(row),
+        ),
+      );
+    }
+
     return this.formatWhiteboard(await this.loadBoard(whiteboardId), actorId, true);
+  }
+
+  private boardTitle(row: BoardRow) {
+    return row.title?.trim() || 'Untitled whiteboard';
+  }
+
+  private async notifySafely(send: () => Promise<unknown>) {
+    try {
+      await send();
+    } catch (error) {
+      this.logger.error(
+        `Whiteboard notification failed: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
   }
 }

@@ -120,7 +120,11 @@ export class NotificationsService implements OnModuleInit {
     });
 
     try {
-      await this.pushToUserDevices(userId, title, body, metadata);
+      await this.pushToUserDevices(userId, title, body, {
+        ...(metadata ?? {}),
+        type,
+        notificationId: notification.id,
+      });
     } catch (error) {
       this.logger.error(
         `FCM push failed for user ${userId}: ${
@@ -191,6 +195,76 @@ export class NotificationsService implements OnModuleInit {
       'Removed from project',
       `You were removed from ${projectName}.`,
       { projectId },
+    );
+  }
+
+  async notifyWhiteboardMemberAdded(
+    userId: string,
+    whiteboardId: string,
+    whiteboardTitle: string,
+    inviterName: string,
+    role: string,
+    projectId?: string | null,
+  ) {
+    await this.createNotification(
+      userId,
+      'WHITEBOARD_MEMBER_ADDED',
+      'Added to whiteboard',
+      `${inviterName} added you to ${whiteboardTitle} as ${role.toLowerCase()}.`,
+      {
+        whiteboardId,
+        role,
+        url: `/whiteboard/${whiteboardId}`,
+        ...(projectId ? { projectId } : {}),
+      },
+    );
+  }
+
+  async notifyWhiteboardRoleChanged(
+    userId: string,
+    whiteboardId: string,
+    whiteboardTitle: string,
+    role: string,
+  ) {
+    await this.createNotification(
+      userId,
+      'WHITEBOARD_ROLE_CHANGED',
+      'Whiteboard role updated',
+      `Your role on ${whiteboardTitle} is now ${role.toLowerCase()}.`,
+      { whiteboardId, role, url: `/whiteboard/${whiteboardId}` },
+    );
+  }
+
+  async notifyWhiteboardMemberRemoved(
+    userId: string,
+    whiteboardId: string,
+    whiteboardTitle: string,
+  ) {
+    await this.createNotification(
+      userId,
+      'WHITEBOARD_MEMBER_REMOVED',
+      'Removed from whiteboard',
+      `You were removed from ${whiteboardTitle}.`,
+      { whiteboardId, url: '/whiteboard' },
+    );
+  }
+
+  async notifyWhiteboardDeleted(
+    userIds: string[],
+    whiteboardId: string,
+    whiteboardTitle: string,
+    projectId?: string | null,
+  ) {
+    await this.notifyUsers(
+      userIds,
+      'WHITEBOARD_DELETED',
+      'Whiteboard deleted',
+      `${whiteboardTitle} was deleted.`,
+      {
+        whiteboardId,
+        url: '/whiteboard',
+        ...(projectId ? { projectId } : {}),
+      },
     );
   }
 
