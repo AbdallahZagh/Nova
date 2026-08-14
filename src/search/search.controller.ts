@@ -23,9 +23,9 @@ export class SearchController {
 
   @Get()
   @ApiOperation({
-    summary: 'Search projects, tasks, and users',
+    summary: 'Search projects, tasks, whiteboards, and users',
     description:
-      'Runs a secure global omnisearch across projects, tasks, and users for the authenticated user.',
+      'Runs a secure global omnisearch across projects, tasks, whiteboards, and users for the authenticated user.',
   })
   @ApiQuery({ name: 'q', required: false, description: 'Search term' })
   @ApiResponse({
@@ -48,6 +48,14 @@ export class SearchController {
             name: 'Sarah Johnson',
             email: 'sarah.johnson@devteam.io',
             username: 'sarah',
+          },
+        ],
+        whiteboards: [
+          {
+            id: 'whiteboard-id',
+            title: 'Sprint planning',
+            projectId: 'project-id',
+            project: { id: 'project-id', name: 'Nova' },
           },
         ],
       },

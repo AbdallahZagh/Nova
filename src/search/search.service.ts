@@ -5,6 +5,7 @@ const EMPTY_SEARCH_RESULTS = {
   projects: [],
   tasks: [],
   users: [],
+  whiteboards: [],
 };
 
 @Injectable()
@@ -19,7 +20,7 @@ export class SearchService {
       OR: [{ ownerId: userId }, { members: { some: { userId } } }],
     };
 
-    const [projects, tasks, users] = await Promise.all([
+    const [projects, tasks, users, whiteboards] = await Promise.all([
       (this.prisma as any).project.findMany({
         where: {
           ...accessibleProjectWhere,
@@ -64,6 +65,35 @@ export class SearchService {
         },
         take: 5,
       }),
+      (this.prisma as any).whiteboard.findMany({
+        where: {
+          AND: [
+            {
+              OR: [{ createdById: userId }, { members: { some: { userId } } }],
+            },
+            {
+              OR: [
+                { title: { contains: q, mode: 'insensitive' } },
+                ...(this.matchesUntitled(q)
+                  ? [{ title: null }, { title: '' }]
+                  : []),
+              ],
+            },
+          ],
+        },
+        select: {
+          id: true,
+          title: true,
+          projectId: true,
+          project: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+        },
+        take: 5,
+      }),
     ]);
 
     return {
@@ -75,6 +105,22 @@ export class SearchService {
         email: user.email,
         username: user.username,
       })),
+      whiteboards: whiteboards.map((board: any) => ({
+        id: board.id,
+        title: board.title?.trim() || 'Untitled whiteboard',
+        projectId: board.projectId,
+        project: board.project
+          ? { id: board.project.id, name: board.project.name }
+          : null,
+      })),
     };
+  }
+
+  private matchesUntitled(query: string) {
+    const q = query.toLowerCase();
+    return (
+      q.length >= 3 &&
+      ['untitled', 'untitled whiteboard'].some((label) => label.startsWith(q))
+    );
   }
 }
