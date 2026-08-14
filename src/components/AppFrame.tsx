@@ -16,10 +16,12 @@ import { useNotificationSync } from "@/hooks/useNotificationSync";
 import { useAuthStore } from "@/store/useAuthStore";
 import { useNotificationStore } from "@/store/useNotificationStore";
 import { getPalette } from "@/theme/colors";
+import { useWhiteboardLeave } from "@/whiteboard/WhiteboardLeaveContext";
 
 const tabs = [
   { href: "/(main)/dashboard", label: "Dashboard", icon: "grid-outline" },
   { href: "/(main)/projects", label: "Projects", icon: "folder-open-outline" },
+  { href: "/(main)/whiteboard", label: "Board", icon: "easel-outline" },
   { href: "/(main)/timeline", label: "Timeline", icon: "git-compare-outline" },
   { href: "/(main)/profile", label: "Profile", icon: "person-outline" },
 ] as const;
@@ -32,6 +34,13 @@ export function AppFrame({ children }: PropsWithChildren) {
   const user = useAuthStore((state) => state.user);
   const unreadCount = useNotificationStore((state) => state.unreadCount);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
+  const hideTabs = pathname.includes("/whiteboard/");
+  const { tryLeave } = useWhiteboardLeave();
+
+  const go = (href: string) => {
+    if (tryLeave(href)) return;
+    router.push(href as never);
+  };
 
   useNotificationSync(user);
 
@@ -58,7 +67,7 @@ export function AppFrame({ children }: PropsWithChildren) {
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Go to dashboard"
-          onPress={() => router.push("/(main)/dashboard")}
+          onPress={() => go("/(main)/dashboard")}
           className="items-center justify-center active:opacity-75"
         >
           <DynamicLogo size={40} />
@@ -68,7 +77,7 @@ export function AppFrame({ children }: PropsWithChildren) {
           <Pressable
             accessibilityLabel="Search"
             accessibilityRole="button"
-            onPress={() => router.push("/(main)/search")}
+            onPress={() => go("/(main)/search")}
             className="h-[42px] flex-1 flex-row items-center gap-2 rounded-[14px] border border-glass bg-glass-button px-3 active:opacity-70 dark:border-dark-glass dark:bg-dark-glass-button"
           >
             <Ionicons name="search-outline" size={18} color={palette.muted} />
@@ -78,7 +87,7 @@ export function AppFrame({ children }: PropsWithChildren) {
           <Pressable
             accessibilityLabel="Notifications"
             accessibilityRole="button"
-            onPress={() => router.push("/(main)/notifications")}
+            onPress={() => go("/(main)/notifications")}
             className="relative h-[42px] w-[42px] items-center justify-center rounded-[14px] border border-glass bg-glass-button active:opacity-70 dark:border-dark-glass dark:bg-dark-glass-button"
           >
             <Ionicons name="notifications-outline" size={20} color={palette.muted} />
@@ -112,13 +121,13 @@ export function AppFrame({ children }: PropsWithChildren) {
         <View className="flex-1">{children}</View>
       </KeyboardAvoidingView>
 
-      {keyboardVisible ? null : (
+      {keyboardVisible || hideTabs ? null : (
         <View
           pointerEvents="box-none"
           className="absolute left-0 right-0 bg-transparent px-3"
           style={{ bottom: insets.bottom + 8 }}
         >
-          <View className="relative flex-row gap-2 rounded-nova-lg border border-glass bg-sidebar shadow-lg shadow-black/20 dark:border-dark-glass dark:bg-dark-sidebar">
+          <View className="relative flex-row rounded-nova-lg border border-glass bg-sidebar shadow-lg shadow-black/20 dark:border-dark-glass dark:bg-dark-sidebar">
           {tabs.map((tab) => {
             const active =
               pathname === tab.href.replace("/(main)", "") ||
@@ -130,18 +139,19 @@ export function AppFrame({ children }: PropsWithChildren) {
               key={tab.href}
                 accessibilityRole="button"
                 accessibilityLabel={tab.label}
-                onPress={() => router.push(tab.href)}
-                className={`min-h-[58px] flex-1 items-center justify-center gap-[5px] rounded-nova-lg border ${
+                onPress={() => go(tab.href)}
+                className={`min-h-[54px] flex-1 items-center justify-center gap-[3px] rounded-nova-lg border ${
                   active ? "border-glass bg-glass-button dark:border-dark-glass dark:bg-dark-glass-button" : "border-transparent"
                 } active:opacity-75`}
                 >
                 <Ionicons
                   name={tab.icon}
-                  size={20}
+                  size={18}
                   color={active ? palette.accent : palette.muted}
                 />
                 <Text
-                  className={`text-[11px] font-extrabold ${
+                  numberOfLines={1}
+                  className={`text-[10px] font-extrabold ${
                     active ? "text-accent dark:text-dark-accent" : "text-muted dark:text-dark-muted"
                   }`}
                   >

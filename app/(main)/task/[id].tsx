@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -23,9 +23,19 @@ import {
   type Task,
 } from "@/api/tasks";
 import { getProjectApi, getProjectMemberRole, type Project } from "@/api/projects";
+import {
+  closeTaskCommentApi,
+  createTaskCommentApi,
+  listTaskCommentsApi,
+  replyTaskCommentApi,
+  type TaskComment,
+} from "@/api/task-comments";
 import { CalendarField } from "@/components/CalendarField";
 import { ConfirmationPopup } from "@/components/ConfirmationPopup";
+import { MentionComposer } from "@/components/mentions/MentionComposer";
+import { MentionText } from "@/components/mentions/MentionText";
 import { PageSkeleton } from "@/components/Skeleton";
+import { mentionUsersFromPeople } from "@/mentions";
 import { useAuthStore } from "@/store/useAuthStore";
 import { useSnackbarStore } from "@/store/useSnackbarStore";
 import { getPalette } from "@/theme/colors";
@@ -82,11 +92,42 @@ export default function TaskDetailScreen() {
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [comments, setComments] = useState<TaskComment[]>([]);
+  const [commentContent, setCommentContent] = useState("");
+  const [commentSubmitting, setCommentSubmitting] = useState(false);
+  const [replyingId, setReplyingId] = useState<string | null>(null);
+  const [replyContent, setReplyContent] = useState("");
+  const [busyCommentId, setBusyCommentId] = useState<string | null>(null);
 
   const taskId = Array.isArray(id) ? id[0] : id;
   const parentProjectId = Array.isArray(projectId) ? projectId[0] : projectId;
   const role = project ? getProjectMemberRole(project, user?.id) : null;
   const readOnly = role === "VIEWER";
+  const canAddComment = Boolean(role && role !== "VIEWER");
+  const canModerateComments = role === "OWNER" || role === "ADMIN";
+  const mentionUsers = useMemo(
+    () =>
+      mentionUsersFromPeople([
+        ...(project?.owner
+          ? [
+              {
+                id: project.owner.id,
+                username: project.owner.username,
+                fullName: project.owner.fullName,
+              },
+            ]
+          : []),
+        ...(project?.teamMembers ?? []).map((member) => ({
+          id: member.id,
+          userId: member.userId,
+          username: member.username,
+          fullName: member.name,
+          name: member.name,
+          email: member.email,
+        })),
+      ]),
+    [project],
+  );
 
   const load = useCallback(async () => {
     if (!taskId) return;
@@ -98,6 +139,8 @@ export default function TaskDetailScreen() {
         const projectData = await getProjectApi(relatedProjectId);
         setProject(projectData);
       }
+      const commentRows = await listTaskCommentsApi(taskId).catch(() => [] as TaskComment[]);
+      setComments(commentRows);
     } catch (error) {
       showSnackbar({
         variant: "error",
@@ -162,6 +205,66 @@ export default function TaskDetailScreen() {
       });
     } finally {
       setDeleting(false);
+    }
+  };
+
+  const addComment = async () => {
+    const content = commentContent.trim();
+    if (!task || !content || !canAddComment || commentSubmitting) return;
+    setCommentSubmitting(true);
+    try {
+      const created = await createTaskCommentApi(task.id, content);
+      setComments((current) => [created, ...current]);
+      setCommentContent("");
+    } catch (error) {
+      showSnackbar({
+        variant: "error",
+        title: "Could not post comment",
+        message: getApiErrorMessage(error, "Please try again."),
+      });
+    } finally {
+      setCommentSubmitting(false);
+    }
+  };
+
+  const submitReply = async (commentId: string) => {
+    const content = replyContent.trim();
+    if (!content || !canModerateComments || busyCommentId) return;
+    setBusyCommentId(commentId);
+    try {
+      const updated = await replyTaskCommentApi(commentId, content);
+      setComments((current) =>
+        current.map((item) => (item.id === commentId ? updated : item)),
+      );
+      setReplyingId(null);
+      setReplyContent("");
+    } catch (error) {
+      showSnackbar({
+        variant: "error",
+        title: "Could not reply",
+        message: getApiErrorMessage(error, "Please try again."),
+      });
+    } finally {
+      setBusyCommentId(null);
+    }
+  };
+
+  const closeComment = async (commentId: string) => {
+    if (!canModerateComments || busyCommentId) return;
+    setBusyCommentId(commentId);
+    try {
+      const updated = await closeTaskCommentApi(commentId);
+      setComments((current) =>
+        current.map((item) => (item.id === commentId ? updated : item)),
+      );
+    } catch (error) {
+      showSnackbar({
+        variant: "error",
+        title: "Could not close comment",
+        message: getApiErrorMessage(error, "Please try again."),
+      });
+    } finally {
+      setBusyCommentId(null);
     }
   };
 
@@ -379,6 +482,155 @@ export default function TaskDetailScreen() {
                   </View>
                 </View>
               ))
+            )}
+          </View>
+        </View>
+
+        <View className="rounded-nova-xl border border-glass bg-sidebar p-5 dark:border-dark-glass dark:bg-dark-sidebar">
+          <View className="mb-4 flex-row items-center justify-between">
+            <Text className="text-[18px] font-black text-primary dark:text-dark-primary">
+              Comments
+            </Text>
+            <Text className="text-xs font-bold text-muted dark:text-dark-muted">
+              {comments.length}
+            </Text>
+          </View>
+          {canAddComment ? (
+            <View className="gap-3">
+              <MentionComposer
+                value={commentContent}
+                onChange={setCommentContent}
+                users={mentionUsers}
+                placeholder="Add a task comment. Use @ to mention someone."
+                disabled={commentSubmitting}
+              />
+              <Pressable
+                disabled={!commentContent.trim() || commentSubmitting}
+                onPress={() => void addComment()}
+                className="min-h-[48px] items-center justify-center rounded-nova bg-accent disabled:opacity-50 dark:bg-dark-accent"
+              >
+                <Text className="font-black text-white">
+                  {commentSubmitting ? "Posting..." : "Add Comment"}
+                </Text>
+              </Pressable>
+            </View>
+          ) : null}
+          <View className="mt-4 gap-3">
+            {comments.length === 0 ? (
+              <Text className="text-sm text-muted dark:text-dark-muted">
+                No comments yet.
+              </Text>
+            ) : (
+              comments.map((comment) => {
+                const isClosed = comment.status === "CLOSED";
+                const isBusy = busyCommentId === comment.id;
+                const canAct = canModerateComments && !isClosed;
+                const isReplying = replyingId === comment.id;
+                return (
+                  <View
+                    key={comment.id}
+                    className="rounded-nova border border-glass bg-glass-card p-3 dark:border-dark-glass dark:bg-dark-glass-card"
+                  >
+                    <View className="flex-row items-start justify-between gap-3">
+                      <View className="flex-1">
+                        <Text className="font-black text-primary dark:text-dark-primary">
+                          {comment.createdBy?.fullName ?? "Project member"}
+                        </Text>
+                        <Text className="mt-1 text-xs text-muted dark:text-dark-muted">
+                          {comment.createdAt
+                            ? new Date(comment.createdAt).toLocaleString()
+                            : "Recently"}
+                        </Text>
+                      </View>
+                      <Text className="rounded-full border border-accent/40 px-2 py-1 text-[10px] font-black text-accent dark:text-dark-accent">
+                        {comment.status}
+                      </Text>
+                    </View>
+                    <MentionText
+                      content={comment.content}
+                      className="mt-3 text-sm leading-5 text-primary dark:text-dark-primary"
+                    />
+                    {comment.replyContent ? (
+                      <View className="mt-3 rounded-nova border border-accent/25 bg-accent/10 p-3">
+                        <Text className="text-[10px] font-black uppercase tracking-[1.4px] text-accent dark:text-dark-accent">
+                          Reply
+                        </Text>
+                        <MentionText
+                          content={comment.replyContent}
+                          className="mt-1.5 text-sm leading-5 text-primary dark:text-dark-primary"
+                        />
+                        <Text className="mt-1 text-xs text-muted dark:text-dark-muted">
+                          {comment.repliedBy?.fullName ?? "Admin"}
+                        </Text>
+                      </View>
+                    ) : null}
+                    {isClosed && comment.closedAt ? (
+                      <Text className="mt-2 text-xs text-muted dark:text-dark-muted">
+                        Closed by {comment.closedBy?.fullName ?? "Admin"}
+                      </Text>
+                    ) : null}
+                    {isReplying && canAct ? (
+                      <View className="mt-3 gap-2">
+                        <MentionComposer
+                          value={replyContent}
+                          onChange={setReplyContent}
+                          users={mentionUsers}
+                          placeholder="Write a reply. Use @ to mention someone."
+                          disabled={isBusy}
+                          minHeight={72}
+                        />
+                        <View className="flex-row gap-2">
+                          <Pressable
+                            disabled={isBusy}
+                            onPress={() => {
+                              setReplyingId(null);
+                              setReplyContent("");
+                            }}
+                            className="min-h-[44px] flex-1 items-center justify-center rounded-nova border border-glass bg-glass-button dark:border-dark-glass dark:bg-dark-glass-button"
+                          >
+                            <Text className="font-black text-primary dark:text-dark-primary">
+                              Cancel
+                            </Text>
+                          </Pressable>
+                          <Pressable
+                            disabled={!replyContent.trim() || isBusy}
+                            onPress={() => void submitReply(comment.id)}
+                            className="min-h-[44px] flex-1 items-center justify-center rounded-nova bg-accent disabled:opacity-50 dark:bg-dark-accent"
+                          >
+                            <Text className="font-black text-white">
+                              {isBusy ? "Replying..." : "Send Reply"}
+                            </Text>
+                          </Pressable>
+                        </View>
+                      </View>
+                    ) : canAct ? (
+                      <View className="mt-3 flex-row gap-2">
+                        <Pressable
+                          disabled={isBusy}
+                          onPress={() => {
+                            setReplyingId(comment.id);
+                            setReplyContent(comment.replyContent ?? "");
+                          }}
+                          className="min-h-[40px] flex-1 items-center justify-center rounded-nova border border-glass bg-glass-button dark:border-dark-glass dark:bg-dark-glass-button"
+                        >
+                          <Text className="text-xs font-black text-primary dark:text-dark-primary">
+                            Reply
+                          </Text>
+                        </Pressable>
+                        <Pressable
+                          disabled={isBusy}
+                          onPress={() => void closeComment(comment.id)}
+                          className="min-h-[40px] flex-1 items-center justify-center rounded-nova border border-glass bg-glass-button dark:border-dark-glass dark:bg-dark-glass-button"
+                        >
+                          <Text className="text-xs font-black text-primary dark:text-dark-primary">
+                            Close
+                          </Text>
+                        </Pressable>
+                      </View>
+                    ) : null}
+                  </View>
+                );
+              })
             )}
           </View>
         </View>

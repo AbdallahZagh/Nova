@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { Platform } from "react-native";
 import Constants from "expo-constants";
+import { router } from "expo-router";
 import { createClient } from "@supabase/supabase-js";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { saveDeviceTokenApi, type AppNotification } from "@/api/notifications";
@@ -9,6 +10,7 @@ import {
   SUPABASE_ANON_KEY,
   SUPABASE_URL,
 } from "@/config/notifications";
+import { hrefFromNotificationData } from "@/notifications/links";
 import { useAuthStore } from "@/store/useAuthStore";
 import { useNotificationStore } from "@/store/useNotificationStore";
 import { useSnackbarStore } from "@/store/useSnackbarStore";
@@ -103,6 +105,8 @@ function toNotification(row: Record<string, unknown>): AppNotification {
   };
 }
 
+const handledPushResponseIds = new Set<string>();
+
 export function useNotificationSync(user: ApiUser | null) {
   const showSnackbar = useSnackbarStore((state) => state.showSnackbar);
   const pushRealtimeNotification = useNotificationStore(
@@ -117,6 +121,20 @@ export function useNotificationSync(user: ApiUser | null) {
     let channel: RealtimeChannel | null = null;
     let cancelled = false;
     let notificationSubscription: { remove: () => void } | null = null;
+    let responseSubscription: { remove: () => void } | null = null;
+
+    const openFromPushData = (data?: Record<string, unknown>) => {
+      const key = String(data?.notificationId ?? data?.id ?? "");
+      if (key) {
+        if (handledPushResponseIds.has(key)) return;
+        handledPushResponseIds.add(key);
+      }
+      const href = hrefFromNotificationData(
+        String(data?.type ?? ""),
+        data ?? null,
+      );
+      if (href) router.push(href);
+    };
 
     channel = supabase
       .channel(`notification:${user.id}`)
@@ -169,6 +187,25 @@ export function useNotificationSync(user: ApiUser | null) {
             });
           });
 
+        responseSubscription =
+          modules.Notifications.addNotificationResponseReceivedListener(
+            (response) => {
+              const data = response.notification.request.content.data as
+                | Record<string, unknown>
+                | undefined;
+              openFromPushData(data);
+            },
+          );
+
+        const lastResponse =
+          await modules.Notifications.getLastNotificationResponseAsync();
+        if (!cancelled && lastResponse) {
+          const data = lastResponse.notification.request.content.data as
+            | Record<string, unknown>
+            | undefined;
+          openFromPushData(data);
+        }
+
         const token = await registerForPushNotifications(modules);
         if (!token || cancelled) return;
         console.log("[Nova] mobile push token:", token);
@@ -182,6 +219,7 @@ export function useNotificationSync(user: ApiUser | null) {
     return () => {
       cancelled = true;
       notificationSubscription?.remove();
+      responseSubscription?.remove();
       if (channel) void supabase.removeChannel(channel);
     };
   }, [pushRealtimeNotification, setDeviceToken, showSnackbar, user?.id]);

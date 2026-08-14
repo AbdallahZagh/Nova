@@ -9,7 +9,7 @@ import {
   View,
 } from "react-native";
 import Ionicons from "@expo/vector-icons/Ionicons";
-import { router, useLocalSearchParams } from "expo-router";
+import { type Href, router, useLocalSearchParams } from "expo-router";
 import { useColorScheme } from "nativewind";
 import { getApiErrorMessage } from "@/api/apiClient";
 import {
@@ -41,7 +41,10 @@ import {
 import { BottomDrawer } from "@/components/BottomDrawer";
 import { CalendarField } from "@/components/CalendarField";
 import { ConfirmationPopup } from "@/components/ConfirmationPopup";
+import { MentionComposer } from "@/components/mentions/MentionComposer";
+import { MentionText } from "@/components/mentions/MentionText";
 import { PageSkeleton } from "@/components/Skeleton";
+import { mentionUsersFromPeople } from "@/mentions";
 import { useAuthStore } from "@/store/useAuthStore";
 import { useSnackbarStore } from "@/store/useSnackbarStore";
 import { getPalette } from "@/theme/colors";
@@ -510,6 +513,29 @@ export default function ProjectDetailScreen() {
   const editable = canEditTasks(role);
   const assignable = canAssignTasks(role);
   const manageableTeam = canManageTeam(role);
+  const mentionUsers = useMemo(
+    () =>
+      mentionUsersFromPeople([
+        ...(project?.owner
+          ? [
+              {
+                id: project.owner.id,
+                username: project.owner.username,
+                fullName: project.owner.fullName,
+              },
+            ]
+          : []),
+        ...(project?.teamMembers ?? []).map((member) => ({
+          id: member.id,
+          userId: member.userId,
+          username: member.username,
+          fullName: member.name,
+          name: member.name,
+          email: member.email,
+        })),
+      ]),
+    [project],
+  );
 
   useEffect(() => {
     if (!teamOpen || !manageableTeam) return;
@@ -789,6 +815,13 @@ export default function ProjectDetailScreen() {
               </Text>
             </Pressable>
           </View>
+          <Pressable
+            onPress={() => router.push(`/(main)/whiteboard?projectId=${projectId}` as Href)}
+            className="min-h-[48px] flex-row items-center justify-center gap-2 rounded-nova border border-glass bg-glass-button dark:border-dark-glass dark:bg-dark-glass-button"
+          >
+            <Ionicons name="brush-outline" size={18} color={palette.accent} />
+            <Text className="font-black text-primary dark:text-dark-primary">Whiteboard</Text>
+          </Pressable>
           {editable ? (
             <Pressable
               onPress={() => setNewTaskOpen(true)}
@@ -991,29 +1024,46 @@ export default function ProjectDetailScreen() {
         title="Project Suggestions"
         subtitle="Comments and ideas attached to this project."
         onClose={() => setSuggestionsOpen(false)}
-      >
-        <TextInput
-          value={suggestionText}
-          onChangeText={setSuggestionText}
-          placeholder="Add a suggestion..."
-          placeholderTextColor={palette.muted}
-          multiline
-          textAlignVertical="top"
-          className="min-h-[92px] rounded-nova border border-glass bg-glass-button px-3.5 py-3 text-primary dark:border-dark-glass dark:bg-dark-glass-button dark:text-dark-primary"
-        />
-        <Pressable
-          disabled={creatingSuggestion || !suggestionText.trim()}
-          onPress={handleCreateSuggestion}
-          className="min-h-[48px] items-center justify-center rounded-nova bg-accent disabled:opacity-50 dark:bg-dark-accent"
-        >
-          <Text className="font-black text-white">{creatingSuggestion ? "Adding..." : "Add Suggestion"}</Text>
-        </Pressable>
-        {suggestions.map((suggestion) => (
-          <View key={suggestion.id} className="rounded-nova border border-glass bg-glass-card p-4 dark:border-dark-glass dark:bg-dark-glass-card">
-            <Text className="font-bold leading-5 text-primary dark:text-dark-primary">{suggestion.content}</Text>
-            <Text className="mt-2 text-xs text-muted dark:text-dark-muted">{suggestion.status} - {suggestion.author?.fullName ?? "Unknown"}</Text>
+        footer={
+          <View className="gap-3">
+            <MentionComposer
+              value={suggestionText}
+              onChange={setSuggestionText}
+              users={mentionUsers}
+              placeholder="Add a suggestion. Use @ to mention someone."
+            />
+            <Pressable
+              disabled={creatingSuggestion || !suggestionText.trim()}
+              onPress={handleCreateSuggestion}
+              className="min-h-[48px] items-center justify-center rounded-nova bg-accent disabled:opacity-50 dark:bg-dark-accent"
+            >
+              <Text className="font-black text-white">
+                {creatingSuggestion ? "Adding..." : "Add Suggestion"}
+              </Text>
+            </Pressable>
           </View>
-        ))}
+        }
+      >
+        {suggestions.length === 0 ? (
+          <Text className="py-6 text-center text-sm text-muted dark:text-dark-muted">
+            No suggestions yet.
+          </Text>
+        ) : (
+          suggestions.map((suggestion) => (
+            <View
+              key={suggestion.id}
+              className="rounded-nova border border-glass bg-glass-card p-4 dark:border-dark-glass dark:bg-dark-glass-card"
+            >
+              <MentionText
+                content={suggestion.content}
+                className="font-bold leading-5 text-primary dark:text-dark-primary"
+              />
+              <Text className="mt-2 text-xs text-muted dark:text-dark-muted">
+                {suggestion.status} - {suggestion.author?.fullName ?? "Unknown"}
+              </Text>
+            </View>
+          ))
+        )}
       </BottomDrawer>
 
       <ConfirmationPopup

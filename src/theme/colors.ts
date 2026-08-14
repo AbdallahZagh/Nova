@@ -32,7 +32,7 @@ export const darkColors = {
   white: "#ffffff",
 };
 
-export function getPalette(mode: "light" | "dark" | undefined) {
+export function getPalette(mode: string | undefined | null) {
   return mode === "dark" ? darkColors : lightColors;
 }
 

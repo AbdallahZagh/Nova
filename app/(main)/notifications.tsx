@@ -8,6 +8,7 @@ import {
   View,
 } from "react-native";
 import Ionicons from "@expo/vector-icons/Ionicons";
+import { router } from "expo-router";
 import { useColorScheme } from "nativewind";
 import {
   listNotificationsApi,
@@ -17,6 +18,7 @@ import {
 import { getApiErrorMessage } from "@/api/apiClient";
 import { NOTIFICATION_PAGE_SIZE } from "@/config/notifications";
 import { PageSkeleton } from "@/components/Skeleton";
+import { hrefFromNotification, formatNotificationType } from "@/notifications/links";
 import { useNotificationStore } from "@/store/useNotificationStore";
 import { useSnackbarStore } from "@/store/useSnackbarStore";
 import { getPalette } from "@/theme/colors";
@@ -82,7 +84,7 @@ function NotificationCard({
           </Text>
           <View className="mt-3 flex-row items-center gap-2">
             <Text className="rounded-full border border-accent/40 bg-accent/10 px-2 py-1 text-[10px] font-black uppercase text-accent dark:border-dark-accent/40 dark:bg-dark-accent/10 dark:text-dark-accent">
-              {notification.type}
+              {formatNotificationType(notification.type)}
             </Text>
             <Text className="text-[11px] font-bold text-muted dark:text-dark-muted">
               {notification.isRead ? "Read" : "Unread"}
@@ -135,7 +137,7 @@ function NotificationDetails({
 
       <View className="mt-5 flex-row flex-wrap gap-2">
         <Text className="rounded-full border border-accent/40 bg-accent/10 px-3 py-1.5 text-[11px] font-black uppercase text-accent dark:border-dark-accent/40 dark:bg-dark-accent/10 dark:text-dark-accent">
-          {notification.type}
+          {formatNotificationType(notification.type)}
         </Text>
         <Text className="rounded-full border border-glass bg-glass-button px-3 py-1.5 text-[11px] font-black text-muted dark:border-dark-glass dark:bg-dark-glass-button dark:text-dark-muted">
           {notification.isRead ? "Read" : "Unread"}
@@ -251,22 +253,29 @@ export default function NotificationsScreen() {
 
   const openNotification = useCallback(
     async (notification: AppNotification) => {
-      setSelectedId(notification.id);
-      if (notification.isRead) return;
-
-      setItems((current) =>
-        current.map((item) =>
-          item.id === notification.id ? { ...item, isRead: true } : item,
-        ),
-      );
-      markReadInStore(notification.id);
-      await markNotificationReadApi(notification.id).catch((error) => {
-        showSnackbar({
-          variant: "error",
-          title: "Could not mark as read",
-          message: getApiErrorMessage(error, "Please try again."),
+      const href = hrefFromNotification(notification);
+      if (!notification.isRead) {
+        setItems((current) =>
+          current.map((item) =>
+            item.id === notification.id ? { ...item, isRead: true } : item,
+          ),
+        );
+        markReadInStore(notification.id);
+        await markNotificationReadApi(notification.id).catch((error) => {
+          showSnackbar({
+            variant: "error",
+            title: "Could not mark as read",
+            message: getApiErrorMessage(error, "Please try again."),
+          });
         });
-      });
+      }
+
+      if (href) {
+        router.push(href);
+        return;
+      }
+
+      setSelectedId(notification.id);
     },
     [markReadInStore, showSnackbar],
   );
@@ -355,7 +364,7 @@ export default function NotificationsScreen() {
                 No notifications yet
               </Text>
               <Text className="mt-1 text-center text-sm text-muted dark:text-dark-muted">
-                New project, task, and team updates will appear here.
+                New project, task, and whiteboard updates will appear here.
               </Text>
             </View>
           ) : (

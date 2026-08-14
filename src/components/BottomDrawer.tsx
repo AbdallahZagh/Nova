@@ -10,7 +10,6 @@ import {
 import {
   Dimensions,
   Keyboard,
-  KeyboardAvoidingView,
   Modal,
   PanResponder,
   Platform,
@@ -22,6 +21,7 @@ import {
   type ScrollViewProps,
 } from "react-native";
 import Ionicons from "@expo/vector-icons/Ionicons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColorScheme } from "nativewind";
 import { getPalette } from "@/theme/colors";
 
@@ -62,7 +62,7 @@ export function BottomDrawer({
   keyboardMaxHeight = "74%",
   minHeight = "34%",
   contentClassName = "",
-  contentContainerClassName = "gap-5 p-5",
+  contentContainerClassName = "gap-5 px-5 pb-5",
   contentContainerStyle,
   scrollViewProps,
   onClose,
@@ -70,6 +70,7 @@ export function BottomDrawer({
 }: BottomDrawerProps) {
   const { colorScheme } = useColorScheme();
   const palette = getPalette(colorScheme);
+  const insets = useSafeAreaInsets();
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [windowHeight, setWindowHeight] = useState(
     Dimensions.get("window").height,
@@ -101,15 +102,25 @@ export function BottomDrawer({
     [windowHeight],
   );
 
-  const minimumHeight = resolveHeight(minHeight, 0.34);
-  const normalHeight = resolveHeight(maxHeight, 0.88);
-  const maximumHeight = resolveHeight(
-    keyboardHeight > 0 ? keyboardMaxHeight : "96%",
-    keyboardHeight > 0 ? 0.74 : 0.96,
+  const topGap = Math.max(insets.top, 12) + 8;
+  const screenHeight = Dimensions.get("screen").height;
+  const windowAlreadyResized = windowHeight < screenHeight - 80;
+  const keyboardInset = windowAlreadyResized ? 0 : keyboardHeight;
+  const availableHeight = Math.max(180, windowHeight - keyboardInset - topGap);
+  const minimumHeight = Math.min(resolveHeight(minHeight, 0.34), availableHeight);
+  const normalHeight = Math.min(resolveHeight(maxHeight, 0.88), availableHeight);
+  const maximumHeight = Math.min(
+    resolveHeight(
+      keyboardHeight > 0 ? keyboardMaxHeight : "96%",
+      keyboardHeight > 0 ? 0.74 : 0.96,
+    ),
+    availableHeight,
   );
-  const fitHeight = contentHeight > 0
-    ? clamp(contentHeight + 44, minimumHeight, normalHeight)
-    : normalHeight;
+  const chromeHeight = 52 + (title ? 64 : 0) + (footer ? 72 : 0);
+  const fitHeight =
+    contentHeight > 0
+      ? clamp(contentHeight + chromeHeight, minimumHeight, normalHeight)
+      : normalHeight;
   const activeHeight = clamp(
     drawerHeight ?? fitHeight,
     minimumHeight,
@@ -247,7 +258,7 @@ export function BottomDrawer({
   );
 
   const header = title ? (
-    <View className="flex-row items-start justify-between gap-4">
+    <View className="flex-row items-start justify-between gap-4 px-5 pb-2">
       <View className="flex-1">
         <Text className="text-[22px] font-black text-primary dark:text-dark-primary">
           {title}
@@ -270,13 +281,7 @@ export function BottomDrawer({
     </View>
   ) : null;
 
-  const body = (
-    <>
-      {header}
-      {children}
-      {footer}
-    </>
-  );
+  const bottomPad = keyboardInset > 0 ? 12 : Math.max(insets.bottom, 12);
 
   return (
     <Modal
@@ -286,22 +291,13 @@ export function BottomDrawer({
       statusBarTranslucent
       onRequestClose={close}
     >
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-        className="flex-1 justify-end bg-black/45"
-        style={{
-          paddingBottom:
-            Platform.OS === "android" && keyboardHeight > 0
-              ? Math.max(0, keyboardHeight - 18)
-              : 0,
-        }}
-      >
+      <View className="flex-1 justify-end bg-black/45">
         <TouchableWithoutFeedback onPress={close}>
           <View className="flex-1" />
         </TouchableWithoutFeedback>
         <View
           className={`rounded-t-[28px] border border-glass bg-sidebar shadow-2xl shadow-black/40 dark:border-dark-glass dark:bg-dark-sidebar ${contentClassName}`}
-          style={{ height: activeHeight }}
+          style={{ height: activeHeight, marginBottom: keyboardInset }}
         >
           <View
             className="items-center px-8 pt-3"
@@ -315,38 +311,42 @@ export function BottomDrawer({
               <View className="h-1.5 w-12 rounded-full bg-glass dark:bg-dark-glass" />
             </View>
           </View>
+          {header}
           {scroll ? (
             <ScrollView
               keyboardShouldPersistTaps="handled"
               keyboardDismissMode="interactive"
-              automaticallyAdjustKeyboardInsets
               {...scrollViewProps}
+              style={{ flex: 1 }}
               onContentSizeChange={(width, height) => {
                 setContentHeight(height);
                 scrollViewProps?.onContentSizeChange?.(width, height);
               }}
               contentContainerClassName={contentContainerClassName}
-              contentContainerStyle={{
-                paddingBottom: keyboardHeight > 0 ? 28 : 36,
-                ...(typeof contentContainerStyle === "object"
-                  ? contentContainerStyle
-                  : {}),
-              }}
+              contentContainerStyle={contentContainerStyle}
             >
-              {body}
+              {children}
             </ScrollView>
           ) : (
             <View
               className={contentContainerClassName}
+              style={{ flex: 1 }}
               onLayout={(event) => {
                 setContentHeight(event.nativeEvent.layout.height);
               }}
             >
-              {body}
+              {children}
             </View>
           )}
+          {footer ? (
+            <View className="px-5 pt-2" style={{ paddingBottom: bottomPad }}>
+              {footer}
+            </View>
+          ) : (
+            <View style={{ height: bottomPad }} />
+          )}
         </View>
-      </KeyboardAvoidingView>
+      </View>
     </Modal>
   );
 }
