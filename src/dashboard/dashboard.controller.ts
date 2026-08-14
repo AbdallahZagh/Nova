@@ -67,7 +67,7 @@ export class DashboardController {
   @ApiResponse({
     status: 200,
     description:
-      'ISO date → task array map. Each entry contains id, title, status, dueDate, projectName, and completionPercentage.',
+      'ISO date → task array map. Each entry contains id, title, status, dueDate, projectId, projectName, and completionPercentage.',
     schema: {
       example: {
         '2026-05-28': [
@@ -76,6 +76,7 @@ export class DashboardController {
             title: 'Build Dashboard API',
             status: 'Completed',
             dueDate: '2026-05-28',
+            projectId: 'c3d4e5f6-a7b8-9012-cdef-123456789012',
             projectName: 'Nova Core',
             completionPercentage: 100,
           },
@@ -86,6 +87,7 @@ export class DashboardController {
             title: 'Design system tokens audit',
             status: 'In Progress',
             dueDate: '2026-06-05',
+            projectId: 'c3d4e5f6-a7b8-9012-cdef-123456789012',
             projectName: 'Nova Dashboard v2',
             completionPercentage: 33.3,
           },
@@ -116,5 +118,48 @@ export class DashboardController {
   @ApiResponse({ status: 401, description: 'Missing or invalid Bearer token' })
   getUrgentTasks(@CurrentUser('id') userId: string) {
     return this.dashboardService.getUrgentTasks(userId);
+  }
+
+  @Get('continue')
+  @ApiOperation({
+    summary: 'Fetch the post-login continue strip',
+    description:
+      'Returns the most recently updated project, the most recently edited whiteboard, ' +
+      'and up to 4 incomplete tasks due today. Used as a compact resume strip on the dashboard, ' +
+      'not a fourth report.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Last project, last whiteboard, and due-today tasks',
+    schema: {
+      example: {
+        lastProject: {
+          id: 'c3d4e5f6-a7b8-9012-cdef-123456789012',
+          name: 'Aurora Launch',
+          status: 'Active',
+          updatedAt: '2026-08-14T18:00:00.000Z',
+        },
+        lastWhiteboard: {
+          id: 'd4e5f6a7-b8c9-0123-defa-234567890123',
+          title: 'Sprint board',
+          projectId: 'c3d4e5f6-a7b8-9012-cdef-123456789012',
+          lastEditedAt: '2026-08-14T17:30:00.000Z',
+        },
+        dueToday: [
+          {
+            id: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
+            title: 'Write launch checklist',
+            status: 'To Do',
+            projectId: 'c3d4e5f6-a7b8-9012-cdef-123456789012',
+            projectName: 'Aurora Launch',
+            dueDate: '2026-08-15T00:00:00.000Z',
+          },
+        ],
+      },
+    },
+  })
+  @ApiResponse({ status: 401, description: 'Missing or invalid Bearer token' })
+  getContinue(@CurrentUser('id') userId: string) {
+    return this.dashboardService.getContinue(userId);
   }
 }

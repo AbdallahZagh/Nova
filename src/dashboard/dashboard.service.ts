@@ -126,7 +126,7 @@ export class DashboardService {
         dueDate: true,
         createdAt: true,
         completedAt: true,
-        project: { select: { name: true } },
+        project: { select: { id: true, name: true } },
         subtasks: { select: { isCompleted: true } },
       },
     });
@@ -144,6 +144,7 @@ export class DashboardService {
         title: task.title,
         status: task.status,
         dueDate: task.dueDate ? this.toDateString(task.dueDate) : null,
+        projectId: task.project?.id ?? null,
         projectName: task.project?.name ?? null,
         completionPercentage,
       });
@@ -174,7 +175,7 @@ export class DashboardService {
         title: true,
         priority: true,
         dueDate: true,
-        project: { select: { name: true } },
+        project: { select: { id: true, name: true } },
       },
     });
 
@@ -184,6 +185,7 @@ export class DashboardService {
       .map((task: any) => ({
         id: task.id,
         title: task.title,
+        projectId: task.project?.id ?? null,
         projectName: task.project?.name ?? null,
         priority: task.priority,
         urgency: this.mapUrgency(task.priority),
@@ -204,6 +206,86 @@ export class DashboardService {
       .map(({ _dueTime, _weight, ...rest }: any) => rest);
 
     return sorted;
+  }
+
+  // ─── Continue strip ───────────────────────────────────────────────────────
+
+  async getContinue(userId: string) {
+    const today = this.startOfDay(new Date());
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    const [lastProject, lastWhiteboard, dueToday] = await Promise.all([
+      (this.prisma as any).project.findFirst({
+        where: {
+          OR: [{ ownerId: userId }, { members: { some: { userId } } }],
+        },
+        orderBy: { updatedAt: 'desc' },
+        select: { id: true, name: true, status: true, updatedAt: true },
+      }),
+      (this.prisma as any).whiteboard.findFirst({
+        where: {
+          OR: [{ createdById: userId }, { members: { some: { userId } } }],
+        },
+        orderBy: { updatedAt: 'desc' },
+        select: {
+          id: true,
+          title: true,
+          lastEditedAt: true,
+          updatedAt: true,
+          projectId: true,
+        },
+      }),
+      (this.prisma as any).task.findMany({
+        where: {
+          AND: [
+            myTasksWhere(userId),
+            {
+              status: { not: 'Completed' },
+              dueDate: { gte: today, lt: tomorrow },
+            },
+          ],
+        },
+        select: {
+          id: true,
+          title: true,
+          status: true,
+          dueDate: true,
+          project: { select: { id: true, name: true } },
+        },
+        orderBy: { dueDate: 'asc' },
+        take: 4,
+      }),
+    ]);
+
+    return {
+      lastProject: lastProject
+        ? {
+            id: lastProject.id,
+            name: lastProject.name,
+            status: lastProject.status,
+            updatedAt: lastProject.updatedAt.toISOString(),
+          }
+        : null,
+      lastWhiteboard: lastWhiteboard
+        ? {
+            id: lastWhiteboard.id,
+            title: lastWhiteboard.title?.trim() || 'Untitled board',
+            projectId: lastWhiteboard.projectId ?? null,
+            lastEditedAt: (
+              lastWhiteboard.lastEditedAt ?? lastWhiteboard.updatedAt
+            ).toISOString(),
+          }
+        : null,
+      dueToday: dueToday.map((task: any) => ({
+        id: task.id,
+        title: task.title,
+        status: task.status,
+        projectId: task.project?.id ?? null,
+        projectName: task.project?.name ?? null,
+        dueDate: task.dueDate ? task.dueDate.toISOString() : null,
+      })),
+    };
   }
 
   // ─── Private helpers ──────────────────────────────────────────────────────
@@ -267,6 +349,7 @@ interface ActivityEntry {
   title: string;
   status: string;
   dueDate: string | null;
+  projectId: string | null;
   projectName: string | null;
   completionPercentage: number;
 }

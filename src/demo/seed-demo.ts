@@ -92,8 +92,7 @@ export async function seedDemoWorkspace(prisma: DemoPrisma) {
   await prisma.whiteboard.deleteMany({ where: { createdById: user.id } });
   await prisma.project.deleteMany({ where: { ownerId: user.id } });
 
-  const dueSoon = new Date();
-  dueSoon.setDate(dueSoon.getDate() + 3);
+  const dueToday = new Date();
   const dueLater = new Date();
   dueLater.setDate(dueLater.getDate() + 10);
 
@@ -114,7 +113,7 @@ export async function seedDemoWorkspace(prisma: DemoPrisma) {
       description: 'Keep this short. Move it to In Progress to see the board update.',
       status: 'To Do',
       priority: 'High',
-      dueDate: dueSoon,
+      dueDate: dueToday,
       projectId: project.id,
       assigneeId: user.id,
       assignments: { create: { userId: user.id } },
@@ -163,6 +162,7 @@ export async function seedDemoWorkspace(prisma: DemoPrisma) {
       title: DEMO_BOARD_TITLE,
       createdById: user.id,
       projectId: project.id,
+      lastEditedAt: new Date(),
       lastEditedById: user.id,
       members: { create: { userId: user.id, role: 'ADMIN' } },
       pages: {

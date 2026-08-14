@@ -14,6 +14,12 @@ export class UrgentTaskResponseDto {
   title: string;
 
   @ApiProperty({
+    example: 'c3d4e5f6-a7b8-9012-cdef-123456789012',
+    description: 'Parent project UUID used to open the task workspace',
+  })
+  projectId: string | null;
+
+  @ApiProperty({
     example: 'Nova Core Backend',
     description: 'Name of the parent project the task belongs to',
   })
