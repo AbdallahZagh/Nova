@@ -3,6 +3,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { resolveMentionedUsers, type MentionCandidate } from '../common/mentions';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -15,6 +16,7 @@ const CREATED_BY_SELECT = {
   id: true,
   fullName: true,
   email: true,
+  username: true,
   avatarUrl: true,
   roleTitle: true,
 };
@@ -33,6 +35,9 @@ export class ProjectSuggestionsService {
 
   async create(userId: string, dto: CreateProjectSuggestionDto) {
     const project = await this.ensureProjectAccess(userId, dto.projectId);
+    const eligible = await this.projectMentionCandidates(dto.projectId);
+    const mentioned = resolveMentionedUsers(dto.content, eligible);
+    const mentionedIds = mentioned.map((user) => user.id);
 
     const suggestion = await (this.prisma as any).projectSuggestion.create({
       data: {
@@ -40,16 +45,26 @@ export class ProjectSuggestionsService {
         status: dto.status ?? ProjectSuggestionStatus.IN_REVIEW,
         projectId: dto.projectId,
         createdById: userId,
+        mentionedUserIds: mentionedIds,
       },
       include: SUGGESTION_INCLUDE,
     });
+
+    const actorName = suggestion.createdBy?.fullName || 'Someone';
+    await this.notificationsService.notifySuggestionMention(
+      mentionedIds.filter((id) => id !== userId),
+      actorName,
+      project.name,
+      dto.projectId,
+      suggestion.id,
+    );
 
     await this.notificationsService.notifyProjectManagers(
       dto.projectId,
       'PROJECT_SUGGESTION_CREATED',
       'New project suggestion',
       `A new suggestion was added to ${project.name}.`,
-      { suggestionId: suggestion.id, createdById: userId },
+      { suggestionId: suggestion.id, createdById: userId, projectId: dto.projectId },
     );
 
     return suggestion;
@@ -76,7 +91,13 @@ export class ProjectSuggestionsService {
     await this.ensureSuggestionMutationAllowed(userId, suggestion);
 
     const data: Record<string, unknown> = {};
-    if (dto.content !== undefined) data.content = dto.content;
+    if (dto.content !== undefined) {
+      data.content = dto.content;
+      const eligible = await this.projectMentionCandidates(suggestion.projectId);
+      data.mentionedUserIds = resolveMentionedUsers(dto.content, eligible).map(
+        (user) => user.id,
+      );
+    }
     if (dto.status !== undefined) data.status = dto.status;
 
     const updated = await (this.prisma as any).projectSuggestion.update({
@@ -84,6 +105,22 @@ export class ProjectSuggestionsService {
       data,
       include: SUGGESTION_INCLUDE,
     });
+
+    if (
+      dto.content !== undefined &&
+      dto.content !== suggestion.content
+    ) {
+      const mentionedIds = Array.isArray(data.mentionedUserIds)
+        ? (data.mentionedUserIds as string[])
+        : [];
+      await this.notificationsService.notifySuggestionMention(
+        mentionedIds.filter((id) => id !== userId),
+        updated.createdBy?.fullName || 'Someone',
+        updated.project.name,
+        updated.projectId,
+        updated.id,
+      );
+    }
 
     if (
       dto.status !== undefined &&
@@ -154,5 +191,28 @@ export class ProjectSuggestionsService {
         'Only the suggestion author or project owner can update this suggestion',
       );
     }
+  }
+
+  private async projectMentionCandidates(
+    projectId: string,
+  ): Promise<MentionCandidate[]> {
+    const project = await (this.prisma as any).project.findUnique({
+      where: { id: projectId },
+      select: {
+        owner: { select: { id: true, username: true, fullName: true } },
+        members: {
+          select: {
+            user: { select: { id: true, username: true, fullName: true } },
+          },
+        },
+      },
+    });
+    if (!project) return [];
+    const byId = new Map<string, MentionCandidate>();
+    if (project.owner) byId.set(project.owner.id, project.owner);
+    for (const member of project.members) {
+      if (member.user) byId.set(member.user.id, member.user);
+    }
+    return [...byId.values()];
   }
 }

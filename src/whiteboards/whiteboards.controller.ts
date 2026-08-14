@@ -4,11 +4,13 @@ import {
   Controller,
   Delete,
   Get,
+  Header,
   Param,
   ParseUUIDPipe,
   Patch,
   Post,
   Put,
+  StreamableFile,
   UploadedFile,
   UseGuards,
   UseInterceptors,
@@ -31,7 +33,9 @@ import {
 import { ProjectRoleGuard } from '../common/guards/project-role.guard';
 import { AddWhiteboardMembersDto } from './dto/add-whiteboard-members.dto';
 import { ApplyWhiteboardOpsDto } from './dto/apply-ops.dto';
+import { CreateWhiteboardCommentDto } from './dto/create-whiteboard-comment.dto';
 import { CreateWhiteboardDto } from './dto/create-whiteboard.dto';
+import { CreateWhiteboardInviteDto } from './dto/create-whiteboard-invite.dto';
 import { UpdateWhiteboardDto } from './dto/update-whiteboard.dto';
 import { UpdateWhiteboardMemberDto } from './dto/update-whiteboard-member.dto';
 import { UploadSnapshotMetaDto } from './dto/upload-snapshot.dto';
@@ -87,6 +91,106 @@ export class WhiteboardsController {
     @Param('id', ParseUUIDPipe) id: string,
   ) {
     return this.whiteboardsService.findOne(userId, id);
+  }
+
+  @Post('whiteboards/:id/duplicate')
+  @ApiOperation({ summary: 'Duplicate a whiteboard' })
+  duplicate(
+    @CurrentUser('id') userId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.whiteboardsService.duplicate(userId, id);
+  }
+
+  @Get('whiteboards/:id/activity')
+  @ApiOperation({ summary: 'List whiteboard activity history' })
+  listActivity(
+    @CurrentUser('id') userId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.whiteboardsService.listActivity(userId, id);
+  }
+
+  @Get('whiteboards/:id/comments')
+  @ApiOperation({ summary: 'List whiteboard comments' })
+  listComments(
+    @CurrentUser('id') userId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.whiteboardsService.listComments(userId, id);
+  }
+
+  @Post('whiteboards/:id/comments')
+  @ApiOperation({ summary: 'Add a whiteboard comment' })
+  addComment(
+    @CurrentUser('id') userId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: CreateWhiteboardCommentDto,
+  ) {
+    return this.whiteboardsService.addComment(userId, id, dto);
+  }
+
+  @Delete('whiteboards/:id/comments/:commentId')
+  @ApiOperation({ summary: 'Delete a whiteboard comment' })
+  removeComment(
+    @CurrentUser('id') userId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('commentId', ParseUUIDPipe) commentId: string,
+  ) {
+    return this.whiteboardsService.removeComment(userId, id, commentId);
+  }
+
+  @Post('whiteboards/:id/invites')
+  @ApiOperation({ summary: 'Create a one-time invite link' })
+  createInvite(
+    @CurrentUser('id') userId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: CreateWhiteboardInviteDto,
+  ) {
+    return this.whiteboardsService.createInvite(userId, id, dto);
+  }
+
+  @Get('whiteboard-invites/:token')
+  @ApiOperation({ summary: 'Preview a whiteboard invite' })
+  getInvite(@Param('token') token: string) {
+    return this.whiteboardsService.getInvite(token);
+  }
+
+  @Post('whiteboard-invites/:token/accept')
+  @ApiOperation({ summary: 'Accept a one-time whiteboard invite' })
+  acceptInvite(
+    @CurrentUser('id') userId: string,
+    @Param('token') token: string,
+  ) {
+    return this.whiteboardsService.acceptInvite(userId, token);
+  }
+
+  @Get('whiteboards/:id/export/pdf')
+  @ApiOperation({ summary: 'Export whiteboard pages as PDF' })
+  @Header('Content-Type', 'application/pdf')
+  async exportPdf(
+    @CurrentUser('id') userId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    const file = await this.whiteboardsService.exportBoard(userId, id, 'pdf');
+    return new StreamableFile(file.buffer, {
+      type: file.mime,
+      disposition: `attachment; filename="${file.filename}"`,
+    });
+  }
+
+  @Get('whiteboards/:id/export/zip')
+  @ApiOperation({ summary: 'Export whiteboard page PNGs as ZIP' })
+  @Header('Content-Type', 'application/zip')
+  async exportZip(
+    @CurrentUser('id') userId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    const file = await this.whiteboardsService.exportBoard(userId, id, 'zip');
+    return new StreamableFile(file.buffer, {
+      type: file.mime,
+      disposition: `attachment; filename="${file.filename}"`,
+    });
   }
 
   @Patch('whiteboards/:id')

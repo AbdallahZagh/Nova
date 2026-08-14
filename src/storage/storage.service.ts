@@ -90,6 +90,31 @@ export class StorageService {
     await this.client.storage.from(this.bucket).remove([...stale]);
   }
 
+  async copySnapshot(
+    sourcePath: string,
+    whiteboardId: string,
+    pageId: string,
+  ): Promise<{ storagePath: string; imageUrl: string } | null> {
+    if (!this.client || !sourcePath) return null;
+
+    const { data, error } = await this.client.storage
+      .from(this.bucket)
+      .download(sourcePath);
+    if (error || !data) return null;
+
+    const buffer = Buffer.from(await data.arrayBuffer());
+    return this.uploadSnapshot(whiteboardId, pageId, buffer);
+  }
+
+  async downloadSnapshot(storagePath: string): Promise<Buffer | null> {
+    if (!this.client || !storagePath) return null;
+    const { data, error } = await this.client.storage
+      .from(this.bucket)
+      .download(storagePath);
+    if (error || !data) return null;
+    return Buffer.from(await data.arrayBuffer());
+  }
+
   async deleteSnapshots(storagePaths: string[]): Promise<void> {
     if (!this.client || storagePaths.length === 0) return;
     await this.client.storage.from(this.bucket).remove(storagePaths);

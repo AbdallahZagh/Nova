@@ -249,6 +249,68 @@ export class NotificationsService implements OnModuleInit {
     );
   }
 
+  async notifyWhiteboardCommentMention(
+    userIds: string[],
+    actorName: string,
+    whiteboardTitle: string,
+    whiteboardId: string,
+    projectId?: string | null,
+  ) {
+    await this.notifyUsers(
+      userIds,
+      'WHITEBOARD_COMMENT_MENTION',
+      'You were mentioned',
+      `${actorName} mentioned you on ${whiteboardTitle}.`,
+      {
+        whiteboardId,
+        url: `/whiteboard/${whiteboardId}`,
+        ...(projectId ? { projectId } : {}),
+      },
+    );
+  }
+
+  async notifyTaskCommentMention(
+    userIds: string[],
+    actorName: string,
+    taskTitle: string,
+    taskId: string,
+    projectId: string,
+    commentId: string,
+  ) {
+    await this.notifyUsers(
+      userIds,
+      'TASK_COMMENT_MENTION',
+      'You were mentioned',
+      `${actorName} mentioned you in a comment on ${taskTitle}.`,
+      {
+        taskId,
+        commentId,
+        projectId,
+        url: `/projects/${projectId}?task=${taskId}`,
+      },
+    );
+  }
+
+  async notifySuggestionMention(
+    userIds: string[],
+    actorName: string,
+    projectName: string,
+    projectId: string,
+    suggestionId: string,
+  ) {
+    await this.notifyUsers(
+      userIds,
+      'PROJECT_SUGGESTION_MENTION',
+      'You were mentioned',
+      `${actorName} mentioned you in a suggestion on ${projectName}.`,
+      {
+        projectId,
+        suggestionId,
+        url: `/projects/${projectId}`,
+      },
+    );
+  }
+
   async notifyWhiteboardDeleted(
     userIds: string[],
     whiteboardId: string,

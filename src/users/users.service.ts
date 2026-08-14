@@ -11,6 +11,7 @@ const USER_SEARCH_SELECT = {
   id: true,
   fullName: true,
   email: true,
+  username: true,
   avatarUrl: true,
 };
 
@@ -37,8 +38,9 @@ export class UsersService {
       where: q
         ? {
             OR: [
-              { fullName: { contains: q, mode: 'insensitive' } },
-              { email: { contains: q, mode: 'insensitive' } },
+            { fullName: { contains: q, mode: 'insensitive' } },
+            { email: { contains: q, mode: 'insensitive' } },
+            { username: { contains: q, mode: 'insensitive' } },
             ],
           }
         : {},

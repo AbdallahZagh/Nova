@@ -20,6 +20,7 @@ const MEMBER_SELECT = {
   id: true,
   fullName: true,
   email: true,
+  username: true,
   avatarUrl: true,
   roleTitle: true,
 };
