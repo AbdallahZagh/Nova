@@ -910,7 +910,10 @@ export class WhiteboardsService {
 
   async listActivity(userId: string, id: string) {
     const row = await this.loadBoard(id);
-    await this.ensureWhiteboardAccess(userId, row);
+    const member = await this.ensureWhiteboardAccess(userId, row);
+    if (member.role === WhiteboardRole.VIEWER) {
+      throw new ForbiddenException('Viewers cannot see whiteboard activity');
+    }
 
     const rows = await this.prisma.whiteboardActivity.findMany({
       where: { whiteboardId: id },
