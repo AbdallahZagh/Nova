@@ -20,6 +20,7 @@ import {
 } from '@nestjs/swagger';
 import { AuthService } from '../auth/auth.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { DenyDemo } from '../demo/deny-demo.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { EmailService } from '../mail/email.service';
 import { UpdateProfileDto } from './dto/update-profile.dto';
@@ -57,12 +58,13 @@ export class UsersController {
     },
   })
   @ApiResponse({ status: 401, description: 'Missing or invalid Bearer token' })
-  search(@Query() dto: UserSearchDto) {
-    return this.usersService.searchUsers(dto.q);
+  search(@Query() dto: UserSearchDto, @CurrentUser('id') userId: string) {
+    return this.usersService.searchUsers(dto.q, userId);
   }
 
   @Post('me/test-email')
   @HttpCode(200)
+  @DenyDemo('The demo account cannot send email.')
   @ApiOperation({
     summary: 'Send a test email to the current user',
     description:
@@ -151,6 +153,7 @@ export class UsersController {
   }
 
   @Patch('me')
+  @DenyDemo('The demo profile cannot be edited.')
   @ApiOperation({
     summary: 'Update current user profile',
     description:
@@ -172,6 +175,7 @@ export class UsersController {
 
   @Delete('me')
   @HttpCode(200)
+  @DenyDemo('The demo account cannot be deactivated.')
   @ApiOperation({
     summary: 'Deactivate (archive) the current account',
     description:

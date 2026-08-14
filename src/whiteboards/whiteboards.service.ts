@@ -14,6 +14,7 @@ import { ProjectRole } from '../common/decorators/require-project-role.decorator
 import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { StorageService } from '../storage/storage.service';
+import { DemoService } from '../demo/demo.service';
 import { AddWhiteboardMembersDto } from './dto/add-whiteboard-members.dto';
 import { ApplyWhiteboardOpsDto } from './dto/apply-ops.dto';
 import { CreateWhiteboardCommentDto } from './dto/create-whiteboard-comment.dto';
@@ -124,6 +125,7 @@ export class WhiteboardsService {
     private readonly prisma: PrismaService,
     private readonly storage: StorageService,
     private readonly notifications: NotificationsService,
+    private readonly demoService: DemoService,
   ) {}
 
   private formatSnapshot(row: NonNullable<SnapshotRow>) {
@@ -606,6 +608,11 @@ export class WhiteboardsService {
 
     const page = row.pages.find((item) => item.id === pageId);
     if (!page) throw new NotFoundException('Whiteboard page not found');
+    if (page.snapshot && (await this.demoService.isDemoUserId(userId))) {
+      throw new ForbiddenException(
+        'The demo board already has a saved image. Export that, or create an account to save more.',
+      );
+    }
 
     const { storagePath, imageUrl } = await this.storage.uploadSnapshot(
       whiteboardId,

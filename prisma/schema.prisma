@@ -34,6 +34,7 @@ model User {
   fullName     String
   isActive     Boolean @default(false)
   isArchived   Boolean @default(false)
+  isDemo       Boolean @default(false)
   roleTitle    String?
   bio          String?
   avatarUrl    String?

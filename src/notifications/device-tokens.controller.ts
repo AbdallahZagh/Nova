@@ -16,6 +16,7 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { DenyDemo } from '../demo/deny-demo.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { ListNotificationsQueryDto } from './dto/list-notifications-query.dto';
 import { MarkNotificationsReadDto } from './dto/mark-notifications-read.dto';
@@ -31,6 +32,7 @@ export class DeviceTokensController {
 
   @Post('save')
   @HttpCode(HttpStatus.OK)
+  @DenyDemo()
   @ApiOperation({ summary: 'Save or refresh an FCM device token' })
   @ApiResponse({ status: 200, description: 'Device token saved' })
   @ApiResponse({ status: 401, description: 'Missing or invalid Bearer token' })
@@ -77,6 +79,7 @@ export class DeviceTokensController {
 
   @Post('test-notification')
   @HttpCode(HttpStatus.OK)
+  @DenyDemo()
   @ApiOperation({
     summary: 'Create a test notification for the current user',
     description:

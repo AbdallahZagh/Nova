@@ -25,6 +25,7 @@ import {
 } from '@nestjs/swagger';
 import { memoryStorage } from 'multer';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { DenyDemo } from '../demo/deny-demo.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import {
   ProjectRole,
@@ -65,6 +66,7 @@ export class WhiteboardsController {
   constructor(private readonly whiteboardsService: WhiteboardsService) {}
 
   @Post('whiteboards')
+  @DenyDemo('The demo already has a sample board. Create an account to add your own.')
   @ApiOperation({ summary: 'Create a whiteboard' })
   create(
     @CurrentUser('id') userId: string,
@@ -105,6 +107,7 @@ export class WhiteboardsController {
   }
 
   @Post('whiteboards/:id/duplicate')
+  @DenyDemo('The demo account cannot duplicate boards.')
   @ApiOperation({ summary: 'Duplicate a whiteboard' })
   duplicate(
     @CurrentUser('id') userId: string,
@@ -152,6 +155,7 @@ export class WhiteboardsController {
   }
 
   @Post('whiteboards/:id/invites')
+  @DenyDemo('The demo account cannot invite people.')
   @ApiOperation({ summary: 'Create a one-time invite link' })
   createInvite(
     @CurrentUser('id') userId: string,
@@ -259,6 +263,7 @@ export class WhiteboardsController {
   }
 
   @Post('whiteboards/:id/pages')
+  @DenyDemo('The demo board keeps a single page so visitors share the same canvas.')
   @ApiOperation({ summary: 'Add a blank page' })
   addPage(
     @CurrentUser('id') userId: string,
@@ -268,6 +273,7 @@ export class WhiteboardsController {
   }
 
   @Delete('whiteboards/:id/pages/:pageId')
+  @DenyDemo('The demo board keeps a single page so visitors share the same canvas.')
   @ApiOperation({ summary: 'Delete a page' })
   removePage(
     @CurrentUser('id') userId: string,
@@ -325,6 +331,7 @@ export class WhiteboardsController {
   }
 
   @Post('whiteboards/:id/members')
+  @DenyDemo('The demo account cannot invite people.')
   @ApiOperation({ summary: 'Add collaborators to a whiteboard' })
   addMembers(
     @CurrentUser('id') userId: string,
@@ -335,6 +342,7 @@ export class WhiteboardsController {
   }
 
   @Patch('whiteboards/:id/members/:userId')
+  @DenyDemo('The demo account cannot change members.')
   @ApiOperation({ summary: 'Update a collaborator role' })
   updateMember(
     @CurrentUser('id') actorId: string,
@@ -346,6 +354,7 @@ export class WhiteboardsController {
   }
 
   @Delete('whiteboards/:id/members/:userId')
+  @DenyDemo('The demo account cannot change members.')
   @ApiOperation({ summary: 'Remove a collaborator' })
   removeMember(
     @CurrentUser('id') actorId: string,
@@ -356,6 +365,7 @@ export class WhiteboardsController {
   }
 
   @Delete('whiteboards/:id')
+  @DenyDemo('The demo board cannot be deleted. It resets every night.')
   @ApiOperation({ summary: 'Delete a whiteboard' })
   remove(
     @CurrentUser('id') userId: string,

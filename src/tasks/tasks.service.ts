@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { ProjectRole } from '../common/decorators/require-project-role.decorator';
 import { NotificationsService } from '../notifications/notifications.service';
+import { DemoService } from '../demo/demo.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AssignTasksDto, TaskAssignmentInputDto } from './dto/assign-tasks.dto';
 import { CreateTaskDto } from './dto/create-task.dto';
@@ -69,11 +70,13 @@ export class TasksService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly notificationsService: NotificationsService,
+    private readonly demoService: DemoService,
   ) {}
 
   // ─── Create ───────────────────────────────────────────────────────────────
 
   async create(userId: string, dto: CreateTaskDto) {
+    await this.demoService.assertCanCreateTask(userId);
     const activities: ActivityInput[] = [
       { type: 'CREATED', content: 'Task created', createdById: userId },
     ];

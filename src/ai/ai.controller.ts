@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Post,
+  SetMetadata,
   UseGuards,
   UsePipes,
   ValidationPipe,
@@ -13,6 +14,8 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { DEMO_BLOCK_KEY } from '../demo/deny-demo.decorator';
+import { DenyDemoGuard } from '../demo/deny-demo.guard';
 import { AiService } from './ai.service';
 import { AiSuggestDto } from './dto/ai-suggest.dto';
 import { AiProjectDescriptionDto } from './dto/ai-project-description.dto';
@@ -21,7 +24,11 @@ import { GenerateProjectDescriptionDto } from './dto/generate-project-descriptio
 
 @ApiTags('AI')
 @ApiBearerAuth('access-token')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, DenyDemoGuard)
+@SetMetadata(
+  DEMO_BLOCK_KEY,
+  'AI is turned off on the demo account to protect the free quota.',
+)
 @Controller()
 export class AiController {
   constructor(private readonly aiService: AiService) {}

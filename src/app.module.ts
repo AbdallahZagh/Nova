@@ -5,6 +5,7 @@ import { AppService } from './app.service';
 import { AiModule } from './ai/ai.module';
 import { AuthModule } from './auth/auth.module';
 import { DashboardModule } from './dashboard/dashboard.module';
+import { DemoModule } from './demo/demo.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { ProjectsModule } from './projects/projects.module';
@@ -22,6 +23,7 @@ import { MailModule } from './mail/mail.module';
 @Module({
   imports: [
     PrismaModule,
+    DemoModule,
     MailModule,
     ScheduleModule.forRoot(),
     StorageModule,

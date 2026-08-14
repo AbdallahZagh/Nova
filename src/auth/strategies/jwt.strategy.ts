@@ -7,6 +7,7 @@ import { jwtSecret } from '../jwt-secret';
 export interface AuthUser {
   id: string;
   email: string;
+  isDemo: boolean;
 }
 
 interface JwtPayload {
@@ -31,13 +32,13 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
 
     const user = await (this.prisma as any).user.findUnique({
       where: { id: payload.sub },
-      select: { id: true, email: true, isActive: true, isArchived: true },
+      select: { id: true, email: true, isActive: true, isArchived: true, isDemo: true },
     });
 
     if (!user || !user.isActive || user.isArchived) {
       throw new UnauthorizedException('User is not active');
     }
 
-    return { id: user.id, email: user.email };
+    return { id: user.id, email: user.email, isDemo: Boolean(user.isDemo) };
   }
 }

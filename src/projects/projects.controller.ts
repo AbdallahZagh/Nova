@@ -16,6 +16,7 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { DenyDemo } from '../demo/deny-demo.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import {
   ProjectRole,
@@ -36,6 +37,7 @@ export class ProjectsController {
   constructor(private readonly projectsService: ProjectsService) {}
 
   @Post()
+  @DenyDemo('The demo workspace already has a sample project. Create an account to add your own.')
   @ApiOperation({
     summary: 'Create a new project',
     description:
@@ -122,6 +124,7 @@ export class ProjectsController {
   @Delete(':id')
   @UseGuards(ProjectRoleGuard)
   @RequireProjectRole(ProjectRole.OWNER)
+  @DenyDemo('The demo project cannot be deleted. It resets every night.')
   @ApiOperation({
     summary: 'Delete a project',
     description:
@@ -147,6 +150,7 @@ export class ProjectsController {
   @Post(':id/members')
   @UseGuards(ProjectRoleGuard)
   @RequireProjectRole(ProjectRole.OWNER, ProjectRole.ADMIN)
+  @DenyDemo('The demo account cannot invite people.')
   @ApiOperation({
     summary: 'Add one or more members to a project',
     description:
@@ -211,6 +215,7 @@ export class ProjectsController {
   @Delete(':id/members/:userId')
   @UseGuards(ProjectRoleGuard)
   @RequireProjectRole(ProjectRole.OWNER, ProjectRole.ADMIN)
+  @DenyDemo('The demo account cannot change members.')
   @ApiOperation({
     summary: 'Remove a member from a project',
     description:

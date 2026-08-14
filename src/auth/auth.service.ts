@@ -9,6 +9,7 @@ import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { normalizeUsername } from '../common/utils/username.util';
 import { EmailService } from '../mail/email.service';
+import { DemoService } from '../demo/demo.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { LoginDto } from './dto/login.dto';
@@ -25,6 +26,7 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
     private readonly emailService: EmailService,
+    private readonly demoService: DemoService,
   ) {}
 
   async register(dto: RegisterDto) {
@@ -133,6 +135,10 @@ export class AuthService {
 
   async forgotPassword(dto: ForgotPasswordDto) {
     const email = this.normalizeEmail(dto.email);
+    await this.demoService.assertNotDemoEmail(
+      email,
+      'The demo password cannot be changed. Use Try demo on the sign-in screen.',
+    );
     const user = await this.findUserByEmail(email);
 
     if (user.isArchived) {
@@ -145,6 +151,10 @@ export class AuthService {
 
   async resetPassword(dto: ResetPasswordDto) {
     const email = this.normalizeEmail(dto.email);
+    await this.demoService.assertNotDemoEmail(
+      email,
+      'The demo password cannot be changed. Use Try demo on the sign-in screen.',
+    );
     const user = await this.findUserByEmail(email);
 
     await this.consumeOtp(user.id, dto.code, 'FORGOT_PASSWORD');
@@ -178,6 +188,10 @@ export class AuthService {
   }
 
   async deactivateAccount(userId: string) {
+    await this.demoService.assertNotDemo(
+      userId,
+      'The demo account cannot be deactivated.',
+    );
     await (this.prisma as any).user.update({
       where: { id: userId },
       data: { isActive: false, isArchived: true },

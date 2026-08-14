@@ -6,6 +6,7 @@ import {
 import { normalizeUsername } from '../common/utils/username.util';
 import { PrismaService } from '../prisma/prisma.service';
 import { UpdateProfileDto } from './dto/update-profile.dto';
+import { DemoService } from '../demo/demo.service';
 
 const USER_SEARCH_SELECT = {
   id: true,
@@ -22,6 +23,7 @@ const PROFILE_USER_SELECT = {
   fullName: true,
   isActive: true,
   isArchived: true,
+  isDemo: true,
   roleTitle: true,
   bio: true,
   avatarUrl: true,
@@ -29,9 +31,13 @@ const PROFILE_USER_SELECT = {
 
 @Injectable()
 export class UsersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly demoService: DemoService,
+  ) {}
 
-  async searchUsers(query?: string) {
+  async searchUsers(query?: string, actorId?: string) {
+    if (await this.demoService.isDemoUserId(actorId)) return [];
     const q = query?.trim();
 
     return (this.prisma as any).user.findMany({

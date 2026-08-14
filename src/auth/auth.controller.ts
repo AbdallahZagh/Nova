@@ -1,6 +1,7 @@
-import { Body, Controller, HttpCode, HttpStatus, Post } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, HttpStatus, Post } from '@nestjs/common';
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
+import { DemoService } from '../demo/demo.service';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
@@ -11,7 +12,16 @@ import { VerifyOtpDto } from './dto/verify-otp.dto';
 @ApiTags('Authentication')
 @Controller('api/auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(
+    private readonly authService: AuthService,
+    private readonly demoService: DemoService,
+  ) {}
+
+  @Get('demo')
+  @ApiOperation({ summary: 'Public demo login credentials for the portfolio sandbox' })
+  demoCredentials() {
+    return this.demoService.credentials();
+  }
 
   @Post('register')
   @ApiOperation({ summary: 'Register with email/password and send OTP' })
