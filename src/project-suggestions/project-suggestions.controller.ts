@@ -18,6 +18,11 @@ import {
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
+import {
+  ProjectRole,
+  RequireProjectRole,
+} from '../common/decorators/require-project-role.decorator';
+import { ProjectRoleGuard } from '../common/guards/project-role.guard';
 import { CreateProjectSuggestionDto } from './dto/create-project-suggestion.dto';
 import { UpdateProjectSuggestionDto } from './dto/update-project-suggestion.dto';
 import { ProjectSuggestionsService } from './project-suggestions.service';
@@ -96,6 +101,30 @@ export class ProjectSuggestionsController {
   @ApiResponse({ status: 404, description: 'Project suggestion not found' })
   findOne(@CurrentUser('id') userId: string, @Param('id') id: string) {
     return this.projectSuggestionsService.findOne(userId, id);
+  }
+
+  @Post(':id/convert-to-task')
+  @UseGuards(ProjectRoleGuard)
+  @RequireProjectRole(ProjectRole.OWNER, ProjectRole.ADMIN, ProjectRole.MEMBER)
+  @ApiOperation({
+    summary: 'Turn a suggestion into a task',
+    description:
+      'Creates a To Do card from the idea and marks the suggestion In Progress.',
+  })
+  @ApiParam({
+    name: 'id',
+    example: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
+    description: 'Project suggestion UUID',
+  })
+  @ApiResponse({ status: 201, description: 'Task created from suggestion' })
+  @ApiResponse({ status: 401, description: 'Missing or invalid Bearer token' })
+  @ApiResponse({
+    status: 403,
+    description: 'Viewers cannot turn ideas into tasks',
+  })
+  @ApiResponse({ status: 404, description: 'Project suggestion not found' })
+  convertToTask(@CurrentUser('id') userId: string, @Param('id') id: string) {
+    return this.projectSuggestionsService.convertToTask(userId, id);
   }
 
   @Patch(':id')

@@ -6,6 +6,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import {
@@ -90,6 +91,32 @@ export class ProjectsController {
   @ApiResponse({ status: 404, description: 'Project not found' })
   findOne(@CurrentUser('id') userId: string, @Param('id') id: string) {
     return this.projectsService.findOne(userId, id);
+  }
+
+  @Get(':id/activity')
+  @ApiOperation({
+    summary: 'List recent project activity',
+    description:
+      'Returns the latest task activity on this project, newest first.',
+  })
+  @ApiParam({
+    name: 'id',
+    example: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
+    description: 'Project UUID',
+  })
+  @ApiResponse({ status: 200, description: 'Project activity returned' })
+  @ApiResponse({ status: 401, description: 'Missing or invalid Bearer token' })
+  @ApiResponse({
+    status: 403,
+    description: 'You do not have access to this project',
+  })
+  @ApiResponse({ status: 404, description: 'Project not found' })
+  listActivity(
+    @CurrentUser('id') userId: string,
+    @Param('id') id: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.projectsService.listActivity(userId, id, Number(limit) || 20);
   }
 
   @Patch(':id')

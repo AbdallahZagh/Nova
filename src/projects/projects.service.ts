@@ -159,6 +159,51 @@ export class ProjectsService {
     return this.withCompletion(project);
   }
 
+  async listActivity(userId: string, projectId: string, limit = 20) {
+    const project = await (this.prisma as any).project.findUnique({
+      where: { id: projectId },
+      select: {
+        id: true,
+        ownerId: true,
+        members: { select: { userId: true } },
+      },
+    });
+    if (!project) throw new NotFoundException('Project not found');
+    const isMember = project.members.some((m: any) => m.userId === userId);
+    if (project.ownerId !== userId && !isMember) {
+      throw new ForbiddenException('You do not have access to this project');
+    }
+    const take = Math.min(50, Math.max(1, Number(limit) || 20));
+    const rows = await (this.prisma as any).taskActivity.findMany({
+      where: { task: { projectId } },
+      orderBy: { createdAt: 'desc' },
+      take,
+      include: {
+        createdBy: {
+          select: { id: true, fullName: true, avatarUrl: true },
+        },
+        task: { select: { id: true, title: true, status: true } },
+      },
+    });
+
+    return rows.map((row: any) => ({
+      id: row.id,
+      type: row.type,
+      content: row.content,
+      createdAt: row.createdAt,
+      author: row.createdBy
+        ? {
+            id: row.createdBy.id,
+            name: row.createdBy.fullName,
+            avatarUrl: row.createdBy.avatarUrl,
+          }
+        : null,
+      task: row.task
+        ? { id: row.task.id, title: row.task.title, status: row.task.status }
+        : null,
+    }));
+  }
+
   // ─── Update ───────────────────────────────────────────────────────────────
 
   async update(userId: string, id: string, dto: UpdateProjectDto) {

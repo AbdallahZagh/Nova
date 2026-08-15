@@ -547,6 +547,7 @@ export class NotificationsService implements OnModuleInit {
         id: true,
         title: true,
         dueDate: true,
+        projectId: true,
         assigneeId: true,
         assignments: { select: { userId: true } },
       },
@@ -562,7 +563,7 @@ export class NotificationsService implements OnModuleInit {
         title: true,
         dueDate: true,
         assignments: { select: { userId: true } },
-        task: { select: { id: true, title: true } },
+        task: { select: { id: true, title: true, projectId: true } },
       },
     });
 
@@ -579,7 +580,12 @@ export class NotificationsService implements OnModuleInit {
         'TASK_DUE_REMINDER',
         'Task due soon',
         `${task.title} is due ${dueLabel}.`,
-        { taskId: task.id, dueDate: task.dueDate },
+        {
+          taskId: task.id,
+          projectId: task.projectId,
+          dueDate: task.dueDate,
+          url: `/projects/${task.projectId}?task=${task.id}`,
+        },
       );
     }
 
@@ -598,7 +604,74 @@ export class NotificationsService implements OnModuleInit {
         {
           subtaskId: subtask.id,
           taskId: subtask.task.id,
+          projectId: subtask.task.projectId,
           dueDate: subtask.dueDate,
+          url: `/projects/${subtask.task.projectId}?task=${subtask.task.id}`,
+        },
+      );
+    }
+  }
+
+  @Cron('0 7 * * *')
+  async sendOverdueNudges() {
+    const today = this.startOfDay(new Date());
+    const since = new Date(Date.now() - 20 * 60 * 60 * 1000);
+
+    const tasks = await (this.prisma as any).task.findMany({
+      where: {
+        status: { not: 'Completed' },
+        dueDate: { lt: today },
+      },
+      select: {
+        id: true,
+        title: true,
+        dueDate: true,
+        projectId: true,
+        assigneeId: true,
+        assignments: { select: { userId: true } },
+      },
+    });
+
+    if (tasks.length === 0) return;
+
+    const recent = await (this.prisma as any).notification.findMany({
+      where: {
+        type: 'TASK_OVERDUE',
+        createdAt: { gte: since },
+      },
+      select: { userId: true, metadata: true },
+    });
+    const alreadyNudged = new Set(
+      recent.map((item: any) => {
+        const taskId = item?.metadata?.taskId;
+        return taskId ? `${item.userId}:${taskId}` : '';
+      }),
+    );
+
+    for (const task of tasks) {
+      const userIds = [
+        ...new Set(
+          [task.assigneeId, ...task.assignments.map((a: any) => a.userId)].filter(
+            Boolean,
+          ),
+        ),
+      ] as string[];
+
+      const recipients = userIds.filter(
+        (userId) => !alreadyNudged.has(`${userId}:${task.id}`),
+      );
+      if (recipients.length === 0) continue;
+
+      await this.notifyUsers(
+        recipients,
+        'TASK_OVERDUE',
+        'Task is late',
+        `${task.title} is past due.`,
+        {
+          taskId: task.id,
+          projectId: task.projectId,
+          dueDate: task.dueDate,
+          url: `/projects/${task.projectId}?task=${task.id}`,
         },
       );
     }

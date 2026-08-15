@@ -8,5 +8,6 @@ import { TasksService } from './tasks.service';
   imports: [NotificationsModule],
   controllers: [TasksController],
   providers: [TasksService, ProjectRoleGuard],
+  exports: [TasksService],
 })
 export class TasksModule {}

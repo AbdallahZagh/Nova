@@ -6,6 +6,7 @@ import {
 import { resolveMentionedUsers, type MentionCandidate } from '../common/mentions';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { TasksService } from '../tasks/tasks.service';
 import {
   CreateProjectSuggestionDto,
   ProjectSuggestionStatus,
@@ -31,6 +32,7 @@ export class ProjectSuggestionsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly notificationsService: NotificationsService,
+    private readonly tasksService: TasksService,
   ) {}
 
   async create(userId: string, dto: CreateProjectSuggestionDto) {
@@ -151,6 +153,52 @@ export class ProjectSuggestionsService {
     return updated;
   }
 
+  async convertToTask(userId: string, id: string) {
+    const suggestion = await this.findOneOrFail(id);
+    await this.ensureCanCreateTasks(userId, suggestion.projectId);
+
+    if (suggestion.status === ProjectSuggestionStatus.REJECTED) {
+      throw new ForbiddenException('Rejected ideas cannot be turned into tasks');
+    }
+
+    const title = this.titleFromSuggestion(suggestion.content);
+    const authorName = suggestion.createdBy?.fullName;
+    const description = authorName
+      ? `${suggestion.content.trim()}\n\nFrom an idea by ${authorName}.`
+      : suggestion.content.trim();
+
+    const task = await this.tasksService.create(userId, {
+      title,
+      description,
+      projectId: suggestion.projectId,
+      status: undefined,
+      priority: undefined,
+    });
+
+    const updated = await (this.prisma as any).projectSuggestion.update({
+      where: { id },
+      data: { status: ProjectSuggestionStatus.IN_PROGRESS },
+      include: SUGGESTION_INCLUDE,
+    });
+
+    if (updated.createdById && updated.createdById !== userId) {
+      await this.notificationsService.createNotification(
+        updated.createdById,
+        'PROJECT_SUGGESTION_CONVERTED',
+        'Idea turned into a task',
+        `Your idea in ${updated.project.name} is now a task.`,
+        {
+          projectId: updated.projectId,
+          suggestionId: updated.id,
+          taskId: task.id,
+          url: `/projects/${updated.projectId}?task=${task.id}`,
+        },
+      );
+    }
+
+    return { suggestion: updated, task };
+  }
+
   async remove(userId: string, id: string) {
     const suggestion = await this.findOneOrFail(id);
     await this.ensureSuggestionMutationAllowed(userId, suggestion);
@@ -183,6 +231,29 @@ export class ProjectSuggestionsService {
       throw new ForbiddenException('You do not have access to this project');
     }
 
+    return project;
+  }
+
+  private titleFromSuggestion(content: string) {
+    const line = content
+      .replace(/\s+/g, ' ')
+      .trim()
+      .split(/[.!?\n]/)[0]
+      .trim();
+    if (!line) return 'New task from idea';
+    return line.length > 80 ? `${line.slice(0, 77).trimEnd()}…` : line;
+  }
+
+  private async ensureCanCreateTasks(userId: string, projectId: string) {
+    const project = await this.ensureProjectAccess(userId, projectId);
+    if (project.ownerId === userId) return project;
+    const member = await (this.prisma as any).projectMember.findUnique({
+      where: { userId_projectId: { userId, projectId } },
+      select: { role: true },
+    });
+    if (!member || member.role === 'VIEWER') {
+      throw new ForbiddenException('Viewers cannot turn ideas into tasks');
+    }
     return project;
   }
 
