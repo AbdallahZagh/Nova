@@ -69,13 +69,6 @@ export function mergeDocuments(
   };
 }
 
-export function mergeStroke(current: Stroke | null, point: Stroke["points"][number]): Stroke {
-  if (!current) {
-    throw new Error("Cannot merge into an empty stroke");
-  }
-  return { ...current, points: [...current.points, point] };
-}
-
 export type HistoryEntry =
   | { type: "add"; stroke: Stroke }
   | { type: "remove"; strokes: Stroke[] };

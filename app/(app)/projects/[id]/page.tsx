@@ -233,15 +233,19 @@ export default function ProjectWorkspacePage() {
   );
 
   const tasksByColumn = useMemo(() => {
-    return TASK_COLUMNS.reduce(
-      (acc, column) => {
-        acc[column] = sortTasksInStatusColumn(
-          filteredTasks.filter((task) => task.status === column),
-        );
-        return acc;
-      },
-      {} as Record<TaskStatus, Task[]>,
-    );
+    const acc = {
+      "To Do": [] as Task[],
+      "In Progress": [] as Task[],
+      "In Review": [] as Task[],
+      Completed: [] as Task[],
+    };
+    for (const task of filteredTasks) {
+      acc[task.status].push(task);
+    }
+    for (const column of TASK_COLUMNS) {
+      acc[column] = sortTasksInStatusColumn(acc[column]);
+    }
+    return acc as Record<TaskStatus, Task[]>;
   }, [filteredTasks]);
 
   const handleStatusChange = async (taskId: string, status: TaskStatus) => {

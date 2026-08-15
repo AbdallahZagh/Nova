@@ -782,24 +782,26 @@ function GanttBoard({
         .map((item) => makeGanttSpan(item, rangeStart, rangeEnd, dayPx))
         .filter((t): t is SpanTask => t !== null);
 
-      const seen = new Set<string>();
-      const order: [string, string][] = [];
+      const grouped = new Map<string, { title: string; tasks: SpanTask[] }>();
       for (const t of spans) {
-        if (!seen.has(t.projectId)) {
-          seen.add(t.projectId);
-          order.push([t.projectId, t.project.name]);
-        }
+        const group = grouped.get(t.projectId);
+        if (group) group.tasks.push(t);
+        else grouped.set(t.projectId, { title: t.project.name, tasks: [t] });
       }
       if (filterProjectId !== "all") {
         const p = projects.find((x) => x.id === filterProjectId);
-        if (p && !seen.has(p.id)) order.push([p.id, p.title]);
+        if (p && !grouped.has(p.id)) {
+          grouped.set(p.id, { title: p.title, tasks: [] });
+        }
       }
 
-      const groups: ProjectGroup[] = order.map(([projectId, title]) => ({
-        projectId,
-        title,
-        tasks: spans.filter((t) => t.projectId === projectId),
-      }));
+      const groups: ProjectGroup[] = [...grouped.entries()].map(
+        ([projectId, group]) => ({
+          projectId,
+          title: group.title,
+          tasks: group.tasks,
+        }),
+      );
 
       return {
         groups,

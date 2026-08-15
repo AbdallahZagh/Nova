@@ -7,7 +7,7 @@ export type DashboardMetrics = {
   _meta?: {
     totalSubtasks?: number;
     completedSubtasks?: number;
-    totalAssignedTasks?: number;
+    totalTasks?: number;
   };
 };
 
@@ -63,26 +63,11 @@ export type DashboardContinue = {
   dueToday: ContinueDueTodayTask[];
 };
 
-export function taskWorkspaceHref(
-  projectId: string | null | undefined,
-  taskId: string,
-) {
-  if (!projectId) return null;
-  return `/projects/${projectId}?task=${taskId}`;
-}
-
-export function getDashboardMetricsApi() {
-  return apiFetch<DashboardMetrics>("/api/dashboard/metrics");
-}
-
-export function getDashboardActivityApi() {
-  return apiFetch<ActivityMap>("/api/dashboard/activity");
-}
-
-export function getDashboardUrgentTasksApi() {
-  return apiFetch<UrgentTask[]>("/api/dashboard/urgent-tasks");
-}
-
-export function getDashboardContinueApi() {
-  return apiFetch<DashboardContinue>("/api/dashboard/continue");
+export function getDashboardSummaryApi() {
+  return apiFetch<{
+    metrics: DashboardMetrics;
+    activity: ActivityMap;
+    urgentTasks: UrgentTask[];
+    continue: DashboardContinue;
+  }>("/api/dashboard");
 }

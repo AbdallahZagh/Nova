@@ -316,10 +316,19 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
     );
   };
 
-  const projectItems = items.filter((item) => item.type === "project");
-  const whiteboardItems = items.filter((item) => item.type === "whiteboard");
-  const taskItems = items.filter((item) => item.type === "task");
-  const userItems = items.filter((item) => item.type === "user");
+  const { projectItems, whiteboardItems, taskItems, userItems } = useMemo(() => {
+    const projectItems: ResultItem[] = [];
+    const whiteboardItems: ResultItem[] = [];
+    const taskItems: ResultItem[] = [];
+    const userItems: ResultItem[] = [];
+    for (const item of items) {
+      if (item.type === "project") projectItems.push(item);
+      else if (item.type === "whiteboard") whiteboardItems.push(item);
+      else if (item.type === "task") taskItems.push(item);
+      else userItems.push(item);
+    }
+    return { projectItems, whiteboardItems, taskItems, userItems };
+  }, [items]);
 
   return (
     <div ref={rootRef} className="relative z-40 max-w-xl flex-1">

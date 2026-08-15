@@ -56,12 +56,6 @@ export function sameColor(a: string, b: string) {
   return toHexColor(a) === toHexColor(b);
 }
 
-export function platformLabel(platform?: string) {
-  if (platform === "ios") return "iPhone";
-  if (platform === "android") return "Android";
-  return "Web";
-}
-
 function readVar(styles: CSSStyleDeclaration, name: string, fallback: string) {
   return styles.getPropertyValue(name).trim() || fallback;
 }

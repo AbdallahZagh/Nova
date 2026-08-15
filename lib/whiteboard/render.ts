@@ -1,6 +1,6 @@
 import type { Stroke, WhiteboardDocument, WhiteboardPresence } from "./types";
 
-function drawStroke(
+export function drawStroke(
   ctx: CanvasRenderingContext2D,
   stroke: Stroke,
   paper: string,
