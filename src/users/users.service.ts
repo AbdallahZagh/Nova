@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { normalizeUsername } from '../common/utils/username.util';
 import { PrismaService } from '../prisma/prisma.service';
+import { StorageService } from '../storage/storage.service';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { DemoService } from '../demo/demo.service';
 
@@ -34,6 +35,7 @@ export class UsersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly demoService: DemoService,
+    private readonly storage: StorageService,
   ) {}
 
   async searchUsers(query?: string, actorId?: string) {
@@ -115,6 +117,29 @@ export class UsersService {
     });
 
     // Delegate to getProfile so the response always includes projectsCount and tasksCount
+    return this.getProfile(userId);
+  }
+
+  async uploadAvatar(userId: string, file: Express.Multer.File) {
+    const user = await (this.prisma as any).user.findUnique({
+      where: { id: userId },
+      select: { id: true, avatarUrl: true },
+    });
+
+    if (!user) throw new NotFoundException('User not found');
+
+    const { imageUrl } = await this.storage.uploadAvatar(
+      userId,
+      file.buffer,
+      file.mimetype,
+      user.avatarUrl,
+    );
+
+    await (this.prisma as any).user.update({
+      where: { id: userId },
+      data: { avatarUrl: imageUrl },
+    });
+
     return this.getProfile(userId);
   }
 

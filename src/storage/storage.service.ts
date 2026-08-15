@@ -119,4 +119,65 @@ export class StorageService {
     if (!this.client || storagePaths.length === 0) return;
     await this.client.storage.from(this.bucket).remove(storagePaths);
   }
+
+  async uploadAvatar(
+    userId: string,
+    buffer: Buffer,
+    mimeType: string,
+    previousUrl?: string | null,
+  ): Promise<{ storagePath: string; imageUrl: string }> {
+    if (!this.client) {
+      throw new InternalServerErrorException(
+        'Supabase Storage is not configured. Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.',
+      );
+    }
+
+    const ext =
+      mimeType === 'image/png'
+        ? 'png'
+        : mimeType === 'image/webp'
+          ? 'webp'
+          : mimeType === 'image/gif'
+            ? 'gif'
+            : 'jpg';
+    const storagePath = `avatars/${userId}.${ext}`;
+
+    const { error } = await this.client.storage
+      .from(this.bucket)
+      .upload(storagePath, buffer, {
+        upsert: true,
+        contentType: mimeType,
+        cacheControl: '3600',
+      });
+
+    if (error) {
+      throw new InternalServerErrorException(
+        `Failed to upload avatar: ${error.message}`,
+      );
+    }
+
+    const previousPath = this.pathFromPublicUrl(previousUrl);
+    if (previousPath && previousPath !== storagePath) {
+      await this.client.storage.from(this.bucket).remove([previousPath]);
+    }
+
+    const { data } = this.client.storage
+      .from(this.bucket)
+      .getPublicUrl(storagePath);
+
+    return {
+      storagePath,
+      imageUrl: `${data.publicUrl}?v=${Date.now()}`,
+    };
+  }
+
+  private pathFromPublicUrl(url?: string | null): string | null {
+    if (!url) return null;
+    const marker = `/object/public/${this.bucket}/`;
+    const index = url.indexOf(marker);
+    if (index === -1) return null;
+    return decodeURIComponent(
+      url.slice(index + marker.length).split('?')[0] ?? '',
+    );
+  }
 }

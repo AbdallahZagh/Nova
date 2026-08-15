@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -8,10 +9,16 @@ import {
   Patch,
   Post,
   Query,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { memoryStorage } from 'multer';
 import {
   ApiBearerAuth,
+  ApiBody,
+  ApiConsumes,
   ApiOperation,
   ApiParam,
   ApiQuery,
@@ -150,6 +157,45 @@ export class UsersController {
   @ApiResponse({ status: 404, description: 'User not found' })
   getUserProfile(@Param('id') userId: string) {
     return this.usersService.getProfile(userId);
+  }
+
+  @Post('me/avatar')
+  @DenyDemo('The demo profile photo cannot be changed.')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: memoryStorage(),
+      limits: { fileSize: 5 * 1024 * 1024 },
+    }),
+  )
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: { file: { type: 'string', format: 'binary' } },
+      required: ['file'],
+    },
+  })
+  @ApiOperation({ summary: 'Upload the current user avatar to Supabase Storage' })
+  @ApiResponse({ status: 200, description: 'Avatar updated successfully' })
+  @ApiResponse({ status: 400, description: 'Missing or invalid image file' })
+  uploadAvatar(
+    @CurrentUser('id') userId: string,
+    @UploadedFile() file?: Express.Multer.File,
+  ) {
+    if (!file?.buffer?.length) {
+      throw new BadRequestException('Choose an image to upload.');
+    }
+    const allowed = new Set([
+      'image/jpeg',
+      'image/jpg',
+      'image/png',
+      'image/webp',
+      'image/gif',
+    ]);
+    if (!allowed.has(file.mimetype)) {
+      throw new BadRequestException('Use a JPG, PNG, WEBP, or GIF image.');
+    }
+    return this.usersService.uploadAvatar(userId, file);
   }
 
   @Patch('me')
