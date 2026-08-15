@@ -198,6 +198,14 @@ export class UsersController {
     return this.usersService.uploadAvatar(userId, file);
   }
 
+  @Delete('me/avatar')
+  @DenyDemo('The demo profile photo cannot be changed.')
+  @ApiOperation({ summary: 'Remove the current user avatar from Supabase Storage' })
+  @ApiResponse({ status: 200, description: 'Avatar removed successfully' })
+  deleteAvatar(@CurrentUser('id') userId: string) {
+    return this.usersService.deleteAvatar(userId);
+  }
+
   @Patch('me')
   @DenyDemo('The demo profile cannot be edited.')
   @ApiOperation({

@@ -143,6 +143,23 @@ export class UsersService {
     return this.getProfile(userId);
   }
 
+  async deleteAvatar(userId: string) {
+    const user = await (this.prisma as any).user.findUnique({
+      where: { id: userId },
+      select: { id: true, avatarUrl: true },
+    });
+
+    if (!user) throw new NotFoundException('User not found');
+
+    await this.storage.deleteAvatar(user.avatarUrl);
+    await (this.prisma as any).user.update({
+      where: { id: userId },
+      data: { avatarUrl: null },
+    });
+
+    return this.getProfile(userId);
+  }
+
   private async getUserProjects(userId: string) {
     const projects = await (this.prisma as any).project.findMany({
       where: {

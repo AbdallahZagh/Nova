@@ -171,6 +171,13 @@ export class StorageService {
     };
   }
 
+  async deleteAvatar(previousUrl?: string | null): Promise<void> {
+    if (!this.client) return;
+    const previousPath = this.pathFromPublicUrl(previousUrl);
+    if (!previousPath) return;
+    await this.client.storage.from(this.bucket).remove([previousPath]);
+  }
+
   private pathFromPublicUrl(url?: string | null): string | null {
     if (!url) return null;
     const marker = `/object/public/${this.bucket}/`;
