@@ -163,7 +163,7 @@ export class NotificationsService implements OnModuleInit {
       'PROJECT_MEMBER_ADDED',
       'Added to project',
       `${inviterName} added you to ${projectName}.`,
-      { projectId },
+      { projectId, url: `/projects/${projectId}` },
     );
   }
 
@@ -179,7 +179,7 @@ export class NotificationsService implements OnModuleInit {
       'PROJECT_TEAM_MEMBER_ADDED',
       'New project member',
       `${memberName} joined ${projectName} as ${role.toLowerCase()}.`,
-      { projectId, memberName, role },
+      { projectId, memberName, role, url: `/projects/${projectId}` },
       excludeUserIds,
     );
   }
@@ -194,7 +194,7 @@ export class NotificationsService implements OnModuleInit {
       'PROJECT_MEMBER_REMOVED',
       'Removed from project',
       `You were removed from ${projectName}.`,
-      { projectId },
+      { projectId, url: '/projects' },
     );
   }
 
@@ -306,7 +306,7 @@ export class NotificationsService implements OnModuleInit {
       {
         projectId,
         suggestionId,
-        url: `/projects/${projectId}`,
+        url: `/projects/${projectId}?suggestions=1`,
       },
     );
   }
@@ -355,7 +355,7 @@ export class NotificationsService implements OnModuleInit {
       type,
       title,
       body,
-      { ...metadata, projectId },
+      { ...metadata, projectId, url: metadata?.url ?? `/projects/${projectId}` },
     );
   }
 
@@ -388,7 +388,11 @@ export class NotificationsService implements OnModuleInit {
       type,
       title,
       body,
-      { ...metadata, projectId },
+      {
+        ...metadata,
+        projectId,
+        url: metadata?.url ?? `/projects/${projectId}`,
+      },
     );
   }
 
@@ -398,7 +402,7 @@ export class NotificationsService implements OnModuleInit {
       'TASK_ASSIGNED',
       'Task assigned',
       `You were assigned to ${taskTitle}.`,
-      { taskId },
+      await this.taskContext(taskId),
     );
   }
 
@@ -408,18 +412,21 @@ export class NotificationsService implements OnModuleInit {
       'TASK_UNASSIGNED',
       'Task assignment removed',
       `You were unassigned from ${taskTitle}.`,
-      { taskId },
+      await this.taskContext(taskId),
     );
   }
 
   async notifyTaskUpdated(taskId: string, taskTitle: string) {
-    const userIds = await this.getTaskRecipientIds(taskId);
+    const [userIds, meta] = await Promise.all([
+      this.getTaskRecipientIds(taskId),
+      this.taskContext(taskId),
+    ]);
     await this.notifyUsers(
       userIds,
       'TASK_UPDATED',
       'Task updated',
       `${taskTitle} was updated.`,
-      { taskId },
+      meta,
     );
   }
 
@@ -427,6 +434,7 @@ export class NotificationsService implements OnModuleInit {
     const task = await (this.prisma as any).task.findUnique({
       where: { id: taskId },
       select: {
+        projectId: true,
         project: { select: { ownerId: true } },
       },
     });
@@ -439,7 +447,7 @@ export class NotificationsService implements OnModuleInit {
       'TASK_DONE',
       'Task completed',
       `${taskTitle} is done.`,
-      { taskId },
+      this.taskLinkMeta(taskId, task?.projectId),
     );
   }
 
@@ -453,7 +461,7 @@ export class NotificationsService implements OnModuleInit {
       'SUBTASK_ASSIGNED',
       'Subtask assigned',
       `You were assigned to ${subtaskTitle}.`,
-      { subtaskId },
+      await this.subtaskContext(subtaskId),
     );
   }
 
@@ -467,18 +475,21 @@ export class NotificationsService implements OnModuleInit {
       'SUBTASK_UNASSIGNED',
       'Subtask assignment removed',
       `You were unassigned from ${subtaskTitle}.`,
-      { subtaskId },
+      await this.subtaskContext(subtaskId),
     );
   }
 
   async notifySubtaskUpdated(subtaskId: string, subtaskTitle: string) {
-    const userIds = await this.getSubtaskRecipientIds(subtaskId);
+    const [userIds, meta] = await Promise.all([
+      this.getSubtaskRecipientIds(subtaskId),
+      this.subtaskContext(subtaskId),
+    ]);
     await this.notifyUsers(
       userIds,
       'SUBTASK_UPDATED',
       'Subtask updated',
       `${subtaskTitle} was updated.`,
-      { subtaskId },
+      meta,
     );
   }
 
@@ -486,7 +497,13 @@ export class NotificationsService implements OnModuleInit {
     const subtask = await (this.prisma as any).subtask.findUnique({
       where: { id: subtaskId },
       select: {
-        task: { select: { project: { select: { ownerId: true } } } },
+        task: {
+          select: {
+            id: true,
+            projectId: true,
+            project: { select: { ownerId: true } },
+          },
+        },
       },
     });
 
@@ -497,7 +514,7 @@ export class NotificationsService implements OnModuleInit {
       'SUBTASK_DONE',
       'Subtask completed',
       `${subtaskTitle} is done.`,
-      { subtaskId },
+      this.subtaskLinkMeta(subtaskId, subtask.task.id, subtask.task.projectId),
     );
   }
 
@@ -511,7 +528,7 @@ export class NotificationsService implements OnModuleInit {
       'TASK_COMMENT_REPLY',
       'Comment replied',
       `An admin replied to your comment on ${taskTitle}.`,
-      { commentId },
+      await this.commentContext(commentId),
     );
   }
 
@@ -526,7 +543,7 @@ export class NotificationsService implements OnModuleInit {
       'TASK_COMMENT_STATUS_CHANGED',
       'Comment status updated',
       `Your comment on ${taskTitle} was changed to ${status}.`,
-      { commentId, status },
+      { ...(await this.commentContext(commentId)), status },
     );
   }
 
@@ -745,6 +762,73 @@ export class NotificationsService implements OnModuleInit {
         data: { isActive: false },
       });
     }
+  }
+
+  private projectUrl(projectId: string, taskId?: string) {
+    return taskId
+      ? `/projects/${projectId}?task=${taskId}`
+      : `/projects/${projectId}`;
+  }
+
+  private taskLinkMeta(taskId: string, projectId?: string | null) {
+    return {
+      taskId,
+      ...(projectId
+        ? { projectId, url: this.projectUrl(projectId, taskId) }
+        : {}),
+    };
+  }
+
+  private subtaskLinkMeta(
+    subtaskId: string,
+    taskId?: string | null,
+    projectId?: string | null,
+  ) {
+    return {
+      subtaskId,
+      ...(taskId ? { taskId } : {}),
+      ...(projectId
+        ? { projectId, url: this.projectUrl(projectId, taskId ?? undefined) }
+        : {}),
+    };
+  }
+
+  private async taskContext(taskId: string) {
+    const task = await (this.prisma as any).task.findUnique({
+      where: { id: taskId },
+      select: { id: true, projectId: true },
+    });
+    return this.taskLinkMeta(taskId, task?.projectId);
+  }
+
+  private async subtaskContext(subtaskId: string) {
+    const subtask = await (this.prisma as any).subtask.findUnique({
+      where: { id: subtaskId },
+      select: {
+        id: true,
+        task: { select: { id: true, projectId: true } },
+      },
+    });
+    return this.subtaskLinkMeta(
+      subtaskId,
+      subtask?.task?.id,
+      subtask?.task?.projectId,
+    );
+  }
+
+  private async commentContext(commentId: string) {
+    const comment = await (this.prisma as any).taskComment.findUnique({
+      where: { id: commentId },
+      select: {
+        id: true,
+        task: { select: { id: true, projectId: true } },
+      },
+    });
+    if (!comment?.task) return { commentId };
+    return {
+      commentId,
+      ...this.taskLinkMeta(comment.task.id, comment.task.projectId),
+    };
   }
 
   private async getTaskRecipientIds(taskId: string) {
