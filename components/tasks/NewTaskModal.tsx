@@ -112,6 +112,8 @@ function SubtaskRow({
             variant="glass"
             aria-label="Subtask assignees"
             disabled={assigneeOptions.length === 0}
+            searchable
+            searchPlaceholder="Search people..."
           />
         </div>
       )}
@@ -515,6 +517,8 @@ function NewTaskForm({
               placeholder="Select team members..."
               variant="glass"
               aria-label="Assign to"
+              searchable
+              searchPlaceholder="Search people..."
             />
           </div>
         )}

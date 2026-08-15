@@ -10,7 +10,13 @@ import {
   useFloatingMenu,
 } from "@/components/ui/useDropdownPlacement";
 import { cn } from "@/lib/cn";
-import { projectStatusLabel, type Project } from "@/lib/projects";
+import {
+  formatProjectLateCount,
+  formatProjectNextDue,
+  projectStatusLabel,
+  type Project,
+  type ProjectDueAssignee,
+} from "@/lib/projects";
 
 export type { Project } from "@/lib/projects";
 
@@ -96,39 +102,44 @@ export function ProjectCard({
               />
             </div>
 
-            <div className="mt-3 flex items-center justify-between gap-2">
-              <div className="min-w-0">
-                <span className="text-xs font-medium text-primary/70">
-                  {progress}% complete
-                </span>
-                {project.totalTasks != null && (
-                  <p className="text-[11px] text-primary/50">
-                    {project.completedTasks ?? 0}/{project.totalTasks} tasks
-                    {project.totalSubtasks != null && project.totalSubtasks > 0
-                      ? ` · ${project.completedSubtasks ?? 0}/${project.totalSubtasks} subtasks`
-                      : ""}
-                  </p>
-                )}
-              </div>
+            <div className="mt-3 min-w-0">
+              <span className="text-xs font-medium text-primary/70">
+                {progress}% complete
+              </span>
+              {project.totalTasks != null && (
+                <p className="text-[11px] text-primary/50">
+                  {project.completedTasks ?? 0}/{project.totalTasks} tasks
+                  {project.totalSubtasks != null && project.totalSubtasks > 0
+                    ? ` · ${project.completedSubtasks ?? 0}/${project.totalSubtasks} subtasks`
+                    : ""}
+                </p>
+              )}
+            </div>
 
-              <div className="flex items-center">
-                {project.teamMembers.map((member, index) => (
-                  <div key={`${member.initials}-${index}`} className="-ml-1 first:ml-0">
-                    <div className="flex size-7 items-center justify-center overflow-hidden rounded-full border border-accent/35 bg-glass-button text-[10px] font-semibold text-primary">
-                      {member.imageUrl ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={member.imageUrl}
-                          alt={member.initials}
-                          className="size-full object-cover"
-                        />
-                      ) : (
-                        member.initials
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
+            <div className="mt-3 flex items-center justify-between gap-2 text-[11px] text-primary/55">
+              <span
+                className={cn(
+                  "font-medium",
+                  (project.overdueCount ?? 0) > 0 && "text-warning",
+                )}
+              >
+                {formatProjectLateCount(project.overdueCount)}
+              </span>
+              <span className="truncate font-medium">
+                {formatProjectNextDue(project.nextDueDate)}
+              </span>
+              <ProjectWhoAvatars
+                people={
+                  project.nextDueDate
+                    ? (project.nextDueAssignees ?? [])
+                    : project.teamMembers.map((member) => ({
+                        id: member.userId ?? member.id,
+                        name: member.name ?? member.initials,
+                        initials: member.initials,
+                        avatarUrl: member.imageUrl,
+                      }))
+                }
+              />
             </div>
           </div>
         </GlassCard>
@@ -194,6 +205,39 @@ export function ProjectCard({
           </>
         )}
       </FloatingMenuPortal>
+    </div>
+  );
+}
+
+function ProjectWhoAvatars({ people }: { people: ProjectDueAssignee[] }) {
+  if (people.length === 0) {
+    return <span className="shrink-0 font-medium">Unassigned</span>;
+  }
+
+  const visible = people.slice(0, 3);
+  return (
+    <div className="flex shrink-0 items-center" title={people.map((p) => p.name).join(", ")}>
+      {visible.map((person, index) => (
+        <div key={`${person.id ?? person.initials}-${index}`} className="-ml-1 first:ml-0">
+          <div className="flex size-6 items-center justify-center overflow-hidden rounded-full border border-accent/35 bg-glass-button text-[9px] font-semibold text-primary">
+            {person.avatarUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={person.avatarUrl}
+                alt={person.initials}
+                className="size-full object-cover"
+              />
+            ) : (
+              person.initials
+            )}
+          </div>
+        </div>
+      ))}
+      {people.length > visible.length ? (
+        <span className="ml-1 text-[10px] text-primary/45">
+          +{people.length - visible.length}
+        </span>
+      ) : null}
     </div>
   );
 }

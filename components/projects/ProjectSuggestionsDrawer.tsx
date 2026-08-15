@@ -1,17 +1,17 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Loader2, MessageSquarePlus, Pencil, Trash2, X } from "lucide-react";
+import { ListPlus, Loader2, MessageSquarePlus, Pencil, Trash2, X } from "lucide-react";
 import { MentionComposer } from "@/components/mentions/MentionComposer";
 import { MentionText } from "@/components/mentions/MentionText";
 import { DeleteConfirmModal } from "@/components/ui/DeleteConfirmModal";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { Select } from "@/components/ui/Select";
 import { useToast } from "@/components/ui/Toast";
-import { Textarea } from "@/components/ui/input";
 import { UserProfileLink } from "@/components/users/UserProfileLink";
 import { ApiError } from "@/lib/api/client";
 import {
+  convertProjectSuggestionApi,
   createProjectSuggestionApi,
   deleteProjectSuggestionApi,
   listProjectSuggestionsApi,
@@ -21,11 +21,14 @@ import {
   type ProjectSuggestionStatus,
 } from "@/lib/api/project-suggestions";
 import type { MentionUser } from "@/lib/mentions";
+import type { Task } from "@/lib/tasks";
 import { cn } from "@/lib/cn";
 
 type ProjectSuggestionsDrawerProps = {
   projectId: string;
   mentionUsers?: MentionUser[];
+  canConvert?: boolean;
+  onConverted?: (task: Task) => void | Promise<void>;
 };
 
 const statusStyles: Record<ProjectSuggestionStatus, string> = {
@@ -45,6 +48,8 @@ function suggestionSnapshot(suggestion: ProjectSuggestion) {
 export function ProjectSuggestionsDrawer({
   projectId,
   mentionUsers = [],
+  canConvert = false,
+  onConverted,
 }: ProjectSuggestionsDrawerProps) {
   const { toast } = useToast();
   const [suggestions, setSuggestions] = useState<ProjectSuggestion[]>([]);
@@ -56,6 +61,7 @@ export function ProjectSuggestionsDrawer({
   const [savingId, setSavingId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<ProjectSuggestion | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [convertingId, setConvertingId] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -187,6 +193,27 @@ export function ProjectSuggestionsDrawer({
       showError("Could not delete suggestion", err);
     } finally {
       setDeleting(false);
+    }
+  };
+
+  const handleConvert = async (suggestion: ProjectSuggestion) => {
+    if (suggestion.status === "Rejected" || convertingId) return;
+    setConvertingId(suggestion.id);
+    try {
+      const result = await convertProjectSuggestionApi(suggestion.id);
+      setSuggestions((prev) =>
+        prev.map((item) => (item.id === result.suggestion.id ? result.suggestion : item)),
+      );
+      toast({
+        variant: "success",
+        title: "Task created",
+        message: `"${result.task.title}" is now on the board.`,
+      });
+      await onConverted?.(result.task);
+    } catch (err) {
+      showError("Could not turn this idea into a task", err);
+    } finally {
+      setConvertingId(null);
     }
   };
 
@@ -322,9 +349,24 @@ export function ProjectSuggestionsDrawer({
                   ) : (
                     <>
                       <p className="text-sm leading-relaxed text-primary/75">
-                        <MentionText content={suggestion.content} />
+                        <MentionText content={suggestion.content} users={mentionUsers} />
                       </p>
-                      <div className="mt-4 flex gap-2">
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        {canConvert && suggestion.status !== "Rejected" ? (
+                          <button
+                            type="button"
+                            onClick={() => void handleConvert(suggestion)}
+                            disabled={convertingId === suggestion.id}
+                            className="flex items-center gap-2 rounded-xl border border-accent/40 bg-accent/10 px-3 py-2 text-sm font-semibold text-accent transition hover:bg-accent/20 disabled:opacity-50"
+                          >
+                            {convertingId === suggestion.id ? (
+                              <Loader2 className="size-4 animate-spin" />
+                            ) : (
+                              <ListPlus className="size-4" />
+                            )}
+                            Turn into task
+                          </button>
+                        ) : null}
                         <button
                           type="button"
                           onClick={() => startEditing(suggestion)}

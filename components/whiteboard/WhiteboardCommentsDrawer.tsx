@@ -13,7 +13,9 @@ import {
   listWhiteboardCommentsApi,
   type WhiteboardComment,
 } from "@/lib/api/whiteboards";
-import type { MentionUser } from "@/lib/mentions";
+import { normalizeMention, type MentionUser } from "@/lib/mentions";
+import { UserAvatar } from "@/components/users/UserAvatar";
+import { UserProfileLink } from "@/components/users/UserProfileLink";
 import type { Whiteboard } from "@/lib/whiteboard/types";
 import { canDrawOnBoard } from "@/lib/whiteboard/types";
 
@@ -42,7 +44,7 @@ export function WhiteboardCommentsDrawer({
         .filter((member) => member.username)
         .map((member) => ({
           id: member.userId,
-          username: member.username!,
+          username: normalizeMention(member.username!),
           fullName: member.fullName,
         })),
     [board.members],
@@ -147,13 +149,22 @@ export function WhiteboardCommentsDrawer({
                 className="rounded-xl border border-glass bg-glass-button/40 px-3 py-3"
               >
                 <div className="flex items-start justify-between gap-3">
-                  <div>
+                  <div className="flex min-w-0 items-start gap-2.5">
+                    <UserAvatar
+                      name={item.createdBy?.fullName}
+                      avatarUrl={item.createdBy?.avatarUrl}
+                      size="sm"
+                    />
+                    <div>
                     <p className="text-sm font-semibold text-primary">
-                      {item.createdBy?.fullName || "Someone"}
+                      <UserProfileLink userId={item.createdBy?.id ?? item.createdById}>
+                        {item.createdBy?.fullName || "Someone"}
+                      </UserProfileLink>
                     </p>
                     <p className="text-xs text-primary/45">
                       {new Date(item.createdAt).toLocaleString()}
                     </p>
+                    </div>
                   </div>
                   {canDelete ? (
                     <button
@@ -166,7 +177,7 @@ export function WhiteboardCommentsDrawer({
                   ) : null}
                 </div>
                 <p className="mt-2 text-sm text-primary/75">
-                  <MentionText content={item.content} />
+                  <MentionText content={item.content} users={users} />
                 </p>
               </li>
             );

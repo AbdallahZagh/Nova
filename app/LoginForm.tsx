@@ -8,6 +8,7 @@ import { useToast } from "@/components/ui/Toast";
 import { loginApi, reactivateApi } from "@/lib/api/auth";
 import { getDemoCredentialsApi } from "@/lib/demo";
 import { ApiError, setAccessToken } from "@/lib/api/client";
+import { looksLikeEmail } from "@/lib/username";
 
 function isInactiveAccountError(err: unknown) {
   if (!(err instanceof ApiError)) return false;
@@ -48,11 +49,11 @@ function LoginFormContent() {
     setPending(true);
 
     const formData = new FormData(e.currentTarget);
-    const email = String(formData.get("email") ?? "").trim();
+    const identifier = String(formData.get("identifier") ?? "").trim();
     const password = String(formData.get("password") ?? "");
 
     try {
-      const response = await loginApi(email, password);
+      const response = await loginApi(identifier, password);
       const accessToken = response.accessToken ?? response.access_token;
       if (!accessToken) {
         throw new ApiError(
@@ -91,8 +92,17 @@ function LoginFormContent() {
       router.refresh();
     } catch (err) {
       if (isInactiveAccountError(err)) {
+        if (!looksLikeEmail(identifier)) {
+          const message =
+            err instanceof ApiError
+              ? err.message
+              : "This account needs to be reactivated with the email on file.";
+          setError(message);
+          toast({ variant: "error", title: "Sign in failed", message });
+          return;
+        }
         try {
-          const reactivateResponse = await reactivateApi(email);
+          const reactivateResponse = await reactivateApi(identifier);
           toast({
             variant: "success",
             title: "Reactivation code sent",
@@ -101,7 +111,7 @@ function LoginFormContent() {
                 ? `Your code: ${reactivateResponse._devOtp}`
                 : "Check your email for the OTP.",
           });
-          router.push(`/reactivate?email=${encodeURIComponent(email)}&step=otp`);
+          router.push(`/reactivate?email=${encodeURIComponent(identifier)}&step=otp`);
           return;
         } catch (reactivateErr) {
           const message =
@@ -159,19 +169,22 @@ function LoginFormContent() {
     <form onSubmit={handleSubmit} className="space-y-4">
       <div>
         <label
-          htmlFor="email"
+          htmlFor="identifier"
           className="mb-1.5 block text-sm font-medium text-primary/80"
         >
-          Email
+          Email or username
         </label>
         <Input
-          id="email"
-          name="email"
-          type="email"
-          autoComplete="email"
+          id="identifier"
+          name="identifier"
+          type="text"
+          autoComplete="username"
+          autoCapitalize="none"
+          autoCorrect="off"
+          spellCheck={false}
           required
           variant="soft"
-          placeholder="you@company.com"
+          placeholder="you@company.com or @username"
           className="bg-main/60"
         />
       </div>

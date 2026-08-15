@@ -30,11 +30,11 @@ export async function registerApi(payload: RegisterPayload) {
   });
 }
 
-export async function loginApi(email: string, password: string) {
+export async function loginApi(identifier: string, password: string) {
   return apiFetch<LoginResponse>("/api/auth/login", {
     method: "POST",
     auth: false,
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({ email: identifier.trim(), password }),
   });
 }
 

@@ -10,6 +10,7 @@ import { Input, Textarea } from "@/components/ui/input";
 import { MultiSelect } from "@/components/ui/MultiSelect";
 import { Select } from "@/components/ui/Select";
 import { useToast } from "@/components/ui/Toast";
+import { UserAvatar } from "@/components/users/UserAvatar";
 import { UserProfileLink } from "@/components/users/UserProfileLink";
 import { useAppData } from "@/components/providers/AppDataProvider";
 import { ApiError } from "@/lib/api/client";
@@ -252,6 +253,8 @@ function SubtaskRow({
             variant="glass"
             aria-label="Subtask assignees"
             disabled={assignmentBusy || assigneeOptions.length === 0}
+            searchable
+            searchPlaceholder="Search people..."
           />
           <button
             type="button"
@@ -269,18 +272,12 @@ function SubtaskRow({
               key={assignee.id ?? `${assignee.initials}-${assignee.name}-${index}`}
               className="inline-flex items-center gap-1.5 rounded-full border border-glass bg-glass-card px-2 py-1 text-[11px] font-medium text-primary/65"
             >
-              <span className="flex size-4 items-center justify-center overflow-hidden rounded-full bg-glass-button text-[8px] font-semibold text-primary">
-                {assignee.avatarUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={assignee.avatarUrl}
-                    alt={assignee.name}
-                    className="size-full object-cover"
-                  />
-                ) : (
-                  assignee.initials
-                )}
-              </span>
+              <UserAvatar
+                name={assignee.name}
+                avatarUrl={assignee.avatarUrl}
+                initials={assignee.initials}
+                size="xs"
+              />
               <UserProfileLink
                 userId={assignee.id}
                 className="text-primary/65"
@@ -886,18 +883,12 @@ export function TaskDrawerDetails({
                     key={assignee.id ?? `${assignee.initials}-${assignee.name}-${index}`}
                     className="inline-flex items-center gap-2 rounded-full border border-glass bg-glass-card px-2.5 py-1 text-xs font-medium text-primary/75"
                   >
-                    <span className="flex size-5 items-center justify-center overflow-hidden rounded-full bg-glass-button text-[9px] font-semibold text-primary">
-                      {assignee.avatarUrl ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={assignee.avatarUrl}
-                          alt={assignee.name}
-                          className="size-full object-cover"
-                        />
-                      ) : (
-                        assignee.initials
-                      )}
-                    </span>
+                    <UserAvatar
+                      name={assignee.name}
+                      avatarUrl={assignee.avatarUrl}
+                      initials={assignee.initials}
+                      size="xs"
+                    />
                     <UserProfileLink
                       userId={assignee.id}
                       className="text-primary/75"
@@ -921,6 +912,8 @@ export function TaskDrawerDetails({
               variant="glass"
               aria-label="Task assignees"
               disabled={assigneeOptions.length === 0}
+              searchable
+              searchPlaceholder="Search people..."
             />
           )}
           {!readOnly && canAssignTasks && (
@@ -1089,7 +1082,13 @@ export function TaskDrawerDetails({
                   className="rounded-xl border border-glass bg-glass-button/40 px-3 py-3"
                 >
                   <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
+                    <div className="flex min-w-0 items-start gap-2.5">
+                      <UserAvatar
+                        name={comment.createdBy?.fullName}
+                        avatarUrl={comment.createdBy?.avatarUrl}
+                        size="sm"
+                      />
+                      <div className="min-w-0">
                       <p className="text-sm font-medium text-primary">
                         <UserProfileLink
                           userId={comment.createdBy?.id}
@@ -1102,6 +1101,7 @@ export function TaskDrawerDetails({
                       <p className="mt-0.5 text-xs text-primary/45">
                         {comment.createdLabel || "Recently"}
                       </p>
+                      </div>
                     </div>
                     <span
                       className={cn(
@@ -1116,7 +1116,7 @@ export function TaskDrawerDetails({
                   </div>
 
                   <p className="mt-3 text-sm leading-relaxed text-primary/75">
-                    <MentionText content={comment.content} />
+                    <MentionText content={comment.content} users={mentionUsers} />
                   </p>
 
                   {comment.replyContent && (
@@ -1137,7 +1137,7 @@ export function TaskDrawerDetails({
                         </p>
                       </div>
                       <p className="mt-1.5 text-sm leading-relaxed text-primary/75">
-                        <MentionText content={comment.replyContent} />
+                        <MentionText content={comment.replyContent} users={mentionUsers} />
                       </p>
                     </div>
                   )}

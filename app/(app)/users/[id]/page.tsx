@@ -2,14 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import {
-  ArrowLeft,
-  FolderKanban,
-  ListChecks,
-  Mail,
-  ShieldAlert,
-} from "lucide-react";
+import { ArrowLeft, ListChecks, ShieldAlert } from "lucide-react";
 import { ActivityHeatmap } from "@/components/dashboard/ActivityHeatmap";
+import { ProfileHero } from "@/components/profile/ProfileHero";
 import { ProfileSkeleton } from "@/components/skeletons/ProfileSkeleton";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { getInitials, type UserProfile } from "@/components/providers/UserProvider";
@@ -30,10 +25,10 @@ function formatDate(value?: string) {
 }
 
 function roleBadgeClass(role: string) {
-  if (role === "OWNER") return "border-accent/30 bg-accent/10 text-accent";
-  if (role === "ADMIN") return "border-warning/40 bg-warning/10 text-warning";
-  if (role === "VIEWER") return "border-primary/20 bg-glass-button/50 text-primary/45";
-  return "border-glass bg-main/40 text-primary/55";
+  if (role === "OWNER") return "bg-accent/12 text-accent";
+  if (role === "ADMIN") return "bg-warning/10 text-warning";
+  if (role === "VIEWER") return "bg-glass-button/50 text-primary/45";
+  return "bg-glass-button text-primary/55";
 }
 
 export default function UserProfilePage() {
@@ -74,7 +69,7 @@ export default function UserProfilePage() {
 
   if (!profile) {
     return (
-      <div className="mx-auto flex w-full max-w-3xl flex-col items-center gap-4 py-20 text-center">
+      <div className="mx-auto flex w-full max-w-7xl flex-col items-center gap-4 py-20 text-center">
         <div className="flex size-14 items-center justify-center rounded-2xl bg-red-500/10 text-red-400">
           <ShieldAlert className="size-7" />
         </div>
@@ -98,7 +93,7 @@ export default function UserProfilePage() {
   const initials = getInitials(profile.name);
 
   return (
-    <div className="mx-auto flex w-full max-w-5xl flex-col gap-6">
+    <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">
       <div className="flex items-center gap-3">
         <button
           type="button"
@@ -108,84 +103,50 @@ export default function UserProfilePage() {
           <ArrowLeft className="size-4" />
         </button>
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-primary">
-            User Profile
+          <h1 className="text-3xl font-semibold tracking-tight text-primary">
+            Profile
           </h1>
-          <p className="text-sm text-primary/50">Read-only workspace profile</p>
+          <p className="mt-1 text-sm text-primary/60">Workspace member</p>
         </div>
       </div>
 
+      <ProfileHero
+        name={profile.name}
+        username={profile.username}
+        role={profile.role}
+        email={profile.email}
+        bio={profile.bio}
+        avatarUrl={profile.avatarUrl}
+        initials={initials}
+        projectCount={profile.projectCount}
+        taskCount={profile.taskCount}
+        badge={
+          <span className="rounded-full bg-emerald-500/10 px-2.5 py-1 text-[11px] font-semibold text-emerald-400">
+            Active
+          </span>
+        }
+      />
+
       <GlassCard className="p-6">
-        <div className="flex flex-col gap-5 sm:flex-row sm:items-start">
-          <div className="flex size-24 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-linear-135 from-accent to-accent/60 text-3xl font-bold text-white shadow-lg shadow-accent/25">
-            {profile.avatarUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={profile.avatarUrl}
-                alt={profile.name}
-                className="size-full object-cover"
-              />
-            ) : (
-              initials
-            )}
-          </div>
-
-          <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <h2 className="text-xl font-bold text-primary">{profile.name}</h2>
-              <span className="rounded-full border border-emerald-500/25 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-semibold text-emerald-400">
-                Active
-              </span>
-            </div>
-            {profile.username ? (
-              <p className="mt-0.5 text-sm font-medium text-accent">
-                {profile.username}
-              </p>
-            ) : null}
-            <p className="mt-1 text-sm text-primary/70">{profile.role}</p>
-            <p className="mt-1 flex items-center gap-1.5 text-sm text-primary/55">
-              <Mail className="size-3.5" />
-              {profile.email}
-            </p>
-            {profile.bio ? (
-              <p className="mt-3 max-w-2xl text-sm leading-relaxed text-primary/65">
-                {profile.bio}
-              </p>
-            ) : null}
-          </div>
-
-          <div className="grid grid-cols-2 gap-3 sm:w-48">
-            <div className="rounded-xl border border-glass bg-glass-button/50 px-4 py-3 text-center">
-              <p className="text-xl font-bold text-primary">{profile.projectCount}</p>
-              <p className="text-[11px] text-primary/50">Projects</p>
-            </div>
-            <div className="rounded-xl border border-glass bg-glass-button/50 px-4 py-3 text-center">
-              <p className="text-xl font-bold text-primary">{profile.taskCount}</p>
-              <p className="text-[11px] text-primary/50">Tasks</p>
-            </div>
-          </div>
+        <div className="mb-5">
+          <h2 className="text-base font-semibold text-primary">Activity</h2>
+          <p className="mt-0.5 text-xs text-primary/50">
+            Yearly task activity map
+          </p>
         </div>
-      </GlassCard>
-
-      <GlassCard title="Recent Activity">
         <ActivityHeatmap activity={profile.activity} />
       </GlassCard>
 
-      <GlassCard className="p-6">
-        <div className="mb-5 flex items-center gap-3">
-          <div className="flex size-9 items-center justify-center rounded-xl bg-accent/15 text-accent">
-            <FolderKanban className="size-4" />
-          </div>
-          <div>
-            <h2 className="text-base font-semibold text-primary">Projects</h2>
-            <p className="text-xs text-primary/50">
-              Read-only project membership
-            </p>
-          </div>
+      <section>
+        <div className="mb-4">
+          <h2 className="text-base font-semibold text-primary">Projects</h2>
+          <p className="mt-0.5 text-xs text-primary/50">
+            Read-only project membership
+          </p>
         </div>
 
         {profile.projects.length === 0 ? (
-          <p className="rounded-2xl border border-glass bg-glass-button/40 px-4 py-6 text-center text-sm text-primary/45">
+          <p className="rounded-2xl border border-dashed border-glass px-4 py-8 text-center text-sm text-primary/45">
             No projects found.
           </p>
         ) : (
@@ -202,20 +163,20 @@ export default function UserProfilePage() {
               return (
                 <article
                   key={project.id}
-                  className="rounded-2xl border border-glass bg-glass-button/45 p-4"
+                  className="rounded-2xl border border-glass bg-sidebar/80 p-4"
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <h3 className="truncate text-sm font-semibold text-primary">
                         {project.name}
                       </h3>
-                      <p className="mt-1 line-clamp-2 min-h-[2.5rem] text-xs leading-5 text-primary/55">
+                      <p className="mt-1 line-clamp-2 text-xs leading-5 text-primary/55">
                         {project.description || "No description"}
                       </p>
                     </div>
                     <span
                       className={cn(
-                        "shrink-0 rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider",
+                        "shrink-0 rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider",
                         roleBadgeClass(project.role),
                       )}
                     >
@@ -223,14 +184,12 @@ export default function UserProfilePage() {
                     </span>
                   </div>
 
-                  <div className="mt-4 flex items-center justify-between gap-3 text-xs text-primary/50">
-                    <span className="rounded-md border border-glass bg-main/35 px-2 py-1">
-                      {project.status}
-                    </span>
+                  <div className="mt-4 flex items-center justify-between text-xs text-primary/50">
+                    <span>{project.status}</span>
                     <span>Updated {formatDate(project.updatedAt)}</span>
                   </div>
 
-                  <div className="mt-4 space-y-2">
+                  <div className="mt-3 space-y-1.5">
                     <div className="flex items-center justify-between text-xs">
                       <span className="flex items-center gap-1.5 text-primary/55">
                         <ListChecks className="size-3.5" />
@@ -247,20 +206,12 @@ export default function UserProfilePage() {
                       />
                     </div>
                   </div>
-
-                  <div className="mt-4 flex items-center justify-between border-t border-glass pt-3 text-xs text-primary/45">
-                    <span>
-                      {project.totalTasksCount} total task
-                      {project.totalTasksCount === 1 ? "" : "s"}
-                    </span>
-                    <span>Created {formatDate(project.createdAt)}</span>
-                  </div>
                 </article>
               );
             })}
           </div>
         )}
-      </GlassCard>
+      </section>
     </div>
   );
 }

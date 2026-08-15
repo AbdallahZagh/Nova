@@ -64,6 +64,20 @@ export function UrgentTasksTableSkeleton() {
   );
 }
 
+export function ContinueStripSkeleton() {
+  return (
+    <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
+      {Array.from({ length: 3 }).map((_, i) => (
+        <GlassCard key={i} className="p-4">
+          <Skeleton className="h-3 w-20" />
+          <Skeleton className="mt-3 h-5 w-40" />
+          <Skeleton className="mt-2 h-3 w-24" />
+        </GlassCard>
+      ))}
+    </div>
+  );
+}
+
 /** Full-page fallback (e.g. initial paint) */
 export function DashboardSkeleton() {
   return (
@@ -72,6 +86,7 @@ export function DashboardSkeleton() {
         <Skeleton className="h-9 w-48" />
         <Skeleton className="mt-2 h-4 w-72" />
       </div>
+      <ContinueStripSkeleton />
       <MetricsCardsSkeleton />
       <GlassCard title="Recent Activity">
         <ActivityHeatmapSkeleton />

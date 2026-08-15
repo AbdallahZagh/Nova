@@ -39,6 +39,14 @@ export type ApiProjectMember = {
   };
 };
 
+export type ApiProjectDueAssignee = {
+  id?: string;
+  name?: string;
+  fullName?: string;
+  initials?: string;
+  avatarUrl?: string | null;
+};
+
 export type ApiProjectTaskSummary = {
   id: string;
   status: string;
@@ -66,6 +74,9 @@ export type ApiProject = {
   completedTasks?: number;
   totalSubtasks?: number;
   completedSubtasks?: number;
+  overdueCount?: number;
+  nextDueDate?: string | null;
+  nextDueAssignees?: ApiProjectDueAssignee[];
 };
 
 function initialsFromName(fullName: string): string {
@@ -188,6 +199,16 @@ export function apiProjectToProject(api: ApiProject): Project {
     completedTasks: api.completedTasks,
     totalSubtasks: api.totalSubtasks,
     completedSubtasks: api.completedSubtasks,
+    overdueCount: api.overdueCount ?? 0,
+    nextDueDate: api.nextDueDate ?? null,
+    nextDueAssignees: (api.nextDueAssignees ?? []).map((assignee) => ({
+      id: assignee.id,
+      name: assignee.name ?? assignee.fullName ?? "Member",
+      initials:
+        assignee.initials ??
+        initialsFromName(assignee.name ?? assignee.fullName ?? "NA"),
+      avatarUrl: assignee.avatarUrl,
+    })),
     createdAt: api.createdAt,
     updatedAt: api.updatedAt,
   };
@@ -319,4 +340,36 @@ export async function deleteProjectMemberApi(projectId: string, userId: string) 
     `/api/projects/${projectId}/members/${userId}`,
     { method: "DELETE" },
   );
+}
+
+export type ProjectActivityItem = {
+  id: string;
+  type: string;
+  content: string;
+  createdAt: string;
+  authorName: string;
+  taskId?: string;
+  taskTitle?: string;
+};
+
+export async function listProjectActivityApi(projectId: string, limit = 12) {
+  const data = await apiFetch<
+    Array<{
+      id: string;
+      type?: string;
+      content?: string;
+      createdAt?: string;
+      author?: { id?: string; name?: string; fullName?: string } | null;
+      task?: { id?: string; title?: string } | null;
+    }>
+  >(`/api/projects/${projectId}/activity?limit=${limit}`);
+  return (Array.isArray(data) ? data : []).map((item) => ({
+    id: item.id,
+    type: item.type ?? "ACTIVITY",
+    content: item.content ?? "",
+    createdAt: item.createdAt ?? "",
+    authorName: item.author?.name ?? item.author?.fullName ?? "Someone",
+    taskId: item.task?.id,
+    taskTitle: item.task?.title,
+  }));
 }

@@ -1,19 +1,35 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { KanbanSkeleton } from "@/components/skeletons/KanbanSkeleton";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { MessageSquare, PenLine, Plus } from "lucide-react";
+import {
+  Check,
+  Clock,
+  MessageSquare,
+  MoreHorizontal,
+  PenLine,
+  Plus,
+  Users,
+} from "lucide-react";
 import { DeleteConfirmModal } from "@/components/ui/DeleteConfirmModal";
 import { SideDrawer } from "@/components/ui/SideDrawer";
 import { useToast } from "@/components/ui/Toast";
+import {
+  FloatingMenuPortal,
+  useFloatingClickOutside,
+  useFloatingMenu,
+} from "@/components/ui/useDropdownPlacement";
 import { useAppData } from "@/components/providers/AppDataProvider";
 import { useUser } from "@/components/providers/UserProvider";
 import { ManageTeamModal } from "@/components/projects/ManageTeamModal";
+import { ProjectActivityStrip } from "@/components/projects/ProjectActivityStrip";
 import { ProjectSuggestionsDrawer } from "@/components/projects/ProjectSuggestionsDrawer";
 import { TaskCard } from "@/components/tasks/TaskCard";
 import { NewTaskModal } from "@/components/tasks/NewTaskModal";
+import { Select } from "@/components/ui/Select";
 import { TaskDrawerDetails } from "@/components/tasks/TaskDrawerDetails";
+import { UserAvatar } from "@/components/users/UserAvatar";
 import { UserProfileLink } from "@/components/users/UserProfileLink";
 import { ApiError } from "@/lib/api/client";
 import { cn } from "@/lib/cn";
@@ -24,7 +40,15 @@ import {
   type Task,
   type TaskStatus,
 } from "@/lib/tasks";
-import { projectStatusLabel, type Project } from "@/lib/projects";
+import { listProjectActivityApi, type ProjectActivityItem } from "@/lib/api/projects";
+import { projectStatusLabel, shouldOfferMarkProjectComplete, type Project } from "@/lib/projects";
+import {
+  filterBoardTasks,
+  taskMatchesBoardFilters,
+  type BoardPersonFilter,
+  type BoardPriorityFilter,
+  type BoardWhenFilter,
+} from "@/lib/project-board-filters";
 import { normalizeMention } from "@/lib/mentions";
 import {
   canAssignProjectTasks,
@@ -53,6 +77,7 @@ export default function ProjectWorkspacePage() {
   const canAssignSubtasks = canEditTasks;
   const canManageTeam =
     !profile?.isDemo && canManageProjectTeam(currentRole);
+  const canMarkComplete = canManageProjectTeam(currentRole);
 
   const {
     getProject,
@@ -62,6 +87,7 @@ export default function ProjectWorkspacePage() {
     createTask,
     updateTask,
     deleteTask,
+    updateProject,
   } = useAppData();
 
   useEffect(() => {
@@ -119,14 +145,48 @@ export default function ProjectWorkspacePage() {
   const [deleteTaskId, setDeleteTaskId] = useState<string | null>(null);
   const [dragOverColumn, setDragOverColumn] = useState<TaskStatus | null>(null);
   const [isSuggestionsOpen, setIsSuggestionsOpen] = useState(false);
+  const [isActivityOpen, setIsActivityOpen] = useState(false);
   const [isTeamOpen, setIsTeamOpen] = useState(false);
+  const [actionsOpen, setActionsOpen] = useState(false);
+  const actionsTriggerRef = useRef<HTMLButtonElement>(null);
+  const { menuRef: actionsMenuRef, style: actionsMenuStyle, precomputeStyle: precomputeActionsStyle } =
+    useFloatingMenu(actionsTriggerRef, actionsOpen, 220, { minWidth: 200 });
+  const closeActionsMenu = useCallback(() => setActionsOpen(false), []);
+  useFloatingClickOutside(
+    actionsOpen,
+    closeActionsMenu,
+    actionsTriggerRef,
+    actionsMenuRef,
+  );
   const [creating, setCreating] = useState(false);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [markingComplete, setMarkingComplete] = useState(false);
+  const [personFilter, setPersonFilter] = useState<BoardPersonFilter>("all");
+  const [whenFilter, setWhenFilter] = useState<BoardWhenFilter>("all");
+  const [priorityFilter, setPriorityFilter] = useState<BoardPriorityFilter>("all");
+  const [activity, setActivity] = useState<ProjectActivityItem[]>([]);
+
+  useEffect(() => {
+    if (!projectId) return;
+    let cancelled = false;
+    listProjectActivityApi(projectId)
+      .then((items) => {
+        if (!cancelled) setActivity(items);
+      })
+      .catch(() => {
+        if (!cancelled) setActivity([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId, tasks.length]);
 
   const selectedTask = tasks.find((task) => task.id === selectedTaskId) ?? null;
   const deleteTaskItem = tasks.find((task) => task.id === deleteTaskId) ?? null;
   const queryTaskId = searchParams.get("task");
+  const querySuggestions = searchParams.get("suggestions");
+  const queryNewTask = searchParams.get("newTask");
 
   useEffect(() => {
     if (!queryTaskId) return;
@@ -136,17 +196,53 @@ export default function ProjectWorkspacePage() {
     }
   }, [queryTaskId, tasks]);
 
+  useEffect(() => {
+    if (querySuggestions === "1" || querySuggestions === "true") {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- sync suggestions query param into drawer state
+      setIsSuggestionsOpen(true);
+    }
+  }, [querySuggestions]);
+
+  useEffect(() => {
+    if (!project || !canEditTasks) return;
+    if (queryNewTask !== "1" && queryNewTask !== "true") return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- open create-task modal from query
+    setNewTaskDefaultStatus("To Do");
+    setIsNewTaskOpen(true);
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("newTask");
+    const qs = params.toString();
+    router.replace(`/projects/${projectId}${qs ? `?${qs}` : ""}`, {
+      scroll: false,
+    });
+  }, [canEditTasks, project, projectId, queryNewTask, router, searchParams]);
+
+  const myLateTasks = useMemo(
+    () =>
+      profile?.id
+        ? tasks.filter((task) =>
+            taskMatchesBoardFilters(task, profile.id, "late", "all"),
+          )
+        : [],
+    [profile?.id, tasks],
+  );
+
+  const filteredTasks = useMemo(
+    () => filterBoardTasks(tasks, personFilter, whenFilter, priorityFilter),
+    [personFilter, priorityFilter, tasks, whenFilter],
+  );
+
   const tasksByColumn = useMemo(() => {
     return TASK_COLUMNS.reduce(
       (acc, column) => {
         acc[column] = sortTasksInStatusColumn(
-          tasks.filter((task) => task.status === column),
+          filteredTasks.filter((task) => task.status === column),
         );
         return acc;
       },
       {} as Record<TaskStatus, Task[]>,
     );
-  }, [tasks]);
+  }, [filteredTasks]);
 
   const handleStatusChange = async (taskId: string, status: TaskStatus) => {
     const task = tasks.find((item) => item.id === taskId);
@@ -241,11 +337,70 @@ export default function ProjectWorkspacePage() {
     setIsNewTaskOpen(true);
   };
 
+  const personOptions = useMemo(
+    () =>
+      (project?.teamMembers ?? [])
+        .map((member) => ({
+          id: member.userId ?? member.id ?? "",
+          label: member.name ?? member.email ?? member.initials,
+        }))
+        .filter((member) => member.id),
+    [project?.teamMembers],
+  );
+
+  const showMarkComplete = project
+    ? canMarkComplete &&
+      shouldOfferMarkProjectComplete(
+        project.status,
+        tasks.length,
+        tasks.filter((task) => task.status === "Completed").length,
+      )
+    : false;
+
+  const handleMarkComplete = async () => {
+    if (!project || markingComplete) return;
+    setMarkingComplete(true);
+    try {
+      await updateProject(projectId, {
+        title: project.title,
+        description: project.description,
+        status: "Completed",
+        contributorIds: project.contributorIds ?? [],
+      });
+      toast({
+        variant: "success",
+        title: "Project completed",
+        message: `"${project.title}" is now complete.`,
+      });
+    } catch (err) {
+      toast({
+        variant: "error",
+        title: "Could not mark complete",
+        message:
+          err instanceof ApiError ? err.message : "Please try again.",
+      });
+    } finally {
+      setMarkingComplete(false);
+    }
+  };
+
   const closeTaskDrawer = () => {
     if (saving) return;
     setSelectedTaskId(null);
     if (queryTaskId) {
       router.replace(`/projects/${projectId}`, { scroll: false });
+    }
+  };
+
+  const closeSuggestionsDrawer = () => {
+    setIsSuggestionsOpen(false);
+    if (querySuggestions) {
+      const params = new URLSearchParams(searchParams.toString());
+      params.delete("suggestions");
+      const qs = params.toString();
+      router.replace(`/projects/${projectId}${qs ? `?${qs}` : ""}`, {
+        scroll: false,
+      });
     }
   };
 
@@ -287,6 +442,17 @@ export default function ProjectWorkspacePage() {
             >
               {projectStatusLabel(project.status)}
             </span>
+            {showMarkComplete && (
+              <button
+                type="button"
+                onClick={() => void handleMarkComplete()}
+                disabled={markingComplete}
+                className="inline-flex items-center gap-1.5 rounded-full border border-success/50 bg-success/15 px-2.5 py-1 text-xs font-semibold text-success transition hover:bg-success/25 disabled:opacity-60"
+              >
+                <Check className="size-3.5" />
+                {markingComplete ? "Saving…" : "Mark complete"}
+              </button>
+            )}
           </div>
 
           <p className="mt-1.5 text-sm leading-relaxed text-primary/60">
@@ -340,12 +506,18 @@ export default function ProjectWorkspacePage() {
                       key={`${member.initials}-${i}`}
                       userId={member.userId ?? member.id}
                       className={cn(
-                        "flex size-6 items-center justify-center rounded-full border border-accent/30 bg-glass-button text-[9px] font-semibold text-primary",
+                        "flex size-6 items-center justify-center overflow-hidden rounded-full border border-accent/30",
                         i > 0 && "-ml-1.5",
                       )}
                       title={member.name ?? member.initials}
                     >
-                      {member.initials}
+                      <UserAvatar
+                        name={member.name}
+                        avatarUrl={member.imageUrl}
+                        initials={member.initials}
+                        size="xs"
+                        className="border-0"
+                      />
                     </UserProfileLink>
                   ))}
                 </div>
@@ -383,30 +555,7 @@ export default function ProjectWorkspacePage() {
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3">
-          <button
-            type="button"
-            onClick={() => router.push(`/whiteboard?projectId=${projectId}`)}
-            className="flex items-center gap-2 rounded-xl border border-glass bg-glass-button px-4 py-2.5 text-sm font-semibold text-primary transition hover:border-accent/40 hover:text-accent"
-          >
-            <PenLine className="size-4" />
-            Whiteboard
-          </button>
-          <button
-            type="button"
-            onClick={() => setIsTeamOpen(true)}
-            className="rounded-xl border border-glass bg-glass-button px-4 py-2.5 text-sm font-semibold text-primary transition hover:border-accent/40 hover:text-accent"
-          >
-            Manage Team
-          </button>
-          <button
-            type="button"
-            onClick={() => setIsSuggestionsOpen(true)}
-            className="flex items-center gap-2 rounded-xl border border-glass bg-glass-button px-4 py-2.5 text-sm font-semibold text-primary transition hover:border-accent/40 hover:text-accent"
-          >
-            <MessageSquare className="size-4" />
-            Suggestions
-          </button>
+        <div className="flex shrink-0 items-center gap-3">
           {canEditTasks && (
             <button
               type="button"
@@ -416,6 +565,169 @@ export default function ProjectWorkspacePage() {
               New Task
             </button>
           )}
+          <button
+            ref={actionsTriggerRef}
+            type="button"
+            aria-label="Project actions"
+            aria-haspopup="menu"
+            aria-expanded={actionsOpen}
+            onClick={() => {
+              if (!actionsOpen) precomputeActionsStyle();
+              setActionsOpen((open) => !open);
+            }}
+            className={cn(
+              "flex size-10 items-center justify-center rounded-xl border border-glass bg-glass-button text-primary/70 transition hover:border-accent/40 hover:text-accent",
+              actionsOpen && "border-accent/40 text-accent",
+            )}
+          >
+            <MoreHorizontal className="size-4" />
+          </button>
+          <FloatingMenuPortal
+            isOpen={actionsOpen}
+            triggerRef={actionsTriggerRef}
+            menuRef={actionsMenuRef}
+            style={actionsMenuStyle}
+            role="menu"
+            className="overflow-hidden rounded-xl border border-glass bg-sidebar p-1 shadow-xl shadow-black/40 backdrop-blur-2xl"
+          >
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setActionsOpen(false);
+                setIsTeamOpen(true);
+              }}
+              className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-sm text-primary transition hover:bg-accent/10 hover:text-accent"
+            >
+              <Users className="size-3.5 shrink-0" />
+              {canManageTeam ? "Manage Team" : "View Team"}
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setActionsOpen(false);
+                setIsActivityOpen(true);
+              }}
+              className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-sm text-primary transition hover:bg-accent/10 hover:text-accent"
+            >
+              <Clock className="size-3.5 shrink-0" />
+              Recent activity
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setActionsOpen(false);
+                setIsSuggestionsOpen(true);
+              }}
+              className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-sm text-primary transition hover:bg-accent/10 hover:text-accent"
+            >
+              <MessageSquare className="size-3.5 shrink-0" />
+              Suggestions
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setActionsOpen(false);
+                router.push(`/whiteboard?projectId=${projectId}`);
+              }}
+              className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-sm text-primary transition hover:bg-accent/10 hover:text-accent"
+            >
+              <PenLine className="size-3.5 shrink-0" />
+              Whiteboard
+            </button>
+          </FloatingMenuPortal>
+        </div>
+      </div>
+
+      {myLateTasks.length > 0 && profile?.id ? (
+        <button
+          type="button"
+          onClick={() => {
+            setPersonFilter(profile.id);
+            setWhenFilter("late");
+          }}
+          className="flex w-full items-center justify-between gap-3 rounded-2xl border border-warning/40 bg-warning/10 px-4 py-3 text-left transition hover:bg-warning/15"
+        >
+          <span className="text-sm font-semibold text-warning">
+            {myLateTasks.length === 1
+              ? `"${myLateTasks[0].title}" is late`
+              : `${myLateTasks.length} of your tasks are late`}
+          </span>
+          <span className="shrink-0 text-xs font-semibold uppercase tracking-wide text-warning/80">
+            Show
+          </span>
+        </button>
+      ) : null}
+
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div>
+          <label
+            htmlFor="board-person-filter"
+            className="mb-2 block text-xs font-semibold uppercase tracking-wider text-primary/75"
+          >
+            Person
+          </label>
+          <Select
+            id="board-person-filter"
+            value={personFilter}
+            onChange={(value) => setPersonFilter(value as BoardPersonFilter)}
+            options={[
+              { value: "all", label: "All people" },
+              { value: "unassigned", label: "Unassigned" },
+              ...personOptions.map((member) => ({
+                value: member.id,
+                label: member.label,
+              })),
+            ]}
+            aria-label="Filter by person"
+            searchable
+            searchPlaceholder="Search people..."
+          />
+        </div>
+        <div>
+          <label
+            htmlFor="board-when-filter"
+            className="mb-2 block text-xs font-semibold uppercase tracking-wider text-primary/75"
+          >
+            When
+          </label>
+          <Select
+            id="board-when-filter"
+            value={whenFilter}
+            onChange={(value) => setWhenFilter(value as BoardWhenFilter)}
+            options={[
+              { value: "all", label: "Everything" },
+              { value: "late", label: "Late" },
+              { value: "today", label: "Today" },
+              { value: "week", label: "This week" },
+            ]}
+            aria-label="Filter by due date"
+          />
+        </div>
+        <div>
+          <label
+            htmlFor="board-priority-filter"
+            className="mb-2 block text-xs font-semibold uppercase tracking-wider text-primary/75"
+          >
+            Priority
+          </label>
+          <Select
+            id="board-priority-filter"
+            value={priorityFilter}
+            onChange={(value) =>
+              setPriorityFilter(value as BoardPriorityFilter)
+            }
+            options={[
+              { value: "all", label: "All priorities" },
+              { value: "Low", label: "Low" },
+              { value: "Medium", label: "Medium" },
+              { value: "High", label: "High" },
+            ]}
+            aria-label="Filter by priority"
+          />
         </div>
       </div>
 
@@ -527,11 +839,37 @@ export default function ProjectWorkspacePage() {
       />
 
       <SideDrawer
+        isOpen={isActivityOpen}
+        onClose={() => setIsActivityOpen(false)}
+        title="Recent activity"
+      >
+        <ProjectActivityStrip
+          items={activity}
+          onOpenTask={(taskId) => {
+            setSelectedTaskId(taskId);
+            setIsActivityOpen(false);
+          }}
+        />
+      </SideDrawer>
+
+      <SideDrawer
         isOpen={isSuggestionsOpen}
-        onClose={() => setIsSuggestionsOpen(false)}
+        onClose={closeSuggestionsDrawer}
         title="Project Suggestions"
       >
-        <ProjectSuggestionsDrawer projectId={projectId} mentionUsers={mentionUsers} />
+        <ProjectSuggestionsDrawer
+          projectId={projectId}
+          mentionUsers={mentionUsers}
+          canConvert={canEditTasks}
+          onConverted={async (task) => {
+            await loadProjectWorkspace(projectId);
+            setSelectedTaskId(task.id);
+            setIsSuggestionsOpen(false);
+            listProjectActivityApi(projectId)
+              .then(setActivity)
+              .catch(() => undefined);
+          }}
+        />
       </SideDrawer>
 
       {project && (

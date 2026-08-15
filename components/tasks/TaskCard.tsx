@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Calendar, GripVertical } from "lucide-react";
 import { GlassCard } from "@/components/ui/GlassCard";
+import { UserAvatar } from "@/components/users/UserAvatar";
 import { UserProfileLink } from "@/components/users/UserProfileLink";
 import { cn } from "@/lib/cn";
 import { type Task } from "@/lib/tasks";
@@ -112,16 +113,13 @@ export function TaskCard({ task, onClick, canMove = true }: TaskCardProps) {
                     )}
                     title={assignee.name}
                   >
-                    {assignee.avatarUrl ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={assignee.avatarUrl}
-                        alt={assignee.name}
-                        className="size-full object-cover"
-                      />
-                    ) : (
-                      assignee.initials
-                    )}
+                    <UserAvatar
+                      name={assignee.name}
+                      avatarUrl={assignee.avatarUrl}
+                      initials={assignee.initials}
+                      size="sm"
+                      className="border-glass"
+                    />
                   </UserProfileLink>
                 ))}
                 {task.assignees.length > 2 ? (

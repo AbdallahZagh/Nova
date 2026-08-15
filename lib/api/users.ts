@@ -16,6 +16,23 @@ export async function updateMeApi(payload: UpdateProfilePayload) {
   });
 }
 
+export async function uploadAvatarApi(file: File) {
+  const body = new FormData();
+  body.append("file", file);
+  return apiFetch<ApiUser>("/api/users/me/avatar", {
+    method: "POST",
+    body,
+    skipOfflineQueue: true,
+  });
+}
+
+export async function deleteAvatarApi() {
+  return apiFetch<ApiUser>("/api/users/me/avatar", {
+    method: "DELETE",
+    skipOfflineQueue: true,
+  });
+}
+
 export type DeactivateAccountResponse = { message?: string };
 
 /** Archives the current account; client should clear tokens after success. */

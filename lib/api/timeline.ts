@@ -28,6 +28,7 @@ export type TimelineTask = {
   startDate: string;
   dueDate: string;
   completedAt?: string | null;
+  overdue?: boolean;
   project: TimelineProject;
   assignee?: TimelineAssignee | null;
   windowStart?: string;
@@ -44,6 +45,7 @@ export async function getTimelineApi(query: TimelineQuery = {}) {
   const params = new URLSearchParams();
   if (query.projectId) params.set("projectId", query.projectId);
   if (query.filter) params.set("filter", query.filter);
+  params.set("tzOffsetMinutes", String(new Date().getTimezoneOffset()));
   const qs = params.toString();
   const path = qs ? `/api/timeline?${qs}` : "/api/timeline";
 

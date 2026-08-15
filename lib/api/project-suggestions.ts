@@ -1,4 +1,5 @@
 import { apiFetch } from "@/lib/api/client";
+import { apiTaskToTask, type ApiTask } from "@/lib/api/tasks";
 import { formatActivityTime } from "@/lib/tasks";
 
 export type ProjectSuggestionStatus =
@@ -146,4 +147,15 @@ export async function updateProjectSuggestionApi(
 
 export async function deleteProjectSuggestionApi(id: string) {
   await apiFetch<void>(`/api/project-suggestions/${id}`, { method: "DELETE" });
+}
+
+export async function convertProjectSuggestionApi(id: string) {
+  const data = await apiFetch<{
+    suggestion: ApiProjectSuggestion;
+    task: ApiTask;
+  }>(`/api/project-suggestions/${id}/convert-to-task`, { method: "POST" });
+  return {
+    suggestion: apiSuggestionToSuggestion(data.suggestion),
+    task: apiTaskToTask(data.task),
+  };
 }

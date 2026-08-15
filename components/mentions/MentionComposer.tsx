@@ -79,8 +79,8 @@ export function MentionComposer({
               }}
               className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm hover:bg-glass-button"
             >
-              <span className="font-semibold text-primary">{user.fullName}</span>
-              <span className="text-xs text-accent">{user.username}</span>
+              <span className="font-semibold text-accent">{user.username}</span>
+              <span className="truncate text-xs text-primary/55">{user.fullName}</span>
             </button>
           ))}
         </div>

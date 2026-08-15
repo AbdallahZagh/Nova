@@ -39,17 +39,22 @@ export function insertMention(
 }
 
 export function filterMentionUsers(users: MentionUser[], query: string) {
-  const q = query.trim().toLowerCase();
+  const q = query.trim().toLowerCase().replace(/^@/, "");
   return users
     .filter((user) => user.username)
     .filter((user) => {
       if (!q) return true;
-      return (
-        user.username.toLowerCase().includes(q) ||
-        user.fullName.toLowerCase().includes(q)
-      );
+      const username = user.username.toLowerCase().replace(/^@/, "");
+      const name = user.fullName.toLowerCase();
+      return username.includes(q) || name.includes(q);
     })
     .slice(0, 8);
+}
+
+export function findMentionUser(users: MentionUser[] | undefined, handle: string) {
+  if (!users?.length) return undefined;
+  const normalized = normalizeMention(handle);
+  return users.find((user) => normalizeMention(user.username) === normalized);
 }
 
 export function splitMentionText(content: string) {

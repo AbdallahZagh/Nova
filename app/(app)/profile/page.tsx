@@ -5,9 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
-  Camera,
   CheckCircle2,
-  FolderKanban,
   KeyRound,
   ListChecks,
   Loader2,
@@ -15,14 +13,13 @@ import {
   RefreshCw,
   RotateCw,
   Save,
-  ShieldAlert,
   ShieldCheck,
   Trash2,
-  User,
 } from "lucide-react";
 import { clearSession } from "@/app/actions/session";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { ActivityHeatmap } from "@/components/dashboard/ActivityHeatmap";
+import { ProfileHero } from "@/components/profile/ProfileHero";
 import { DeleteConfirmModal } from "@/components/ui/DeleteConfirmModal";
 import { Input, PasswordInput, Textarea } from "@/components/ui/input";
 import { useToast } from "@/components/ui/Toast";
@@ -34,7 +31,7 @@ import {
   resetPasswordApi,
   verifyOtpApi,
 } from "@/lib/api/auth";
-import { deactivateMeApi } from "@/lib/api/users";
+import { deactivateMeApi, deleteAvatarApi, uploadAvatarApi } from "@/lib/api/users";
 import { ApiError } from "@/lib/api/client";
 import { cn } from "@/lib/cn";
 import {
@@ -127,12 +124,12 @@ function EditProfileSection() {
   if (!profile) return null;
 
   return (
-    <GlassCard className="p-6">
-      <div className="mb-5 flex items-center gap-3">
-        <div className="flex size-9 items-center justify-center rounded-xl bg-accent/15 text-accent">
-          <User className="size-4" />
-        </div>
-        <h2 className="text-base font-semibold text-primary">Edit Profile</h2>
+    <GlassCard className="h-full p-6">
+      <div className="mb-5">
+        <h2 className="text-base font-semibold text-primary">Profile details</h2>
+        <p className="mt-0.5 text-xs text-primary/50">
+          How your name and role appear to the team.
+        </p>
       </div>
 
       <div className="space-y-4">
@@ -507,19 +504,14 @@ function ChangePasswordSection() {
   };
 
   return (
-    <GlassCard className="p-6">
-      <div className="mb-5 flex items-center gap-3">
-        <div className="flex size-9 items-center justify-center rounded-xl bg-accent/15 text-accent">
-          <KeyRound className="size-4" />
-        </div>
-        <div>
-          <h2 className="text-base font-semibold text-primary">
-            Password &amp; Security
-          </h2>
-          <p className="text-xs text-primary/50">
-            Reset your password with an email OTP.
-          </p>
-        </div>
+    <GlassCard className="h-full p-6">
+      <div className="mb-5">
+        <h2 className="text-base font-semibold text-primary">
+          Password &amp; security
+        </h2>
+        <p className="mt-0.5 text-xs text-primary/50">
+          Reset your password with an email OTP.
+        </p>
       </div>
 
       {step !== "done" ? (
@@ -673,7 +665,13 @@ function ProfileActivitySection() {
   if (!profile) return null;
 
   return (
-    <GlassCard title="Recent Activity">
+    <GlassCard className="p-6">
+      <div className="mb-5">
+        <h2 className="text-base font-semibold text-primary">Activity</h2>
+        <p className="mt-0.5 text-xs text-primary/50">
+          Your yearly task activity map
+        </p>
+      </div>
       <ActivityHeatmap activity={profile.activity} />
     </GlassCard>
   );
@@ -684,21 +682,16 @@ function ProfileProjectsSection() {
   if (!profile) return null;
 
   return (
-    <GlassCard className="p-6">
-      <div className="mb-5 flex items-center gap-3">
-        <div className="flex size-9 items-center justify-center rounded-xl bg-accent/15 text-accent">
-          <FolderKanban className="size-4" />
-        </div>
-        <div>
-          <h2 className="text-base font-semibold text-primary">Projects</h2>
-          <p className="text-xs text-primary/50">
-            Your project membership and assigned work
-          </p>
-        </div>
+    <section>
+      <div className="mb-4">
+        <h2 className="text-base font-semibold text-primary">Projects</h2>
+        <p className="mt-0.5 text-xs text-primary/50">
+          Membership and assigned work
+        </p>
       </div>
 
       {profile.projects.length === 0 ? (
-        <p className="rounded-2xl border border-glass bg-glass-button/40 px-4 py-6 text-center text-sm text-primary/45">
+        <p className="rounded-2xl border border-dashed border-glass px-4 py-8 text-center text-sm text-primary/45">
           No projects found.
         </p>
       ) : (
@@ -716,37 +709,35 @@ function ProfileProjectsSection() {
               <Link
                 key={project.id}
                 href={`/projects/${project.id}`}
-                className="group rounded-2xl border border-glass bg-glass-button/45 p-4 transition hover:border-accent/45 hover:bg-glass-button"
+                className="group rounded-2xl border border-glass bg-sidebar/80 p-4 transition hover:border-accent/40 hover:bg-glass-button/60"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <h3 className="truncate text-sm font-semibold text-primary group-hover:text-accent">
                       {project.name}
                     </h3>
-                    <p className="mt-1 line-clamp-2 min-h-[2.5rem] text-xs leading-5 text-primary/55">
+                    <p className="mt-1 line-clamp-2 text-xs leading-5 text-primary/55">
                       {project.description || "No description"}
                     </p>
                   </div>
                   <span
                     className={cn(
-                      "shrink-0 rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider",
+                      "shrink-0 rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider",
                       project.role === "OWNER"
-                        ? "border-accent/30 bg-accent/10 text-accent"
-                        : "border-glass bg-main/40 text-primary/55",
+                        ? "bg-accent/12 text-accent"
+                        : "bg-glass-button text-primary/55",
                     )}
                   >
                     {project.role}
                   </span>
                 </div>
 
-                <div className="mt-4 flex items-center justify-between gap-3 text-xs text-primary/50">
-                  <span className="rounded-md border border-glass bg-main/35 px-2 py-1">
-                    {project.status}
-                  </span>
+                <div className="mt-4 flex items-center justify-between text-xs text-primary/50">
+                  <span>{project.status}</span>
                   <span>Updated {formatProfileDate(project.updatedAt)}</span>
                 </div>
 
-                <div className="mt-4 space-y-2">
+                <div className="mt-3 space-y-1.5">
                   <div className="flex items-center justify-between text-xs">
                     <span className="flex items-center gap-1.5 text-primary/55">
                       <ListChecks className="size-3.5" />
@@ -763,32 +754,74 @@ function ProfileProjectsSection() {
                     />
                   </div>
                 </div>
-
-                <div className="mt-4 flex items-center justify-between border-t border-glass pt-3 text-xs text-primary/45">
-                  <span>
-                    {project.totalTasksCount} total task
-                    {project.totalTasksCount === 1 ? "" : "s"}
-                  </span>
-                  <span>Created {formatProfileDate(project.createdAt)}</span>
-                </div>
               </Link>
             );
           })}
         </div>
       )}
-    </GlassCard>
+    </section>
   );
 }
 
 export default function ProfilePage() {
   const router = useRouter();
-  const { profile, initials, loading, refreshProfile } = useUser();
+  const { profile, initials, loading, refreshProfile, setProfileFromApi } =
+    useUser();
 
   useEffect(() => {
     refreshProfile().catch(() => {});
   }, [refreshProfile]);
   const { toast } = useToast();
   const [showDelete, setShowDelete] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+
+  async function handleAvatar(file: File) {
+    setUploadingAvatar(true);
+    try {
+      const user = await uploadAvatarApi(file);
+      setProfileFromApi(user);
+      toast({
+        variant: "success",
+        title: "Photo updated",
+        message: "Your profile photo is now live.",
+      });
+    } catch (err) {
+      toast({
+        variant: "error",
+        title: "Upload failed",
+        message:
+          err instanceof ApiError
+            ? err.message
+            : "Could not upload that photo. Try another image.",
+      });
+    } finally {
+      setUploadingAvatar(false);
+    }
+  }
+
+  async function handleDeleteAvatar() {
+    setUploadingAvatar(true);
+    try {
+      const user = await deleteAvatarApi();
+      setProfileFromApi(user);
+      toast({
+        variant: "success",
+        title: "Photo removed",
+        message: "Your profile now uses initials.",
+      });
+    } catch (err) {
+      toast({
+        variant: "error",
+        title: "Could not remove photo",
+        message:
+          err instanceof ApiError
+            ? err.message
+            : "Something went wrong. Please try again.",
+      });
+    } finally {
+      setUploadingAvatar(false);
+    }
+  }
 
   async function handleDeleteAccount() {
     try {
@@ -813,7 +846,7 @@ export default function ProfilePage() {
 
   if (!profile) {
     return (
-      <div className="mx-auto flex w-full max-w-3xl flex-col items-center gap-4 py-20 text-center">
+      <div className="mx-auto flex w-full max-w-7xl flex-col items-center gap-4 py-20 text-center">
         <p className="text-sm text-primary/60">Could not load your profile.</p>
         <button
           type="button"
@@ -827,8 +860,7 @@ export default function ProfilePage() {
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-3xl flex-col gap-6">
-      {/* ── Back button + title ── */}
+    <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">
       <div className="flex items-center gap-3">
         <button
           type="button"
@@ -838,103 +870,63 @@ export default function ProfilePage() {
           <ArrowLeft className="size-4" />
         </button>
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-primary">
-            Profile Settings
+          <h1 className="text-3xl font-semibold tracking-tight text-primary">
+            Profile
           </h1>
-          <p className="text-sm text-primary/50">
-            Manage your account and preferences
+          <p className="mt-1 text-sm text-primary/60">
+            Photo, details, and account security
           </p>
         </div>
       </div>
 
-      {/* ── Profile overview card ── */}
-      <GlassCard className="p-6">
-        <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-start sm:gap-6">
-          {/* Avatar */}
-          <div className="relative shrink-0">
-            <div className="flex size-24 items-center justify-center rounded-2xl bg-linear-135 from-accent to-accent/60 text-3xl font-bold text-white shadow-lg shadow-accent/25">
-              {initials}
-            </div>
-            {profile.isDemo ? null : (
-              <div className="absolute -bottom-1.5 -right-1.5 flex size-8 items-center justify-center rounded-full border-2 border-sidebar bg-glass-button text-primary/50 transition hover:text-accent cursor-pointer">
-                <Camera className="size-3.5" />
-              </div>
-            )}
-          </div>
+      <ProfileHero
+        name={profile.name}
+        username={profile.username}
+        role={profile.role}
+        email={profile.email}
+        bio={profile.bio}
+        avatarUrl={profile.avatarUrl}
+        initials={initials}
+        projectCount={profile.projectCount}
+        taskCount={profile.taskCount}
+        canEditAvatar={!profile.isDemo}
+        uploadingAvatar={uploadingAvatar}
+        onPickAvatar={handleAvatar}
+        onDeleteAvatar={handleDeleteAvatar}
+      />
 
-          {/* Info */}
-          <div className="flex-1 text-center sm:text-left">
-            <h2 className="text-xl font-bold text-primary">{profile.name}</h2>
-            {profile.username ? (
-              <p className="mt-0.5 text-sm font-medium text-accent">
-                {profile.username}
-              </p>
-            ) : null}
-            <p className="mt-0.5 text-sm text-primary/70">{profile.role}</p>
-            <p className="mt-0.5 text-sm text-primary/55">{profile.email}</p>
-            {profile.bio && (
-              <p className="mt-2 text-sm leading-relaxed text-primary/65">
-                {profile.bio}
-              </p>
-            )}
-          </div>
-
-          {/* Stats */}
-          <div className="flex shrink-0 gap-4 sm:flex-col sm:gap-3 sm:text-right">
-            <div className="rounded-xl border border-glass bg-glass-button/50 px-4 py-2.5 text-center">
-              <p className="text-xl font-bold text-primary">{profile.projectCount}</p>
-              <p className="text-[11px] text-primary/50">Projects</p>
-            </div>
-            <div className="rounded-xl border border-glass bg-glass-button/50 px-4 py-2.5 text-center">
-              <p className="text-xl font-bold text-primary">{profile.taskCount}</p>
-              <p className="text-[11px] text-primary/50">Tasks</p>
-            </div>
-          </div>
+      {profile.isDemo ? null : (
+        <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-2">
+          <EditProfileSection />
+          <ChangePasswordSection />
         </div>
-      </GlassCard>
-
-      {profile.isDemo ? null : <EditProfileSection />}
-
-      {profile.isDemo ? null : <ChangePasswordSection />}
+      )}
 
       <ProfileActivitySection />
 
       <ProfileProjectsSection />
 
       {profile.isDemo ? null : (
-      <GlassCard className="p-6">
-        <div className="mb-5 flex items-center gap-3">
-          <div className="flex size-9 items-center justify-center rounded-xl bg-red-500/15 text-red-400 light:text-red-600">
-            <ShieldAlert className="size-4" />
+        <div className="flex flex-col gap-3 rounded-2xl border border-red-500/20 bg-red-500/5 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-sm font-semibold text-primary">
+              Deactivate account
+            </p>
+            <p className="mt-0.5 text-xs text-primary/55">
+              Archive your account and sign out. Projects and tasks stay saved.
+            </p>
           </div>
-          <h2 className="text-base font-semibold text-primary">Danger Zone</h2>
+          <button
+            type="button"
+            onClick={() => setShowDelete(true)}
+            className="flex shrink-0 items-center gap-2 rounded-xl border border-red-500/30 px-4 py-2 text-sm font-semibold text-red-400 transition hover:bg-red-500/10 light:text-red-600"
+          >
+            <Trash2 className="size-4" />
+            Deactivate
+          </button>
         </div>
-
-        <div className="rounded-2xl border border-red-500/20 bg-red-500/5 p-4">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="text-sm font-semibold text-primary">
-                Deactivate Account
-              </p>
-              <p className="mt-0.5 text-xs text-primary/55">
-                Archive your account and sign out. Projects and tasks are kept.
-                Reactivate later with your email and a one-time code.
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => setShowDelete(true)}
-              className="flex shrink-0 items-center gap-2 rounded-xl border border-red-500/30 px-4 py-2 text-sm font-semibold text-red-400 light:text-red-600 transition hover:bg-red-500/10"
-            >
-              <Trash2 className="size-4" />
-              Deactivate
-            </button>
-          </div>
-        </div>
-      </GlassCard>
       )}
 
-      {/* ── Delete confirm modal ── */}
       <DeleteConfirmModal
         isOpen={showDelete}
         onClose={() => setShowDelete(false)}

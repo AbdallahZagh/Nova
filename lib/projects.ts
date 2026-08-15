@@ -30,6 +30,15 @@ export type ProjectOwner = {
   roleTitle?: string;
 };
 
+export type ProjectDueAssignee = {
+  id?: string;
+  name: string;
+  initials: string;
+  avatarUrl?: string | null;
+};
+
+export type ProjectOwnershipFilter = "All" | "Mine" | "Shared";
+
 export type Project = {
   id: string;
   title: string;
@@ -44,6 +53,9 @@ export type Project = {
   completedTasks?: number;
   totalSubtasks?: number;
   completedSubtasks?: number;
+  overdueCount?: number;
+  nextDueDate?: string | null;
+  nextDueAssignees?: ProjectDueAssignee[];
   createdAt?: string;
   updatedAt?: string;
 };
@@ -182,4 +194,40 @@ export function sortProjectsByStatus(projects: Project[]): Project[] {
     const bTime = new Date(b.updatedAt ?? b.createdAt ?? 0).getTime();
     return bTime - aTime;
   });
+}
+
+export function matchesOwnershipFilter(
+  project: Project,
+  filter: ProjectOwnershipFilter,
+  userId?: string | null,
+) {
+  if (filter === "All") return true;
+  const mine = Boolean(userId && project.ownerId === userId);
+  return filter === "Mine" ? mine : !mine;
+}
+
+export function shouldOfferMarkProjectComplete(
+  status: ProjectStatus,
+  totalTasks: number,
+  completedTasks: number,
+) {
+  if (status === "Completed" || status === "Archived") return false;
+  if (totalTasks <= 0) return false;
+  return completedTasks / totalTasks >= 0.8;
+}
+
+export function formatProjectLateCount(count?: number) {
+  const n = Math.max(0, count ?? 0);
+  if (n === 0) return "None late";
+  return n === 1 ? "1 late" : `${n} late`;
+}
+
+export function formatProjectNextDue(iso?: string | null) {
+  if (!iso) return "No upcoming";
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "No upcoming";
+  return `Next ${date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+  })}`;
 }

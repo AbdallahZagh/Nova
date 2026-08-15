@@ -1,5 +1,9 @@
 const USERNAME_BODY_RE = /^[a-z0-9_]+$/;
 
+export function looksLikeEmail(value: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
+}
+
 /** Strip spaces, lowercase, ensure leading @ (e.g. abdallah_zagh → @abdallah_zagh). */
 export function normalizeUsername(raw: string): string {
   let body = raw.trim().toLowerCase().replace(/\s+/g, "");

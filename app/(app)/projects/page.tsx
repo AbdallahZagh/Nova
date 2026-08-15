@@ -1,19 +1,23 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { ProjectsSkeleton } from "@/components/skeletons/ProjectsSkeleton";
 import { DeleteConfirmModal } from "@/components/ui/DeleteConfirmModal";
 import { ProjectCard } from "@/components/projects/ProjectCard";
 import { ProjectModal } from "@/components/projects/ProjectModal";
+import { Select } from "@/components/ui/Select";
 import { useToast } from "@/components/ui/Toast";
 import { useAppData } from "@/components/providers/AppDataProvider";
 import { useUser } from "@/components/providers/UserProvider";
 import { ApiError } from "@/lib/api/client";
 import {
-  projectStatusLabel,
+  matchesOwnershipFilter,
+  PROJECT_STATUS_OPTIONS,
   sortProjectsByStatus,
   type Project,
   type ProjectFormInput,
+  type ProjectOwnershipFilter,
   type ProjectStatus,
 } from "@/lib/projects";
 import {
@@ -24,8 +28,20 @@ import {
 
 type FilterStatus = "All" | ProjectStatus;
 
+const OWNERSHIP_OPTIONS = [
+  { value: "All", label: "All", description: "Every project you can see" },
+  { value: "Mine", label: "Mine", description: "You own it" },
+  { value: "Shared", label: "Shared", description: "You’re on the team" },
+];
+
+const STATUS_OPTIONS = [
+  { value: "All", label: "All statuses" },
+  ...PROJECT_STATUS_OPTIONS,
+];
+
 export default function ProjectsPage() {
   const { toast } = useToast();
+  const router = useRouter();
   const { profile } = useUser();
   const {
     projects,
@@ -36,6 +52,8 @@ export default function ProjectsPage() {
   } = useAppData();
 
   const [activeFilter, setActiveFilter] = useState<FilterStatus>("All");
+  const [ownershipFilter, setOwnershipFilter] =
+    useState<ProjectOwnershipFilter>("All");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<"create" | "edit">("create");
   const [editingProject, setEditingProject] = useState<Project | null>(null);
@@ -44,12 +62,16 @@ export default function ProjectsPage() {
   const [deleting, setDeleting] = useState(false);
 
   const filteredProjects = useMemo(() => {
-    const list =
-      activeFilter === "All"
-        ? projects
-        : projects.filter((project) => project.status === activeFilter);
+    const list = projects.filter((project) => {
+      const matchesStatus =
+        activeFilter === "All" || project.status === activeFilter;
+      return (
+        matchesStatus &&
+        matchesOwnershipFilter(project, ownershipFilter, profile?.id)
+      );
+    });
     return sortProjectsByStatus(list);
-  }, [activeFilter, projects]);
+  }, [activeFilter, ownershipFilter, profile?.id, projects]);
 
   const canCreateProjects = useMemo(() => {
     if (profile?.isDemo) return false;
@@ -91,15 +113,17 @@ export default function ProjectsPage() {
           title: "Project updated",
           message: `"${input.title}" was saved successfully.`,
         });
+        setIsModalOpen(false);
       } else {
-        await createProject(input);
+        const created = await createProject(input);
         toast({
           variant: "success",
           title: "Project created",
           message: `"${input.title}" is ready to use.`,
         });
+        setIsModalOpen(false);
+        router.push(`/projects/${created.id}?newTask=1`);
       }
-      setIsModalOpen(false);
     } catch (err) {
       toast({
         variant: "error",
@@ -166,26 +190,38 @@ export default function ProjectsPage() {
         )}
       </div>
 
-      <div className="space-y-4">
-        <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-accent/35 bg-glass-card p-3">
-          {(
-            ["All", "Active", "In Progress", "Completed", "Archived"] as FilterStatus[]
-          ).map(
-            (chip) => (
-              <button
-                key={chip}
-                type="button"
-                onClick={() => setActiveFilter(chip)}
-                className={
-                  activeFilter === chip
-                    ? "rounded-full border border-accent/60 bg-accent/20 px-3 py-1.5 text-xs font-semibold text-accent transition"
-                    : "rounded-full border border-accent/35 bg-glass-button px-3 py-1.5 text-xs font-medium text-primary/80 transition hover:border-accent/40 hover:text-accent"
-                }
-              >
-                {chip === "All" ? chip : projectStatusLabel(chip)}
-              </button>
-            ),
-          )}
+      <div className="flex flex-wrap items-end gap-3">
+        <div className="w-full min-w-[180px] sm:w-56">
+          <label
+            htmlFor="project-ownership-filter"
+            className="mb-2 block text-xs font-semibold uppercase tracking-wider text-primary/75"
+          >
+            Ownership
+          </label>
+          <Select
+            id="project-ownership-filter"
+            value={ownershipFilter}
+            onChange={(value) =>
+              setOwnershipFilter(value as ProjectOwnershipFilter)
+            }
+            options={OWNERSHIP_OPTIONS}
+            aria-label="Filter by ownership"
+          />
+        </div>
+        <div className="w-full min-w-[180px] sm:w-56">
+          <label
+            htmlFor="project-status-filter"
+            className="mb-2 block text-xs font-semibold uppercase tracking-wider text-primary/75"
+          >
+            Status
+          </label>
+          <Select
+            id="project-status-filter"
+            value={activeFilter}
+            onChange={(value) => setActiveFilter(value as FilterStatus)}
+            options={STATUS_OPTIONS}
+            aria-label="Filter by status"
+          />
         </div>
       </div>
 

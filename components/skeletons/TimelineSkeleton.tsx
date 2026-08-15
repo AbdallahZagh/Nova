@@ -2,34 +2,23 @@ import { Skeleton } from "@/components/ui/Skeleton";
 
 export function TimelineSkeleton() {
   return (
-    <div className="mx-auto flex max-w-7xl flex-col gap-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
+    <div className="flex h-full flex-col gap-4">
+      <div className="flex items-end justify-between gap-4">
         <div>
           <Skeleton className="h-9 w-40" />
           <Skeleton className="mt-2 h-4 w-72" />
         </div>
-        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
-          <Skeleton className="h-10 w-full rounded-xl sm:w-40" />
-          <Skeleton className="h-10 w-full rounded-xl sm:w-52" />
-        </div>
+        <Skeleton className="h-10 w-48 rounded-xl" />
       </div>
-
-      <div className="overflow-hidden rounded-2xl border border-glass bg-glass-card">
-        <Skeleton className="h-12 w-full rounded-none" />
-        <div className="flex">
-          <div className="hidden w-40 shrink-0 border-r border-glass p-3 md:block">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <Skeleton key={i} className="mb-4 h-8 w-full" />
-            ))}
-          </div>
-          <div className="min-w-0 flex-1 p-4">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="mb-6 flex items-center gap-3">
-                <Skeleton className="h-8 w-full max-w-[200px] rounded-lg" />
-                <Skeleton className="h-7 flex-1 rounded-lg" />
-              </div>
-            ))}
-          </div>
+      <div className="min-h-0 flex-1 overflow-hidden rounded-2xl border border-glass bg-sidebar">
+        <div className="flex gap-2 border-b border-glass p-3">
+          <Skeleton className="h-9 flex-1 rounded-xl" />
+          <Skeleton className="h-9 w-48 rounded-xl" />
+        </div>
+        <div className="grid grid-cols-7 gap-px p-3">
+          {Array.from({ length: 21 }).map((_, i) => (
+            <Skeleton key={i} className="h-24 rounded-md" />
+          ))}
         </div>
       </div>
     </div>
