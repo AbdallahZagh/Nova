@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { BackHandler, Pressable, Text, View } from "react-native";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { router, useLocalSearchParams, useNavigation } from "expo-router";
@@ -66,6 +66,7 @@ export default function WhiteboardEditorScreen() {
   ];
   const lastInkRef = useRef(ink);
   const inkReadyRef = useRef(false);
+  const closeTools = useCallback(() => setToolsOpen(false), []);
 
   useEffect(() => {
     if (!inkReadyRef.current) {
@@ -364,7 +365,7 @@ export default function WhiteboardEditorScreen() {
             onStrokeMove={sync.broadcastDraft}
             onStrokeComplete={sync.addStroke}
             onCursorMove={sync.broadcastCursor}
-            onInteract={() => setToolsOpen(false)}
+            onInteract={closeTools}
             readOnly={!sync.canDraw}
           />
           {sync.canDraw ? (

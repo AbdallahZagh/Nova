@@ -17,10 +17,7 @@ import { router, type Href } from "expo-router";
 import { useColorScheme } from "nativewind";
 import { getApiErrorMessage } from "@/api/apiClient";
 import {
-  getDashboardActivityApi,
-  getDashboardContinueApi,
-  getDashboardMetricsApi,
-  getDashboardUrgentTasksApi,
+  getDashboardSummaryApi,
   taskHref,
   type ActivityMap,
   type ActivityTaskEntry,
@@ -28,118 +25,11 @@ import {
   type DashboardMetrics,
   type UrgentTask,
 } from "@/api/dashboard";
-import { PageSkeleton, SkeletonLine } from "@/components/Skeleton";
+import { PageSkeleton } from "@/components/Skeleton";
+import { ActivityHeatmap } from "@/components/ActivityHeatmap";
 import { useAuthStore } from "@/store/useAuthStore";
 import { useSnackbarStore } from "@/store/useSnackbarStore";
 import { getPalette } from "@/theme/colors";
-
-const monthNames = [
-  "Jan",
-  "Feb",
-  "Mar",
-  "Apr",
-  "May",
-  "Jun",
-  "Jul",
-  "Aug",
-  "Sep",
-  "Oct",
-  "Nov",
-  "Dec",
-] as const;
-
-const dayLabels = ["Mon", "", "Wed", "", "Fri", "", "Sun"] as const;
-
-type HeatmapTask = {
-  id: string;
-  title: string;
-  project: string;
-  projectId: string | null;
-  progress: number;
-};
-
-type HeatmapCell = {
-  key: string;
-  date: Date;
-  isCurrentYear: boolean;
-  count: number;
-  tasks: HeatmapTask[];
-};
-
-function toDateKey(date: Date) {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(
-    2,
-    "0",
-  )}-${String(date.getDate()).padStart(2, "0")}`;
-}
-
-function buildHeatmap(activity: ActivityMap) {
-  const year = new Date().getFullYear();
-  const taskMap = new Map<string, HeatmapTask[]>();
-
-  for (const [isoKey, entries] of Object.entries(activity)) {
-    if (!entries?.length) continue;
-    const date = new Date(isoKey);
-    if (Number.isNaN(date.getTime()) || date.getFullYear() !== year) continue;
-    taskMap.set(
-      isoKey,
-      entries.map((task) => ({
-        id: task.id,
-        title: task.title,
-        project: task.projectName,
-        projectId: task.projectId ?? null,
-        progress: Math.round(task.completionPercentage ?? 0),
-      })),
-    );
-  }
-
-  const jan1 = new Date(year, 0, 1);
-  const startDay = jan1.getDay();
-  const gridStart = new Date(jan1);
-  gridStart.setDate(gridStart.getDate() - (startDay === 0 ? 6 : startDay - 1));
-
-  const dec31 = new Date(year, 11, 31);
-  const endDay = dec31.getDay();
-  const gridEnd = new Date(dec31);
-  gridEnd.setDate(gridEnd.getDate() + (endDay === 0 ? 0 : 7 - endDay));
-
-  const weeks: HeatmapCell[][] = [];
-  const monthCols: { label: string; col: number }[] = [];
-  const seenMonths = new Set<number>();
-  const cursor = new Date(gridStart);
-  let col = 0;
-
-  while (cursor <= gridEnd) {
-    const week: HeatmapCell[] = [];
-    for (let row = 0; row < 7; row++) {
-      const date = new Date(cursor);
-      date.setDate(date.getDate() + row);
-      const isCurrentYear = date.getFullYear() === year;
-      const key = toDateKey(date);
-      const tasks = taskMap.get(key) ?? [];
-
-      if (isCurrentYear && row === 0 && !seenMonths.has(date.getMonth())) {
-        seenMonths.add(date.getMonth());
-        monthCols.push({ label: monthNames[date.getMonth()], col });
-      }
-
-      week.push({ key, date, isCurrentYear, count: tasks.length, tasks });
-    }
-    weeks.push(week);
-    col++;
-    cursor.setDate(cursor.getDate() + 7);
-  }
-
-  return { weeks, monthCols, year };
-}
-
-function heatmapOpacity(count: number) {
-  if (count === 0) return 0.08;
-  if (count === 1) return 0.28;
-  if (count === 2) return 0.52;
-  if (count === 3) return 0.76;
-  return 1;
-}
 
 function formatDate(value?: string | null) {
   if (!value) return "No date";
@@ -187,60 +77,6 @@ function SectionCard({
   );
 }
 
-function MetricsSkeleton() {
-  return (
-    <View className="gap-3">
-      {Array.from({ length: 3 }).map((_, index) => (
-        <View
-          key={index}
-          className="rounded-nova border border-glass bg-glass-card p-4 dark:border-dark-glass dark:bg-dark-glass-card"
-        >
-          <SkeletonLine className="w-2/5" />
-          <SkeletonLine className="mt-3 h-8 w-1/4" />
-          <SkeletonLine className="mt-2 w-1/2" />
-        </View>
-      ))}
-    </View>
-  );
-}
-
-function ActivitySkeleton() {
-  return (
-    <View>
-      <SkeletonLine className="mb-4 w-3/5" />
-      <View className="flex-row gap-[3px]">
-        {Array.from({ length: 22 }).map((_, week) => (
-          <View key={week} className="gap-[3px]">
-            {Array.from({ length: 7 }).map((__, day) => (
-              <View
-                key={`${week}-${day}`}
-                className="h-[10px] w-[10px] rounded-[3px] bg-glass-button dark:bg-dark-glass-button"
-              />
-            ))}
-          </View>
-        ))}
-      </View>
-      <SkeletonLine className="mt-5 h-16 w-full" />
-    </View>
-  );
-}
-
-function UrgentSkeleton() {
-  return (
-    <View className="gap-3">
-      {Array.from({ length: 3 }).map((_, index) => (
-        <View
-          key={index}
-          className="rounded-nova border border-glass bg-glass-card p-4 dark:border-dark-glass dark:bg-dark-glass-card"
-        >
-          <SkeletonLine className="w-3/4" />
-          <SkeletonLine className="mt-3 w-1/2" />
-        </View>
-      ))}
-    </View>
-  );
-}
-
 function MetricCards({ metrics }: { metrics: DashboardMetrics }) {
   const cards: {
     label: string;
@@ -253,8 +89,8 @@ function MetricCards({ metrics }: { metrics: DashboardMetrics }) {
       label: "Tasks Due Today",
       value: String(metrics.tasksDueToday),
       icon: "calendar-clear-outline",
-      hint: metrics._meta?.totalAssignedTasks
-        ? `${metrics._meta.totalAssignedTasks} assigned overall`
+      hint: metrics._meta?.totalTasks
+        ? `${metrics._meta.totalTasks} assigned overall`
         : "Assigned work due today",
       href: "/(main)/timeline?filter=today",
     },
@@ -306,185 +142,6 @@ function MetricCards({ metrics }: { metrics: DashboardMetrics }) {
           <Ionicons name="chevron-forward" size={16} color={palette.subtle} />
         </Pressable>
       ))}
-    </View>
-  );
-}
-
-function ActivityHeatmap({ activity }: { activity: ActivityMap }) {
-  const { weeks, monthCols, year } = useMemo(
-    () => buildHeatmap(activity),
-    [activity],
-  );
-  const firstActiveCell = useMemo(
-    () =>
-      weeks
-        .flat()
-        .filter((cell) => cell.isCurrentYear && cell.tasks.length > 0)
-        .sort((a, b) => b.key.localeCompare(a.key))[0] ?? null,
-    [weeks],
-  );
-  const [selected, setSelected] = useState<HeatmapCell | null>(null);
-  const activeCell = selected ?? firstActiveCell;
-  const totalTasks = useMemo(
-    () => weeks.flat().reduce((total, cell) => total + cell.tasks.length, 0),
-    [weeks],
-  );
-
-  return (
-    <View>
-      <View className="mb-3 flex-row items-center justify-between gap-3">
-        <Text className="flex-1 text-xs text-subtle dark:text-dark-subtle">
-          {totalTasks} task{totalTasks === 1 ? "" : "s"} scheduled in {year}
-        </Text>
-        <View className="flex-row items-center gap-1.5">
-          <Text className="text-[10px] text-subtle dark:text-dark-subtle">
-            Less
-          </Text>
-          {[0.08, 0.28, 0.52, 0.76, 1].map((opacity) => (
-            <View
-              key={opacity}
-              className="h-[10px] w-[10px] rounded-[3px] bg-accent dark:bg-dark-accent"
-              style={{ opacity }}
-            />
-          ))}
-          <Text className="text-[10px] text-subtle dark:text-dark-subtle">
-            More
-          </Text>
-        </View>
-      </View>
-
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerClassName="pb-1"
-      >
-        <View>
-          <View className="relative mb-1 ml-8 h-[16px]">
-            {monthCols.map(({ label, col }) => (
-              <Text
-                key={`${label}-${col}`}
-                className="absolute text-[10px] text-subtle dark:text-dark-subtle"
-                style={{ left: col * 13 }}
-              >
-                {label}
-              </Text>
-            ))}
-          </View>
-
-          <View className="flex-row gap-1.5">
-            <View className="w-6 gap-[3px]">
-              {dayLabels.map((label, index) => (
-                <View
-                  key={`${label}-${index}`}
-                  className="h-[10px] justify-center"
-                >
-                  <Text className="text-[9px] text-subtle dark:text-dark-subtle">
-                    {label}
-                  </Text>
-                </View>
-              ))}
-            </View>
-
-            <View className="flex-row gap-[3px]">
-              {weeks.map((week, weekIndex) => (
-                <View key={weekIndex} className="gap-[3px]">
-                  {week.map((cell) => {
-                    const selectedCell = activeCell?.key === cell.key;
-                    return (
-                      <Pressable
-                        key={cell.key}
-                        accessibilityRole="button"
-                        accessibilityLabel={cell.isCurrentYear ? cell.key : undefined}
-                        disabled={!cell.isCurrentYear}
-                        onPress={() => {
-                          const openable = cell.tasks.filter((task) => task.projectId);
-                          if (openable.length === 1) {
-                            const href = taskHref(openable[0].projectId, openable[0].id);
-                            if (href) {
-                              router.push(href);
-                              return;
-                            }
-                          }
-                          setSelected(cell);
-                        }}
-                        className={`h-6 w-6 rounded-md bg-accent dark:bg-dark-accent ${
-                          selectedCell
-                            ? "border border-primary dark:border-dark-primary"
-                            : ""
-                        }`}
-                        style={{
-                          opacity: cell.isCurrentYear
-                            ? heatmapOpacity(cell.count)
-                            : 0,
-                        }}
-                      />
-                    );
-                  })}
-                </View>
-              ))}
-            </View>
-          </View>
-        </View>
-      </ScrollView>
-
-      <View className="mt-4 rounded-nova border border-glass bg-glass-card p-4 dark:border-dark-glass dark:bg-dark-glass-card">
-        <Text className="text-xs font-black uppercase tracking-[1.4px] text-subtle dark:text-dark-subtle">
-          {activeCell
-            ? activeCell.date.toLocaleDateString(undefined, {
-                weekday: "short",
-                month: "short",
-                day: "numeric",
-              })
-            : "No activity"}
-        </Text>
-
-        {activeCell?.tasks.length ? (
-          <View className="mt-3 gap-3">
-            {activeCell.tasks.map((task) => {
-              const href = taskHref(task.projectId, task.id);
-              const body = (
-                <>
-                  <Text className="font-extrabold text-primary dark:text-dark-primary">
-                    {task.title}
-                  </Text>
-                  <Text className="mt-0.5 text-xs text-muted dark:text-dark-muted">
-                    {task.project}
-                  </Text>
-                  <View className="mt-2 flex-row items-center gap-2">
-                    <View className="h-2 flex-1 overflow-hidden rounded-full bg-glass-button dark:bg-dark-glass-button">
-                      <View
-                        className="h-full rounded-full bg-accent dark:bg-dark-accent"
-                        style={{
-                          width: `${Math.max(0, Math.min(100, task.progress))}%`,
-                        }}
-                      />
-                    </View>
-                    <Text className="text-xs font-black text-accent dark:text-dark-accent">
-                      {task.progress}%
-                    </Text>
-                  </View>
-                </>
-              );
-              if (!href) {
-                return <View key={task.id}>{body}</View>;
-              }
-              return (
-                <Pressable
-                  key={task.id}
-                  accessibilityRole="button"
-                  onPress={() => router.push(href)}
-                >
-                  {body}
-                </Pressable>
-              );
-            })}
-          </View>
-        ) : (
-          <Text className="mt-2 text-sm text-muted dark:text-dark-muted">
-            No activity for this day.
-          </Text>
-        )}
-      </View>
     </View>
   );
 }
@@ -670,12 +327,17 @@ function ContinueStrip({ data }: { data: DashboardContinue }) {
 }
 
 function recentActivityItems(activity: ActivityMap) {
-  return Object.entries(activity)
-    .flatMap(([activityDate, tasks]) =>
-      tasks.map((task) => ({ ...task, activityDate })),
-    )
-    .sort((a, b) => b.activityDate.localeCompare(a.activityDate))
-    .slice(0, 3);
+  const items: (ActivityTaskEntry & { activityDate: string })[] = [];
+  const dates = Object.keys(activity).sort((a, b) => b.localeCompare(a));
+  for (const activityDate of dates) {
+    const tasks = activity[activityDate];
+    if (!tasks?.length) continue;
+    for (const task of tasks) {
+      items.push({ ...task, activityDate });
+      if (items.length >= 3) return items;
+    }
+  }
+  return items;
 }
 
 function RecentActivityList({
@@ -738,80 +400,26 @@ export default function DashboardScreen() {
     lastWhiteboard: null,
     dueToday: [],
   });
-  const [metricsLoading, setMetricsLoading] = useState(true);
-  const [activityLoading, setActivityLoading] = useState(true);
-  const [urgentLoading, setUrgentLoading] = useState(true);
-  const [continueLoading, setContinueLoading] = useState(true);
+  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  const loadMetrics = useCallback(async () => {
-    try {
-      const data = await getDashboardMetricsApi();
-      setMetrics(data);
-    } catch (error) {
-      showSnackbar({
-        variant: "error",
-        title: "Failed to load metrics",
-        message: getApiErrorMessage(error, "Please try again later."),
-      });
-    } finally {
-      setMetricsLoading(false);
-    }
-  }, [showSnackbar]);
-
-  const loadActivity = useCallback(async () => {
-    try {
-      const data = await getDashboardActivityApi();
-      setActivity(data);
-    } catch (error) {
-      showSnackbar({
-        variant: "error",
-        title: "Failed to load activity",
-        message: getApiErrorMessage(error, "Please try again later."),
-      });
-    } finally {
-      setActivityLoading(false);
-    }
-  }, [showSnackbar]);
-
-  const loadUrgentTasks = useCallback(async () => {
-    try {
-      const data = await getDashboardUrgentTasksApi();
-      setUrgentTasks(data);
-    } catch (error) {
-      showSnackbar({
-        variant: "error",
-        title: "Failed to load urgent tasks",
-        message: getApiErrorMessage(error, "Please try again later."),
-      });
-    } finally {
-      setUrgentLoading(false);
-    }
-  }, [showSnackbar]);
-
-  const loadContinue = useCallback(async () => {
-    try {
-      const data = await getDashboardContinueApi();
-      setContinueData(data);
-    } catch {
-      setContinueData({
-        lastProject: null,
-        lastWhiteboard: null,
-        dueToday: [],
-      });
-    } finally {
-      setContinueLoading(false);
-    }
-  }, []);
-
   const loadDashboard = useCallback(async () => {
-    await Promise.all([
-      loadMetrics(),
-      loadActivity(),
-      loadUrgentTasks(),
-      loadContinue(),
-    ]);
-  }, [loadActivity, loadContinue, loadMetrics, loadUrgentTasks]);
+    try {
+      const data = await getDashboardSummaryApi();
+      setMetrics(data.metrics);
+      setActivity(data.activity);
+      setUrgentTasks(data.urgentTasks);
+      setContinueData(data.continue);
+    } catch (error) {
+      showSnackbar({
+        variant: "error",
+        title: "Failed to load dashboard",
+        message: getApiErrorMessage(error, "Please try again later."),
+      });
+    } finally {
+      setLoading(false);
+    }
+  }, [showSnackbar]);
 
   useEffect(() => {
     void loadDashboard();
@@ -830,7 +438,7 @@ export default function DashboardScreen() {
     day: "numeric",
   });
 
-  if (metricsLoading && activityLoading && urgentLoading) {
+  if (loading) {
     return <PageSkeleton />;
   }
 
@@ -855,29 +463,25 @@ export default function DashboardScreen() {
         </Text>
       </View>
 
-      {continueLoading ? <UrgentSkeleton /> : <ContinueStrip data={continueData} />}
+      <ContinueStrip data={continueData} />
 
       <SectionCard icon="stats-chart-outline" title="Overview">
-        {metricsLoading ? (
-          <MetricsSkeleton />
-        ) : metrics ? (
-          <MetricCards metrics={metrics} />
-        ) : null}
+        {metrics ? <MetricCards metrics={metrics} /> : null}
       </SectionCard>
 
       <SectionCard icon="pulse-outline" title="Recent Activity">
-        {activityLoading ? (
-          <ActivitySkeleton />
-        ) : (
-          <>
-            <ActivityHeatmap activity={activity} />
-            <RecentActivityList items={recentItems} />
-          </>
-        )}
+        <ActivityHeatmap
+          activity={activity}
+          onOpenTask={(taskId, projectId) => {
+            const href = taskHref(projectId, taskId);
+            if (href) router.push(href);
+          }}
+        />
+        <RecentActivityList items={recentItems} />
       </SectionCard>
 
       <SectionCard icon="alert-circle-outline" title="Urgent Tasks">
-        {urgentLoading ? <UrgentSkeleton /> : <UrgentTasks tasks={urgentTasks} />}
+        <UrgentTasks tasks={urgentTasks} />
       </SectionCard>
     </ScrollView>
   );

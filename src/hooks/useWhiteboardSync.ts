@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AppState, Platform } from "react-native";
-import { createClient } from "@supabase/supabase-js";
+import { AppState } from "react-native";
 import {
   addWhiteboardPageApi,
   applyHistory,
@@ -26,10 +25,14 @@ import {
   type Whiteboard,
   type WhiteboardDocument,
   type WhiteboardOps,
-  type WhiteboardPage,
+  type WhiteboardPresence,
 } from "@/api/whiteboards";
-import { SUPABASE_ANON_KEY, SUPABASE_URL } from "@/config/notifications";
 import { useAuthStore } from "@/store/useAuthStore";
+import {
+  subscribeWhiteboardRealtime,
+  type WhiteboardChannel,
+} from "@/whiteboard/sync-channel";
+import { compactOps, mergePending, SELF_PLATFORM } from "@/whiteboard/sync-ops";
 import {
   readWhiteboardSession,
   writeWhiteboardSession,
@@ -37,75 +40,9 @@ import {
   type PendingByPage,
 } from "@/whiteboard/pendingStore";
 
-export type WhiteboardPresence = {
-  userId: string;
-  name: string;
-  color: string;
-  platform: PresencePlatform;
-  drawing?: boolean;
-  isSelf?: boolean;
-  x?: number;
-  y?: number;
-};
+export type { WhiteboardPresence };
 
 type SaveState = "idle" | "saving" | "saved" | "error";
-
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-  auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
-});
-
-const SELF_PLATFORM: PresencePlatform = Platform.OS === "ios" ? "ios" : "android";
-
-function unwrapStroke(
-  payload: unknown,
-): { userId?: string; platform?: PresencePlatform; pageId?: string; stroke: Stroke } | null {
-  if (!payload || typeof payload !== "object") return null;
-  const value = payload as {
-    userId?: string;
-    platform?: PresencePlatform;
-    pageId?: string;
-    stroke?: Stroke;
-    id?: string;
-    points?: unknown;
-  };
-  if (value.stroke?.id && Array.isArray(value.stroke.points)) {
-    return {
-      userId: value.userId,
-      platform: value.platform,
-      pageId: value.pageId,
-      stroke: value.stroke,
-    };
-  }
-  if (value.id && Array.isArray(value.points)) {
-    return { userId: value.userId, stroke: value as Stroke };
-  }
-  return null;
-}
-
-function compactOps(ops: WhiteboardOps): WhiteboardOps | null {
-  const removed = new Set(ops.removedStrokeIds ?? []);
-  const added = (ops.addedStrokes ?? []).filter((stroke) => {
-    if (!removed.has(stroke.id)) return true;
-    removed.delete(stroke.id);
-    return false;
-  });
-  const next: WhiteboardOps = {};
-  if (added.length) next.addedStrokes = added;
-  if (removed.size) next.removedStrokeIds = [...removed];
-  if (ops.title !== undefined) next.title = ops.title;
-  return Object.keys(next).length ? next : null;
-}
-
-function mergePending(current: WhiteboardOps, incoming: WhiteboardOps): WhiteboardOps {
-  return {
-    addedStrokes: [...(current.addedStrokes ?? []), ...(incoming.addedStrokes ?? [])],
-    removedStrokeIds: [
-      ...(current.removedStrokeIds ?? []),
-      ...(incoming.removedStrokeIds ?? []),
-    ],
-    title: incoming.title ?? current.title,
-  };
-}
 
 export function useWhiteboardSync(whiteboardId: string) {
   const user = useAuthStore((state) => state.user);
@@ -135,7 +72,7 @@ export function useWhiteboardSync(whiteboardId: string) {
   const persistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const flushingRef = useRef(false);
   const flushAgainRef = useRef(false);
-  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  const channelRef = useRef<WhiteboardChannel | null>(null);
   const undoRef = useRef<HistoryEntry[]>([]);
   const redoRef = useRef<HistoryEntry[]>([]);
   const selfIdRef = useRef<string | null>(null);
@@ -390,188 +327,38 @@ export function useWhiteboardSync(whiteboardId: string) {
 
   useEffect(() => {
     if (!user?.id) return;
-    const colorForUser = presenceColorForUser(user.id);
-    const channel = supabase.channel(`whiteboard:${whiteboardId}`, {
-      config: {
-        presence: { key: presenceSessionKey(user.id, SELF_PLATFORM) },
-        broadcast: { self: false },
-      },
+    return subscribeWhiteboardRealtime({
+      whiteboardId,
+      selfKey,
+      profile: { id: user.id, name: user.fullName },
+      pageIdRef,
+      pagesDocRef,
+      undoRef,
+      redoRef,
+      undoByPageRef,
+      redoByPageRef,
+      channelRef,
+      markDrawing,
+      applyPageDoc,
+      persistPending,
+      refreshHistoryFlags,
+      setRemoteDrafts,
+      setPresence,
+      setBoard,
+      setPageId,
+      setBoardDoc,
     });
+  }, [
+    applyPageDoc,
+    markDrawing,
+    persistPending,
+    refreshHistoryFlags,
+    selfKey,
+    user?.fullName,
+    user?.id,
+    whiteboardId,
+  ]);
 
-    channel
-      .on("broadcast", { event: "stroke:add" }, ({ payload }) => {
-        const parsed = unwrapStroke(payload);
-        if (!parsed) return;
-        if (parsed.userId) markDrawing(parsed.userId, false, parsed.platform);
-        const targetPageId = parsed.pageId ?? pageIdRef.current;
-        setRemoteDrafts((current) => {
-          const next = { ...current };
-          delete next[parsed.stroke.id];
-          return next;
-        });
-        if (targetPageId) applyPageDoc(targetPageId, { addedStrokes: [parsed.stroke] });
-      })
-      .on("broadcast", { event: "history:push" }, ({ payload }) => {
-        const body = payload as { pageId?: string; entry?: HistoryEntry };
-        if (!body.entry || !body.pageId) return;
-        if (body.pageId === pageIdRef.current) {
-          undoRef.current = [...undoRef.current, body.entry];
-          redoRef.current = [];
-          refreshHistoryFlags();
-        } else {
-          undoByPageRef.current[body.pageId] = [
-            ...(undoByPageRef.current[body.pageId] ?? []),
-            body.entry,
-          ];
-          redoByPageRef.current[body.pageId] = [];
-        }
-        persistPending();
-      })
-      .on("broadcast", { event: "history:undo" }, ({ payload }) => {
-        const pageId = (payload as { pageId?: string }).pageId ?? pageIdRef.current;
-        if (!pageId) return;
-        if (pageId === pageIdRef.current) {
-          const entry = undoRef.current.pop();
-          if (entry) redoRef.current.push(entry);
-          refreshHistoryFlags();
-        } else {
-          const stack = [...(undoByPageRef.current[pageId] ?? [])];
-          const entry = stack.pop();
-          if (entry) {
-            undoByPageRef.current[pageId] = stack;
-            redoByPageRef.current[pageId] = [
-              ...(redoByPageRef.current[pageId] ?? []),
-              entry,
-            ];
-          }
-        }
-        persistPending();
-      })
-      .on("broadcast", { event: "history:redo" }, ({ payload }) => {
-        const pageId = (payload as { pageId?: string }).pageId ?? pageIdRef.current;
-        if (!pageId) return;
-        if (pageId === pageIdRef.current) {
-          const entry = redoRef.current.pop();
-          if (entry) undoRef.current.push(entry);
-          refreshHistoryFlags();
-        } else {
-          const stack = [...(redoByPageRef.current[pageId] ?? [])];
-          const entry = stack.pop();
-          if (entry) {
-            redoByPageRef.current[pageId] = stack;
-            undoByPageRef.current[pageId] = [
-              ...(undoByPageRef.current[pageId] ?? []),
-              entry,
-            ];
-          }
-        }
-        persistPending();
-      })
-      .on("broadcast", { event: "stroke:remove" }, ({ payload }) => {
-        const body = payload as { ids?: string[]; pageId?: string };
-        const ids = body.ids ?? [];
-        if (!ids.length) return;
-        applyPageDoc(body.pageId ?? pageIdRef.current ?? "", {
-          removedStrokeIds: ids,
-        });
-      })
-      .on("broadcast", { event: "stroke:draft" }, ({ payload }) => {
-        const parsed = unwrapStroke(payload);
-        if (!parsed) return;
-        if (parsed.userId) markDrawing(parsed.userId, true, parsed.platform);
-        if (parsed.pageId && parsed.pageId !== pageIdRef.current) return;
-        setRemoteDrafts((current) => ({
-          ...current,
-          [parsed.stroke.id]: parsed.stroke,
-        }));
-      })
-      .on("broadcast", { event: "cursor" }, ({ payload }) => {
-        const cursor = payload as WhiteboardPresence;
-        if (!cursor?.userId) return;
-        const key = presenceSessionKey(cursor.userId, cursor.platform ?? "web");
-        if (key === selfKey) return;
-        setPresence((current) =>
-          current.map((peer) =>
-            peer.userId === cursor.userId &&
-            peer.platform === (cursor.platform ?? peer.platform)
-              ? {
-                  ...peer,
-                  x: cursor.x,
-                  y: cursor.y,
-                  drawing: cursor.x != null && cursor.y != null,
-                  platform: cursor.platform ?? peer.platform,
-                }
-              : peer,
-          ),
-        );
-      })
-      .on("broadcast", { event: "page:add" }, ({ payload }) => {
-        const page = payload as WhiteboardPage | undefined;
-        if (!page?.id) return;
-        pagesDocRef.current[page.id] = page.documentJson ?? emptyWhiteboardDocument();
-        setBoard((current) => {
-          if (!current || current.pages.some((item) => item.id === page.id)) return current;
-          return {
-            ...current,
-            pages: [...current.pages, page].sort((a, b) => a.index - b.index),
-          };
-        });
-      })
-      .on("broadcast", { event: "page:remove" }, ({ payload }) => {
-        const removedId = (payload as { pageId?: string }).pageId;
-        if (!removedId) return;
-        delete pagesDocRef.current[removedId];
-        setBoard((current) => {
-          if (!current) return current;
-          const pages = current.pages.filter((page) => page.id !== removedId);
-          if (pageIdRef.current === removedId && pages[0]) {
-            setPageId(pages[0].id);
-            setBoardDoc(pagesDocRef.current[pages[0].id] ?? pages[0].documentJson);
-          }
-          return { ...current, pages };
-        });
-      })
-      .on("presence", { event: "sync" }, () => {
-        const state = channel.presenceState<WhiteboardPresence>();
-        setPresence((current) => {
-          const drawingByKey = Object.fromEntries(
-            current.map((peer) => [
-              presenceSessionKey(peer.userId, peer.platform),
-              peer.drawing,
-            ]),
-          );
-          const peers: WhiteboardPresence[] = [];
-          for (const key of Object.keys(state)) {
-            const meta = state[key]?.[0];
-            if (!meta?.userId) continue;
-            const platform = meta.platform ?? "web";
-            const session = presenceSessionKey(meta.userId, platform);
-            if (session === selfKey) continue;
-            peers.push({
-              ...meta,
-              platform,
-              drawing: drawingByKey[session],
-            });
-          }
-          return peers;
-        });
-      })
-      .subscribe(async (status) => {
-        if (status !== "SUBSCRIBED") return;
-        await channel.track({
-          userId: user.id,
-          name: user.fullName,
-          color: colorForUser,
-          platform: SELF_PLATFORM,
-        });
-      });
-
-    channelRef.current = channel;
-    return () => {
-      channelRef.current = null;
-      void supabase.removeChannel(channel);
-    };
-  }, [applyPageDoc, markDrawing, persistPending, refreshHistoryFlags, selfKey, user?.fullName, user?.id, whiteboardId]);
 
   useEffect(() => {
     const sub = AppState.addEventListener("change", () => {
@@ -796,6 +583,8 @@ export function useWhiteboardSync(whiteboardId: string) {
     ];
   }, [presence, selfDrawing, user]);
 
+  const remoteDraftList = useMemo(() => Object.values(remoteDrafts), [remoteDrafts]);
+
   return {
     board,
     setBoard,
@@ -813,7 +602,7 @@ export function useWhiteboardSync(whiteboardId: string) {
     setWidth,
     presence,
     people,
-    remoteDrafts: Object.values(remoteDrafts),
+    remoteDrafts: remoteDraftList,
     canUndo,
     canRedo,
     canDraw,

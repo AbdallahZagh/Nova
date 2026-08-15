@@ -1,28 +1,29 @@
 import { useEffect } from "react";
 import { AppState, Text, View } from "react-native";
-import { apiClient } from "@/api/apiClient";
-import { flushOfflineQueue, useOfflineStore } from "@/offline/store";
+import { probeApiHealth, syncOfflineQueue } from "@/api/apiClient";
+import { useOfflineStore } from "@/offline/store";
 
 export function OfflineBanner() {
   const online = useOfflineStore((state) => state.online);
   const queuedCount = useOfflineStore((state) => state.queuedCount);
 
   useEffect(() => {
-    const flush = () => {
-      void flushOfflineQueue(async (item) => {
-        await apiClient.request({
-          method: item.method,
-          url: item.path,
-          data: item.body,
-          skipOfflineQueue: true,
-        } as { skipOfflineQueue?: boolean });
+    const recover = (force = false) => {
+      const state = useOfflineStore.getState();
+      if (!force && state.online && state.queuedCount === 0) return;
+      void probeApiHealth().then((ok) => {
+        if (!ok && state.queuedCount > 0) void syncOfflineQueue();
       });
     };
-    flush();
-    const sub = AppState.addEventListener("change", (state) => {
-      if (state === "active") flush();
+    recover(true);
+    const appState = AppState.addEventListener("change", (next) => {
+      if (next === "active") recover(true);
     });
-    return () => sub.remove();
+    const timer = setInterval(() => recover(false), 15_000);
+    return () => {
+      appState.remove();
+      clearInterval(timer);
+    };
   }, []);
 
   if (online && queuedCount === 0) return null;

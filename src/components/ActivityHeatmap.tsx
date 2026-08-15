@@ -1,6 +1,5 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
-import type { ApiUserActivityTask } from "@/api/types";
 
 const monthNames = [
   "Jan",
@@ -19,9 +18,13 @@ const monthNames = [
 
 const dayLabels = ["Mon", "", "Wed", "", "Fri", "", "Sun"] as const;
 
+export type OpenHeatmapTask = (taskId: string, projectId: string) => void;
+
 type HeatmapTask = {
+  id: string;
   title: string;
   project: string;
+  projectId: string | null;
   progress: number;
 };
 
@@ -33,6 +36,14 @@ type HeatmapCell = {
   tasks: HeatmapTask[];
 };
 
+type HeatmapActivityTask = {
+  id?: string;
+  title: string;
+  projectName: string;
+  projectId?: string | null;
+  completionPercentage?: number;
+};
+
 function toDateKey(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(
     2,
@@ -40,7 +51,7 @@ function toDateKey(date: Date) {
   )}-${String(date.getDate()).padStart(2, "0")}`;
 }
 
-function buildHeatmap(activity?: Record<string, ApiUserActivityTask[]>) {
+function buildHeatmap(activity?: Record<string, HeatmapActivityTask[]>) {
   const year = new Date().getFullYear();
   const taskMap = new Map<string, HeatmapTask[]>();
 
@@ -50,9 +61,11 @@ function buildHeatmap(activity?: Record<string, ApiUserActivityTask[]>) {
     if (Number.isNaN(date.getTime()) || date.getFullYear() !== year) continue;
     taskMap.set(
       isoKey,
-      entries.map((task) => ({
+      entries.map((task, index) => ({
+        id: task.id ?? `${isoKey}-${index}`,
         title: task.title,
         project: task.projectName,
+        projectId: task.projectId ?? null,
         progress: Math.round(task.completionPercentage ?? 0),
       })),
     );
@@ -73,6 +86,8 @@ function buildHeatmap(activity?: Record<string, ApiUserActivityTask[]>) {
   const seenMonths = new Set<number>();
   const cursor = new Date(gridStart);
   let col = 0;
+  let totalTasks = 0;
+  let firstActiveCell: HeatmapCell | null = null;
 
   while (cursor <= gridEnd) {
     const week: HeatmapCell[] = [];
@@ -82,26 +97,32 @@ function buildHeatmap(activity?: Record<string, ApiUserActivityTask[]>) {
       const isCurrentYear = date.getFullYear() === year;
       const key = toDateKey(date);
       const tasks = taskMap.get(key) ?? [];
+      const cell: HeatmapCell = {
+        key,
+        date,
+        isCurrentYear,
+        count: tasks.length,
+        tasks,
+      };
 
       if (isCurrentYear && row === 0 && !seenMonths.has(date.getMonth())) {
         seenMonths.add(date.getMonth());
         monthCols.push({ label: monthNames[date.getMonth()], col });
       }
 
-      week.push({
-        key,
-        date,
-        isCurrentYear,
-        count: tasks.length,
-        tasks,
-      });
+      if (isCurrentYear && tasks.length) {
+        totalTasks += tasks.length;
+        if (!firstActiveCell || key > firstActiveCell.key) firstActiveCell = cell;
+      }
+
+      week.push(cell);
     }
     weeks.push(week);
     col++;
     cursor.setDate(cursor.getDate() + 7);
   }
 
-  return { weeks, monthCols, year };
+  return { weeks, monthCols, year, totalTasks, firstActiveCell };
 }
 
 function heatmapOpacity(count: number) {
@@ -112,28 +133,78 @@ function heatmapOpacity(count: number) {
   return 1;
 }
 
+function HeatmapTaskRow({
+  task,
+  onOpenTask,
+}: {
+  task: HeatmapTask;
+  onOpenTask?: OpenHeatmapTask;
+}) {
+  const body = (
+    <>
+      <Text className="font-extrabold text-primary dark:text-dark-primary">
+        {task.title}
+      </Text>
+      <Text className="mt-0.5 text-xs text-muted dark:text-dark-muted">
+        {task.project}
+      </Text>
+      <View className="mt-2 flex-row items-center gap-2">
+        <View className="h-2 flex-1 overflow-hidden rounded-full bg-glass-button dark:bg-dark-glass-button">
+          <View
+            className="h-full rounded-full bg-accent dark:bg-dark-accent"
+            style={{
+              width: `${Math.max(0, Math.min(100, task.progress))}%`,
+            }}
+          />
+        </View>
+        <Text className="text-xs font-black text-accent dark:text-dark-accent">
+          {task.progress}%
+        </Text>
+      </View>
+    </>
+  );
+
+  if (!onOpenTask || !task.projectId) {
+    return <View>{body}</View>;
+  }
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      onPress={() => onOpenTask(task.id, task.projectId as string)}
+    >
+      {body}
+    </Pressable>
+  );
+}
+
 export function ActivityHeatmap({
   activity,
+  onOpenTask,
 }: {
-  activity?: Record<string, ApiUserActivityTask[]>;
+  activity?: Record<string, HeatmapActivityTask[]>;
+  onOpenTask?: OpenHeatmapTask;
 }) {
-  const { weeks, monthCols, year } = useMemo(
+  const { weeks, monthCols, year, totalTasks, firstActiveCell } = useMemo(
     () => buildHeatmap(activity),
     [activity],
   );
-  const firstActiveCell = useMemo(
-    () =>
-      weeks
-        .flat()
-        .filter((cell) => cell.isCurrentYear && cell.tasks.length > 0)
-        .sort((a, b) => b.key.localeCompare(a.key))[0] ?? null,
-    [weeks],
-  );
   const [selected, setSelected] = useState<HeatmapCell | null>(null);
   const activeCell = selected ?? firstActiveCell;
-  const totalTasks = useMemo(
-    () => weeks.flat().reduce((total, cell) => total + cell.tasks.length, 0),
-    [weeks],
+
+  const openDay = useCallback(
+    (cell: HeatmapCell) => {
+      if (!cell.isCurrentYear) return;
+      if (onOpenTask) {
+        const openable = cell.tasks.filter((task) => task.projectId);
+        if (openable.length === 1 && openable[0].projectId) {
+          onOpenTask(openable[0].id, openable[0].projectId);
+          return;
+        }
+      }
+      setSelected(cell);
+    },
+    [onOpenTask],
   );
 
   return (
@@ -199,7 +270,7 @@ export function ActivityHeatmap({
                         accessibilityRole="button"
                         accessibilityLabel={cell.isCurrentYear ? cell.key : undefined}
                         disabled={!cell.isCurrentYear}
-                        onPress={() => setSelected(cell)}
+                        onPress={() => openDay(cell)}
                         className={`h-6 w-6 rounded-md bg-accent dark:bg-dark-accent ${
                           selectedCell ? "border border-primary dark:border-dark-primary" : ""
                         }`}
@@ -231,28 +302,12 @@ export function ActivityHeatmap({
 
         {activeCell?.tasks.length ? (
           <View className="mt-3 gap-3">
-            {activeCell.tasks.map((task, index) => (
-              <View key={`${task.title}-${index}`}>
-                <Text className="font-extrabold text-primary dark:text-dark-primary">
-                  {task.title}
-                </Text>
-                <Text className="mt-0.5 text-xs text-muted dark:text-dark-muted">
-                  {task.project}
-                </Text>
-                <View className="mt-2 flex-row items-center gap-2">
-                  <View className="h-2 flex-1 overflow-hidden rounded-full bg-glass-button dark:bg-dark-glass-button">
-                    <View
-                      className="h-full rounded-full bg-accent dark:bg-dark-accent"
-                      style={{
-                        width: `${Math.max(0, Math.min(100, task.progress))}%`,
-                      }}
-                    />
-                  </View>
-                  <Text className="text-xs font-black text-accent dark:text-dark-accent">
-                    {task.progress}%
-                  </Text>
-                </View>
-              </View>
+            {activeCell.tasks.map((task) => (
+              <HeatmapTaskRow
+                key={task.id}
+                task={task}
+                onOpenTask={onOpenTask}
+              />
             ))}
           </View>
         ) : (

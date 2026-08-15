@@ -8,7 +8,7 @@ export type DashboardMetrics = {
   _meta?: {
     totalSubtasks?: number;
     completedSubtasks?: number;
-    totalAssignedTasks?: number;
+    totalTasks?: number;
   };
 };
 
@@ -77,26 +77,12 @@ export function taskHref(
   return `/(main)/task/${taskId}` as Href;
 }
 
-export async function getDashboardMetricsApi() {
-  const response = await apiClient.get<DashboardMetrics>("/api/dashboard/metrics");
-  return response.data;
-}
-
-export async function getDashboardActivityApi() {
-  const response = await apiClient.get<ActivityMap>("/api/dashboard/activity");
-  return response.data;
-}
-
-export async function getDashboardUrgentTasksApi() {
-  const response = await apiClient.get<UrgentTask[]>(
-    "/api/dashboard/urgent-tasks",
-  );
-  return response.data;
-}
-
-export async function getDashboardContinueApi() {
-  const response = await apiClient.get<DashboardContinue>(
-    "/api/dashboard/continue",
-  );
+export async function getDashboardSummaryApi() {
+  const response = await apiClient.get<{
+    metrics: DashboardMetrics;
+    activity: ActivityMap;
+    urgentTasks: UrgentTask[];
+    continue: DashboardContinue;
+  }>("/api/dashboard");
   return response.data;
 }

@@ -40,58 +40,78 @@ function userName(user: SearchUser) {
   return user.name ?? user.fullName ?? user.email ?? "Unknown user";
 }
 
-function flattenResults(
+function groupResults(
   projects: SearchProject[],
   whiteboards: SearchWhiteboard[],
   tasks: SearchTask[],
   users: SearchUser[],
   currentUserId?: string,
-): ResultItem[] {
-  return [
-    ...projects.map((project) => ({
-      id: `project-${project.id}`,
-      type: "project" as const,
-      label: project.name,
-      subtitle: project.description ?? project.status,
-      href: `/(main)/project/${project.id}` as Href,
-    })),
-    ...whiteboards.map((board) => ({
-      id: `whiteboard-${board.id}`,
-      type: "whiteboard" as const,
-      label: board.title,
-      subtitle: board.project?.name ?? "Personal whiteboard",
-      href: `/(main)/whiteboard/${board.id}` as Href,
-    })),
-    ...tasks.map((task) => {
-      const projectId = task.projectId ?? task.project?.id ?? "";
-      return {
-        id: `task-${task.id}`,
-        type: "task" as const,
-        label: task.title,
-        subtitle: task.project?.name ?? "Task",
-        href: {
-          pathname: "/(main)/task/[id]",
-          params: {
-            id: task.id,
-            ...(projectId ? { projectId } : {}),
-          },
-        } as Href,
-      };
-    }),
-    ...users.map((user) => ({
-      id: `user-${user.id}`,
-      type: "user" as const,
-      label: userName(user),
-      subtitle: user.username ?? user.email ?? "",
-      href:
-        user.id === currentUserId
-          ? ("/(main)/profile" as Href)
-          : ({
-              pathname: "/(main)/user/[id]",
-              params: { id: user.id },
-            } as Href),
-    })),
-  ];
+): { title: string; data: ResultItem[] }[] {
+  const sections: { title: string; data: ResultItem[] }[] = [];
+  if (projects.length) {
+    sections.push({
+      title: "Projects",
+      data: projects.map((project) => ({
+        id: `project-${project.id}`,
+        type: "project" as const,
+        label: project.name,
+        subtitle: project.description ?? project.status,
+        href: `/(main)/project/${project.id}` as Href,
+      })),
+    });
+  }
+  if (whiteboards.length) {
+    sections.push({
+      title: "Whiteboards",
+      data: whiteboards.map((board) => ({
+        id: `whiteboard-${board.id}`,
+        type: "whiteboard" as const,
+        label: board.title,
+        subtitle: board.project?.name ?? "Personal whiteboard",
+        href: `/(main)/whiteboard/${board.id}` as Href,
+      })),
+    });
+  }
+  if (tasks.length) {
+    sections.push({
+      title: "Tasks",
+      data: tasks.map((task) => {
+        const projectId = task.projectId ?? task.project?.id ?? "";
+        return {
+          id: `task-${task.id}`,
+          type: "task" as const,
+          label: task.title,
+          subtitle: task.project?.name ?? "Task",
+          href: {
+            pathname: "/(main)/task/[id]",
+            params: {
+              id: task.id,
+              ...(projectId ? { projectId } : {}),
+            },
+          } as Href,
+        };
+      }),
+    });
+  }
+  if (users.length) {
+    sections.push({
+      title: "People",
+      data: users.map((user) => ({
+        id: `user-${user.id}`,
+        type: "user" as const,
+        label: userName(user),
+        subtitle: user.username ?? user.email ?? "",
+        href:
+          user.id === currentUserId
+            ? ("/(main)/profile" as Href)
+            : ({
+                pathname: "/(main)/user/[id]",
+                params: { id: user.id },
+              } as Href),
+      })),
+    });
+  }
+  return sections;
 }
 
 function ResultCard({
@@ -208,29 +228,11 @@ export default function SearchScreen() {
     };
   }, [debouncedQuery, showSnackbar]);
 
-  const items = useMemo(
-    () => flattenResults(projects, whiteboards, tasks, users, currentUserId),
+  const sections = useMemo(
+    () => groupResults(projects, whiteboards, tasks, users, currentUserId),
     [currentUserId, projects, tasks, users, whiteboards],
   );
-
-  const sections = [
-    {
-      title: "Projects",
-      data: items.filter((item) => item.type === "project"),
-    },
-    {
-      title: "Whiteboards",
-      data: items.filter((item) => item.type === "whiteboard"),
-    },
-    {
-      title: "Tasks",
-      data: items.filter((item) => item.type === "task"),
-    },
-    {
-      title: "People",
-      data: items.filter((item) => item.type === "user"),
-    },
-  ].filter((section) => section.data.length > 0);
+  const hasResults = sections.length > 0;
 
   const hasQuery = debouncedQuery.length > 0;
 
@@ -286,14 +288,14 @@ export default function SearchScreen() {
               Results include boards you can open, plus projects, tasks, and people.
             </Text>
           </View>
-        ) : loading && items.length === 0 ? (
+        ) : loading && !hasResults ? (
           <View className="items-center rounded-nova-xl border border-glass bg-sidebar p-8 dark:border-dark-glass dark:bg-dark-sidebar">
             <ActivityIndicator color={palette.accent} />
             <Text className="mt-3 text-sm text-muted dark:text-dark-muted">
               Searching...
             </Text>
           </View>
-        ) : items.length === 0 ? (
+        ) : !hasResults ? (
           <View className="items-center rounded-nova-xl border border-glass bg-sidebar p-8 dark:border-dark-glass dark:bg-dark-sidebar">
             <Ionicons name="file-tray-outline" size={32} color={palette.accent} />
             <Text className="mt-3 text-center font-black text-primary dark:text-dark-primary">

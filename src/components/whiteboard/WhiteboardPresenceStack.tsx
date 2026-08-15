@@ -6,7 +6,7 @@ import {
   presenceDeviceLabel,
   type PresencePlatform,
 } from "@/api/whiteboards";
-import type { WhiteboardPresence } from "@/hooks/useWhiteboardSync";
+import type { WhiteboardPresence } from "@/api/whiteboards";
 
 function initials(name: string) {
   const parts = name.trim().split(/\s+/).filter(Boolean);

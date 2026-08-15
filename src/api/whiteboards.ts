@@ -92,14 +92,6 @@ export type WhiteboardOps = {
 
 export const DEFAULT_CANVAS = { width: 2000, height: 1500 } as const;
 
-export const BOARD_INSET = 16;
-
-export const TOOL_SIZE_PRESETS: Record<StrokeTool, readonly number[]> = {
-  pen: [2, 4, 8, 14, 22],
-  highlighter: [12, 20, 32, 44],
-  eraser: [16, 32, 56, 80, 120],
-};
-
 export const DEFAULT_TOOL_WIDTH: Record<StrokeTool, number> = {
   pen: 4,
   highlighter: 20,
@@ -112,6 +104,17 @@ export const ERASER_WIDTH_MIN = 8;
 export const ERASER_WIDTH_MAX = 120;
 
 export type PresencePlatform = "web" | "ios" | "android";
+
+export type WhiteboardPresence = {
+  userId: string;
+  name: string;
+  color: string;
+  platform: PresencePlatform;
+  drawing?: boolean;
+  isSelf?: boolean;
+  x?: number;
+  y?: number;
+};
 
 export function presenceSessionKey(userId: string, platform: PresencePlatform) {
   return `${userId}:${platform}`;
@@ -173,10 +176,6 @@ export function canDrawOnBoard(role: WhiteboardRole | null | undefined) {
   return role === "ADMIN" || role === "MEMBER";
 }
 
-export function canCommentOnBoard(role: WhiteboardRole | null | undefined) {
-  return canDrawOnBoard(role);
-}
-
 export function canViewBoardActivity(role: WhiteboardRole | null | undefined) {
   return canDrawOnBoard(role);
 }
@@ -210,12 +209,6 @@ export function fitBoard(
     panX: (viewW - boardW * zoom) / 2,
     panY: (viewH - boardH * zoom) / 2,
   };
-}
-
-export function platformLabel(platform?: string) {
-  if (platform === "ios") return "iPhone";
-  if (platform === "android") return "Android";
-  return "Web";
 }
 
 export const PRESENCE_COLORS = [
@@ -282,32 +275,55 @@ export function applyOpsLocally(
   current: WhiteboardDocument,
   ops: WhiteboardOps,
 ): WhiteboardDocument {
-  const removedStrokeIds = new Set(ops.removedStrokeIds ?? []);
-  const strokeMap = new Map(
-    current.strokes
-      .filter((stroke) => !removedStrokeIds.has(stroke.id))
-      .map((stroke) => [stroke.id, stroke]),
-  );
-  for (const stroke of ops.addedStrokes ?? []) {
-    if (removedStrokeIds.has(stroke.id)) continue;
-    strokeMap.set(stroke.id, stroke);
+  const removedStrokeIds = ops.removedStrokeIds?.length
+    ? new Set(ops.removedStrokeIds)
+    : null;
+  const addedStrokes = ops.addedStrokes ?? [];
+  const removedRegionIds = ops.removedRegionIds?.length
+    ? new Set(ops.removedRegionIds)
+    : null;
+  const addedRegions = ops.addedRegions ?? [];
+
+  if (
+    !removedStrokeIds &&
+    !addedStrokes.length &&
+    !removedRegionIds &&
+    !addedRegions.length &&
+    !ops.canvas
+  ) {
+    return current;
   }
 
-  const removedRegionIds = new Set(ops.removedRegionIds ?? []);
-  const regionMap = new Map(
-    current.regions
-      .filter((region) => !removedRegionIds.has(region.id))
-      .map((region) => [region.id, region]),
-  );
-  for (const region of ops.addedRegions ?? []) {
-    if (removedRegionIds.has(region.id)) continue;
-    regionMap.set(region.id, region);
+  let strokes = current.strokes;
+  if (removedStrokeIds || addedStrokes.length) {
+    const strokeMap = new Map<string, Stroke>();
+    for (const stroke of current.strokes) {
+      if (!removedStrokeIds?.has(stroke.id)) strokeMap.set(stroke.id, stroke);
+    }
+    for (const stroke of addedStrokes) {
+      if (removedStrokeIds?.has(stroke.id)) continue;
+      strokeMap.set(stroke.id, stroke);
+    }
+    strokes = [...strokeMap.values()];
+  }
+
+  let regions = current.regions;
+  if (removedRegionIds || addedRegions.length) {
+    const regionMap = new Map<string, SemanticRegion>();
+    for (const region of current.regions) {
+      if (!removedRegionIds?.has(region.id)) regionMap.set(region.id, region);
+    }
+    for (const region of addedRegions) {
+      if (removedRegionIds?.has(region.id)) continue;
+      regionMap.set(region.id, region);
+    }
+    regions = [...regionMap.values()];
   }
 
   return {
     canvas: ops.canvas ?? current.canvas,
-    strokes: [...strokeMap.values()],
-    regions: [...regionMap.values()],
+    strokes,
+    regions,
   };
 }
 

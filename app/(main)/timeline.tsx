@@ -393,21 +393,21 @@ export default function TimelineScreen() {
   const agendaGroups = useMemo(() => {
     const { start, end } = calendarWindow(timeFilter);
     const byDay = new Map<string, TimelineTask[]>();
-    filteredItems
-      .slice()
-      .sort((a, b) => {
+    for (const task of filteredItems) {
+      const due = parseDay(task.dueDate);
+      if (!due) continue;
+      const key = dateKey(due);
+      const existing = byDay.get(key);
+      if (existing) existing.push(task);
+      else byDay.set(key, [task]);
+    }
+    for (const dayTasks of byDay.values()) {
+      dayTasks.sort((a, b) => {
         const aTime = parseDate(a.dueDate)?.getTime() ?? 0;
         const bTime = parseDate(b.dueDate)?.getTime() ?? 0;
         return aTime - bTime;
-      })
-      .forEach((task) => {
-        const due = parseDay(task.dueDate);
-        if (!due) return;
-        const key = dateKey(due);
-        const existing = byDay.get(key);
-        if (existing) existing.push(task);
-        else byDay.set(key, [task]);
       });
+    }
 
     const days =
       timeFilter === "weekly" ? eachDay(start, end) : Array.from(byDay.keys()).map((key) => {

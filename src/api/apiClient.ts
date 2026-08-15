@@ -18,12 +18,15 @@ export const API_BASE_URL = (
   process.env.EXPO_PUBLIC_API_URL || "https://nova-l5df.onrender.com"
 ).replace(/\/$/, "");
 
-type OfflineConfig = AxiosRequestConfig & { skipOfflineQueue?: boolean };
+type OfflineConfig = AxiosRequestConfig & {
+  skipOfflineQueue?: boolean;
+  fromOfflineCache?: boolean;
+};
 
 function createBaseClient() {
   return create({
     baseURL: API_BASE_URL,
-    timeout: 20_000,
+    timeout: 30_000,
     adapter: expoFetchAdapter,
     headers: {
       Accept: "application/json",
@@ -39,6 +42,10 @@ export const publicApiClient = createBaseClient();
 
 function skipped(config?: AxiosRequestConfig) {
   return Boolean((config as OfflineConfig | undefined)?.skipOfflineQueue);
+}
+
+function fromCache(config?: AxiosRequestConfig) {
+  return Boolean((config as OfflineConfig | undefined)?.fromOfflineCache);
 }
 
 function stripUnsafeHeaders(config: InternalAxiosRequestConfig) {
@@ -65,7 +72,8 @@ apiClient.interceptors.request.use((config) => {
 publicApiClient.interceptors.request.use(stripUnsafeHeaders);
 
 let handlingUnauthorized = false;
-let consecutiveNetworkFailures = 0;
+let failureWave = 0;
+let lastFailureAt = 0;
 
 function fakeOk(config: InternalAxiosRequestConfig | undefined, data: unknown) {
   return {
@@ -73,26 +81,63 @@ function fakeOk(config: InternalAxiosRequestConfig | undefined, data: unknown) {
     status: 200,
     statusText: "OK",
     headers: {},
-    config: config ?? ({} as InternalAxiosRequestConfig),
+    config: {
+      ...(config ?? ({} as InternalAxiosRequestConfig)),
+      fromOfflineCache: true,
+    } as InternalAxiosRequestConfig,
   };
+}
+
+function markOnline() {
+  failureWave = 0;
+  lastFailureAt = 0;
+  useOfflineStore.getState().setOnline(true);
+}
+
+function recordNetworkFailure() {
+  const now = Date.now();
+  if (now - lastFailureAt > 2500) {
+    failureWave += 1;
+  }
+  lastFailureAt = now;
+  if (failureWave >= 2) {
+    useOfflineStore.getState().setOnline(false);
+  }
+}
+
+export async function syncOfflineQueue() {
+  await flushOfflineQueue(async (item) => {
+    await apiClient.request({
+      method: item.method,
+      url: item.path,
+      data: item.body,
+      skipOfflineQueue: true,
+    } as OfflineConfig);
+  });
+}
+
+export async function probeApiHealth() {
+  try {
+    await publicApiClient.get("/api/health", { timeout: 10_000 });
+    markOnline();
+    void syncOfflineQueue();
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 apiClient.interceptors.response.use(
   (response) => {
-    consecutiveNetworkFailures = 0;
-    useOfflineStore.getState().setOnline(true);
+    if (fromCache(response.config)) {
+      return response;
+    }
+    markOnline();
     if ((response.config.method ?? "get").toUpperCase() === "GET" && response.config.url) {
       void writeCachedGet(response.config.url, response.data);
     }
     if (!skipped(response.config)) {
-      void flushOfflineQueue(async (item) => {
-        await apiClient.request({
-          method: item.method,
-          url: item.path,
-          data: item.body,
-          skipOfflineQueue: true,
-        } as OfflineConfig);
-      });
+      void syncOfflineQueue();
     }
     return response;
   },
@@ -124,14 +169,11 @@ apiClient.interceptors.response.use(
       !skipped(config) &&
       !shouldBypassOffline(url, config.data)
     ) {
-      consecutiveNetworkFailures += 1;
-      if (consecutiveNetworkFailures >= 3) {
-        useOfflineStore.getState().setOnline(false);
-      }
+      recordNetworkFailure();
       if (method === "GET") {
         const cached = await readCachedGet(url);
         if (cached !== null) return fakeOk(config, cached);
-      } else if (consecutiveNetworkFailures >= 3) {
+      } else if (!useOfflineStore.getState().online) {
         await enqueueMutation({ method, path: url, body: config.data });
         const data = await optimisticMutationResponse(method, url, config.data);
         return fakeOk(config, data);

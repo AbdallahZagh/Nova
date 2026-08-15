@@ -16,6 +16,9 @@ const FORBIDDEN_HEADERS = new Set([
   "accept-encoding",
 ]);
 
+const MAX_ATTEMPTS = 3;
+const RETRY_WAIT_MS = [0, 400, 1200];
+
 function requestUrl(config: InternalAxiosRequestConfig) {
   const uri = axios.getUri(config);
   if (/^https?:\/\//i.test(uri)) return uri;
@@ -99,6 +102,15 @@ type TransportResponse = {
   data: unknown;
 };
 
+function wait(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isRetryable(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  return /network|timeout|abort/i.test(message);
+}
+
 function xhrRequest(
   url: string,
   method: string,
@@ -158,58 +170,72 @@ export const expoFetchAdapter: AxiosAdapter = async (config) => {
   const method = (config.method ?? "get").toUpperCase();
   const headers = requestHeaders(config, method);
   const body = requestBody(config, headers, method);
-  const timeout = config.timeout && config.timeout > 0 ? config.timeout : 20_000;
+  const timeout = config.timeout && config.timeout > 0 ? config.timeout : 30_000;
   const responseType = config.responseType === "arraybuffer" ? "arraybuffer" : "text";
 
   if (__DEV__) {
     console.log(`[Nova API] ${method} ${url}`);
   }
 
-  try {
-    const response = await xhrRequest(
-      url,
-      method,
-      headers,
-      body,
-      timeout,
-      responseType,
-    );
+  let lastError: unknown;
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt += 1) {
+    const delay = RETRY_WAIT_MS[attempt] ?? 1200;
+    if (delay) await wait(delay);
+    try {
+      const response = await xhrRequest(
+        url,
+        method,
+        headers,
+        body,
+        timeout,
+        responseType,
+      );
 
-    const axiosResponse = {
-      data: response.data,
-      status: response.status,
-      statusText: response.statusText,
-      headers: response.headers,
-      config,
-      request: { url },
-    } as AxiosResponse;
+      const axiosResponse = {
+        data: response.data,
+        status: response.status,
+        statusText: response.statusText,
+        headers: response.headers,
+        config,
+        request: { url },
+      } as AxiosResponse;
 
-    if (__DEV__) {
-      console.log(`[Nova API] ${method} ${url} -> ${response.status}`);
+      if (__DEV__) {
+        console.log(`[Nova API] ${method} ${url} -> ${response.status}`);
+      }
+
+      if (response.status >= 200 && response.status < 300) {
+        return axiosResponse;
+      }
+
+      throw new AxiosError(
+        `Request failed with status code ${response.status}`,
+        response.status >= 500 ? AxiosError.ERR_BAD_RESPONSE : AxiosError.ERR_BAD_REQUEST,
+        config,
+        axiosResponse.request,
+        axiosResponse,
+      );
+    } catch (error) {
+      lastError = error;
+      if (error instanceof AxiosError) throw error;
+      if (!isRetryable(error) || attempt === MAX_ATTEMPTS - 1) break;
+      if (__DEV__) {
+        console.log(
+          `[Nova API] ${method} ${url} retry ${attempt + 1}/${MAX_ATTEMPTS - 1} after ${error instanceof Error ? error.message : "error"}`,
+        );
+      }
     }
-
-    if (response.status >= 200 && response.status < 300) {
-      return axiosResponse;
-    }
-
-    throw new AxiosError(
-      `Request failed with status code ${response.status}`,
-      response.status >= 500 ? AxiosError.ERR_BAD_RESPONSE : AxiosError.ERR_BAD_REQUEST,
-      config,
-      axiosResponse.request,
-      axiosResponse,
-    );
-  } catch (error) {
-    if (error instanceof AxiosError) throw error;
-    const message = error instanceof Error ? error.message : "Network Error";
-    if (__DEV__) {
-      console.log(`[Nova API] ${method} ${url} failed: ${message} (${Platform.OS})`);
-    }
-    const aborted = /abort|timeout/i.test(message);
-    throw new AxiosError(
-      message,
-      aborted ? AxiosError.ECONNABORTED : AxiosError.ERR_NETWORK,
-      config,
-    );
   }
+
+  if (lastError instanceof AxiosError) throw lastError;
+  const message = lastError instanceof Error ? lastError.message : "Network Error";
+  if (__DEV__) {
+    console.log(`[Nova API] ${method} ${url} failed: ${message} (${Platform.OS})`);
+  }
+  const aborted = /abort|timeout/i.test(message);
+  throw new AxiosError(
+    message,
+    aborted ? AxiosError.ECONNABORTED : AxiosError.ERR_NETWORK,
+    config,
+  );
 };

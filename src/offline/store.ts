@@ -1,3 +1,4 @@
+import * as FileSystem from "expo-file-system/legacy";
 import { create } from "zustand";
 
 export type OfflineMutation = {
@@ -6,6 +7,7 @@ export type OfflineMutation = {
   path: string;
   body?: unknown;
   createdAt: number;
+  attempts?: number;
 };
 
 type OfflineState = {
@@ -22,17 +24,16 @@ export const useOfflineStore = create<OfflineState>((set) => ({
   setQueuedCount: (queuedCount) => set({ queuedCount }),
 }));
 
-function cacheFile(FileSystem: typeof import("expo-file-system/legacy")) {
+function cacheFile() {
   return `${FileSystem.documentDirectory ?? FileSystem.cacheDirectory}nova-offline-cache.json`;
 }
 
-function queueFile(FileSystem: typeof import("expo-file-system/legacy")) {
+function queueFile() {
   return `${FileSystem.documentDirectory ?? FileSystem.cacheDirectory}nova-offline-queue.json`;
 }
 
 async function readFile<T>(path: string, fallback: T): Promise<T> {
   try {
-    const FileSystem = await import("expo-file-system/legacy");
     const info = await FileSystem.getInfoAsync(path);
     if (!info.exists) return fallback;
     return JSON.parse(await FileSystem.readAsStringAsync(path)) as T;
@@ -43,7 +44,6 @@ async function readFile<T>(path: string, fallback: T): Promise<T> {
 
 async function writeFile(path: string, value: unknown) {
   try {
-    const FileSystem = await import("expo-file-system/legacy");
     await FileSystem.writeAsStringAsync(path, JSON.stringify(value));
   } catch {
     // ignore disk failures
@@ -67,6 +67,8 @@ export function shouldBypassOffline(path: string, data?: unknown) {
     value.includes("/reactivate") ||
     value.includes("/export") ||
     value.includes("/snapshots") ||
+    value.includes("/device-tokens") ||
+    value.includes("/health") ||
     /\/pages\/[^/]+\/ops$/.test(value) ||
     /\/whiteboards\/[^/]+\/ops$/.test(value)
   );
@@ -88,28 +90,30 @@ export function isNetworkFailure(error: unknown) {
   );
 }
 
+function responseStatus(error: unknown) {
+  if (!error || typeof error !== "object") return null;
+  const status = (error as { response?: { status?: number } }).response?.status;
+  return typeof status === "number" ? status : null;
+}
+
 export async function readCachedGet<T>(path: string): Promise<T | null> {
-  const FileSystem = await import("expo-file-system/legacy");
-  const cache = await readFile<Record<string, T>>(cacheFile(FileSystem), {});
+  const cache = await readFile<Record<string, T>>(cacheFile(), {});
   return cache[normalizePath(path)] ?? null;
 }
 
 export async function writeCachedGet(path: string, data: unknown) {
-  const FileSystem = await import("expo-file-system/legacy");
-  const file = cacheFile(FileSystem);
+  const file = cacheFile();
   const cache = await readFile<Record<string, unknown>>(file, {});
   cache[normalizePath(path)] = data;
   await writeFile(file, cache);
 }
 
 async function readQueue() {
-  const FileSystem = await import("expo-file-system/legacy");
-  return readFile<OfflineMutation[]>(queueFile(FileSystem), []);
+  return readFile<OfflineMutation[]>(queueFile(), []);
 }
 
 async function writeQueue(rows: OfflineMutation[]) {
-  const FileSystem = await import("expo-file-system/legacy");
-  await writeFile(queueFile(FileSystem), rows);
+  await writeFile(queueFile(), rows);
   useOfflineStore.getState().setQueuedCount(rows.length);
 }
 
@@ -125,6 +129,7 @@ export async function enqueueMutation(input: {
     path: normalizePath(input.path),
     body: input.body,
     createdAt: Date.now(),
+    attempts: 0,
   };
   await writeQueue([...rows, item]);
   return item;
@@ -202,24 +207,47 @@ export async function optimisticMutationResponse(
 
 let flushing = false;
 
+function shouldDropFailedItem(error: unknown, attempts: number) {
+  if (isNetworkFailure(error)) return false;
+  const status = responseStatus(error);
+  if (status == null) return attempts >= 5;
+  if (status === 408 || status === 429 || status >= 500) return attempts >= 5;
+  if (status === 401) return attempts >= 2;
+  return true;
+}
+
 export async function flushOfflineQueue(
   send: (item: OfflineMutation) => Promise<void>,
 ) {
   if (flushing) return;
   const rows = await readQueue();
-  if (!rows.length) return;
+  if (!rows.length) {
+    useOfflineStore.getState().setQueuedCount(0);
+    return;
+  }
   flushing = true;
   try {
+    const remaining: OfflineMutation[] = [];
     for (let index = 0; index < rows.length; index += 1) {
+      const item = rows[index];
       try {
-        await send(rows[index]);
-      } catch {
-        await writeQueue(rows.slice(index));
-        return;
+        await send(item);
+      } catch (error) {
+        const attempts = (item.attempts ?? 0) + 1;
+        if (isNetworkFailure(error)) {
+          remaining.push({ ...item, attempts }, ...rows.slice(index + 1));
+          break;
+        }
+        if (!shouldDropFailedItem(error, attempts)) {
+          remaining.push({ ...item, attempts }, ...rows.slice(index + 1));
+          break;
+        }
       }
     }
-    await writeQueue([]);
-    useOfflineStore.getState().setOnline(true);
+    await writeQueue(remaining);
+    if (remaining.length === 0) {
+      useOfflineStore.getState().setOnline(true);
+    }
   } finally {
     flushing = false;
   }

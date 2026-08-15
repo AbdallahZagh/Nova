@@ -850,33 +850,39 @@ export default function ProjectDetailScreen() {
     setNewTaskOpen(true);
   }, [editable, loading, newTaskParam, project]);
 
-  const myLateTasks = useMemo(
-    () =>
-      user?.id
-        ? tasks.filter((task) =>
-            taskMatchesBoardFilters(task, user.id, "late", "all"),
-          )
-        : [],
-    [tasks, user?.id],
-  );
+  const myLateTasks = useMemo(() => {
+    if (!user?.id) return [];
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return tasks.filter((task) =>
+      taskMatchesBoardFilters(task, user.id, "late", "all", today.getTime()),
+    );
+  }, [tasks, user?.id]);
 
   const filteredTasks = useMemo(
     () => filterBoardTasks(tasks, personFilter, whenFilter, priorityFilter),
     [personFilter, priorityFilter, tasks, whenFilter],
   );
 
-  const tasksByColumn = useMemo(
-    () =>
-      TASK_COLUMNS.reduce(
-        (acc, column) => {
-          acc[column] = sortTasksInStatusColumn(
-            filteredTasks.filter((task) => task.status === column),
-          );
-          return acc;
-        },
-        {} as Record<TaskStatus, Task[]>,
-      ),
-    [filteredTasks],
+  const tasksByColumn = useMemo(() => {
+    const acc = {
+      "To Do": [] as Task[],
+      "In Progress": [] as Task[],
+      "In Review": [] as Task[],
+      Completed: [] as Task[],
+    };
+    for (const task of filteredTasks) {
+      acc[task.status]?.push(task);
+    }
+    for (const column of TASK_COLUMNS) {
+      acc[column] = sortTasksInStatusColumn(acc[column]);
+    }
+    return acc;
+  }, [filteredTasks]);
+
+  const completedCount = useMemo(
+    () => tasks.reduce((count, task) => count + (task.status === "Completed" ? 1 : 0), 0),
+    [tasks],
   );
 
   const onRefresh = async () => {
@@ -914,7 +920,7 @@ export default function ProjectDetailScreen() {
       shouldOfferMarkProjectComplete(
         project.status,
         tasks.length,
-        tasks.filter((task) => task.status === "Completed").length,
+        completedCount,
       )
     : false;
 
