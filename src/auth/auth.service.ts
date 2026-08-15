@@ -109,16 +109,13 @@ export class AuthService {
   }
 
   async login(dto: LoginDto) {
-    const email = this.normalizeEmail(dto.email);
-    const user = await (this.prisma as any).user.findUnique({
-      where: { email },
-    });
+    const user = await this.findUserByLoginIdentifier(dto.email);
 
-    if (!user) throw new UnauthorizedException('Invalid email or password');
+    if (!user) throw new UnauthorizedException('Invalid email, username, or password');
 
     const validPassword = await bcrypt.compare(dto.password, user.passwordHash);
     if (!validPassword) {
-      throw new UnauthorizedException('Invalid email or password');
+      throw new UnauthorizedException('Invalid email, username, or password');
     }
 
     if (user.isArchived) {
@@ -126,7 +123,7 @@ export class AuthService {
     }
 
     if (!user.isActive) {
-      await this.issueOtp(user.id, email, 'REGISTER');
+      await this.issueOtp(user.id, user.email, 'REGISTER');
       throw new UnauthorizedException('Please verify your email before logging in. A new OTP was sent.');
     }
 
@@ -210,6 +207,26 @@ export class AuthService {
     });
     if (!user) throw new NotFoundException('User not found');
     return user;
+  }
+
+  /** Email if it looks like one; otherwise unique username (`@name` or `name`). */
+  private async findUserByLoginIdentifier(raw: string) {
+    const identifier = raw.trim();
+    if (!identifier) return null;
+
+    if (this.looksLikeEmail(identifier)) {
+      return (this.prisma as any).user.findUnique({
+        where: { email: this.normalizeEmail(identifier) },
+      });
+    }
+
+    return (this.prisma as any).user.findUnique({
+      where: { username: normalizeUsername(identifier) },
+    });
+  }
+
+  private looksLikeEmail(value: string) {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
   }
 
   private async issueOtp(userId: string, email: string, purpose: OtpPurpose) {

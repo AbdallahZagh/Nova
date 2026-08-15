@@ -48,7 +48,7 @@ export class AuthController {
 
   @Post('login')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Login with email/password' })
+  @ApiOperation({ summary: 'Login with email or username, plus password' })
   @ApiResponse({ status: 200, description: 'JWT access token returned' })
   login(@Body() dto: LoginDto) {
     return this.authService.login(dto);

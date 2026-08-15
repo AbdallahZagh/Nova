@@ -11,7 +11,7 @@ import { IsUsername } from '../../common/validators/is-username.decorator';
 export class RegisterDto {
   @ApiProperty({
     example: 'sarah.johnson@devteam.io',
-    description: 'Valid email address — used as the unique login identifier',
+    description: 'Valid email address — can also be used to sign in'
   })
   @IsEmail({}, { message: 'Please provide a valid email address' })
   email: string;
