@@ -8,6 +8,7 @@ export type ActionSheetItem = {
   label: string;
   icon: keyof typeof Ionicons.glyphMap;
   disabled?: boolean;
+  destructive?: boolean;
   onPress: () => void;
 };
 
@@ -49,15 +50,28 @@ export function ActionSheet({
               <Pressable
                 key={item.key}
                 disabled={item.disabled}
-                onPress={item.onPress}
+                onPress={() => {
+                  onClose();
+                  item.onPress();
+                }}
                 className={`flex-row items-center gap-3 px-4 py-3.5 active:bg-glass-button dark:active:bg-dark-glass-button ${
                   index > 0 || title
                     ? "border-t border-glass dark:border-dark-glass"
                     : ""
                 } ${item.disabled ? "opacity-50" : ""}`}
               >
-                <Ionicons name={item.icon} size={18} color={palette.primary} />
-                <Text className="flex-1 text-[15px] font-extrabold text-primary dark:text-dark-primary">
+                <Ionicons
+                  name={item.icon}
+                  size={18}
+                  color={item.destructive ? palette.danger : palette.primary}
+                />
+                <Text
+                  className={`flex-1 text-[15px] font-extrabold ${
+                    item.destructive
+                      ? "text-danger dark:text-dark-danger"
+                      : "text-primary dark:text-dark-primary"
+                  }`}
+                >
                   {item.label}
                 </Text>
               </Pressable>

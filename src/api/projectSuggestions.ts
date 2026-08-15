@@ -1,4 +1,5 @@
 import { apiClient } from "@/api/apiClient";
+import { apiTaskToTask, type Task } from "@/api/tasks";
 
 export type ProjectSuggestionStatus = "In Review" | "In Progress" | "Done" | "Rejected";
 
@@ -6,6 +7,7 @@ export type ProjectSuggestion = {
   id: string;
   content: string;
   status: ProjectSuggestionStatus;
+  authorId?: string;
   createdAt?: string;
   author?: {
     id?: string;
@@ -15,11 +17,20 @@ export type ProjectSuggestion = {
   };
 };
 
+export const PROJECT_SUGGESTION_STATUS_OPTIONS: ProjectSuggestionStatus[] = [
+  "In Review",
+  "In Progress",
+  "Done",
+  "Rejected",
+];
+
 type ApiSuggestion = {
   id: string;
   content?: string;
   message?: string;
   status?: string;
+  authorId?: string;
+  userId?: string;
   createdAt?: string;
   author?: { id?: string; fullName?: string; name?: string; avatarUrl?: string | null; roleTitle?: string } | null;
   user?: { id?: string; fullName?: string; name?: string; avatarUrl?: string | null; roleTitle?: string } | null;
@@ -39,6 +50,7 @@ function mapSuggestion(item: ApiSuggestion): ProjectSuggestion {
     id: item.id,
     content: item.content ?? item.message ?? "",
     status: normalizeStatus(item.status),
+    authorId: item.authorId ?? item.userId ?? author?.id,
     createdAt: item.createdAt,
     author: author
       ? {
@@ -67,4 +79,30 @@ export async function createProjectSuggestionApi(projectId: string, content: str
     content: content.trim(),
   });
   return mapSuggestion(response.data);
+}
+
+export async function updateProjectSuggestionApi(
+  id: string,
+  patch: { content?: string; status?: ProjectSuggestionStatus },
+) {
+  const response = await apiClient.patch<ApiSuggestion>(`/api/project-suggestions/${id}`, {
+    content: patch.content?.trim(),
+    status: patch.status,
+  });
+  return mapSuggestion(response.data);
+}
+
+export async function deleteProjectSuggestionApi(id: string) {
+  await apiClient.delete(`/api/project-suggestions/${id}`);
+}
+
+export async function convertProjectSuggestionApi(id: string) {
+  const response = await apiClient.post<{
+    suggestion: ApiSuggestion;
+    task: Parameters<typeof apiTaskToTask>[0];
+  }>(`/api/project-suggestions/${id}/convert-to-task`);
+  return {
+    suggestion: mapSuggestion(response.data.suggestion),
+    task: apiTaskToTask(response.data.task) as Task,
+  };
 }

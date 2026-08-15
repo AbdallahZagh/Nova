@@ -13,14 +13,18 @@ import {
   View,
 } from "react-native";
 import Ionicons from "@expo/vector-icons/Ionicons";
+import { router, type Href } from "expo-router";
 import { useColorScheme } from "nativewind";
 import { getApiErrorMessage } from "@/api/apiClient";
 import {
   getDashboardActivityApi,
+  getDashboardContinueApi,
   getDashboardMetricsApi,
   getDashboardUrgentTasksApi,
+  taskHref,
   type ActivityMap,
   type ActivityTaskEntry,
+  type DashboardContinue,
   type DashboardMetrics,
   type UrgentTask,
 } from "@/api/dashboard";
@@ -47,8 +51,10 @@ const monthNames = [
 const dayLabels = ["Mon", "", "Wed", "", "Fri", "", "Sun"] as const;
 
 type HeatmapTask = {
+  id: string;
   title: string;
   project: string;
+  projectId: string | null;
   progress: number;
 };
 
@@ -78,8 +84,10 @@ function buildHeatmap(activity: ActivityMap) {
     taskMap.set(
       isoKey,
       entries.map((task) => ({
+        id: task.id,
         title: task.title,
         project: task.projectName,
+        projectId: task.projectId ?? null,
         progress: Math.round(task.completionPercentage ?? 0),
       })),
     );
@@ -234,30 +242,39 @@ function UrgentSkeleton() {
 }
 
 function MetricCards({ metrics }: { metrics: DashboardMetrics }) {
-  const cards = [
+  const cards: {
+    label: string;
+    value: string;
+    icon: keyof typeof Ionicons.glyphMap;
+    hint: string;
+    href: Href;
+  }[] = [
     {
       label: "Tasks Due Today",
       value: String(metrics.tasksDueToday),
-      icon: "calendar-clear-outline" as const,
+      icon: "calendar-clear-outline",
       hint: metrics._meta?.totalAssignedTasks
         ? `${metrics._meta.totalAssignedTasks} assigned overall`
         : "Assigned work due today",
+      href: "/(main)/timeline?filter=today",
     },
     {
       label: "Active Projects",
       value: String(metrics.activeProjectsCount),
-      icon: "folder-open-outline" as const,
+      icon: "folder-open-outline",
       hint: "Projects currently moving",
+      href: "/(main)/projects",
     },
     {
       label: "Productivity Score",
       value: `${metrics.productivityPercentage}%`,
-      icon: "trending-up-outline" as const,
+      icon: "trending-up-outline",
       hint:
         metrics._meta?.totalSubtasks != null &&
         metrics._meta.completedSubtasks != null
           ? `${metrics._meta.completedSubtasks} / ${metrics._meta.totalSubtasks} subtasks`
           : "Completed subtask progress",
+      href: "/(main)/projects",
     },
   ];
   const { colorScheme } = useColorScheme();
@@ -266,8 +283,10 @@ function MetricCards({ metrics }: { metrics: DashboardMetrics }) {
   return (
     <View className="gap-3">
       {cards.map((card) => (
-        <View
+        <Pressable
           key={card.label}
+          accessibilityRole="button"
+          onPress={() => router.push(card.href)}
           className="flex-row items-center gap-4 rounded-nova border border-glass bg-glass-card p-4 dark:border-dark-glass dark:bg-dark-glass-card"
         >
           <View className="h-11 w-11 items-center justify-center rounded-nova bg-accent/15 dark:bg-dark-accent/15">
@@ -284,7 +303,8 @@ function MetricCards({ metrics }: { metrics: DashboardMetrics }) {
               {card.hint}
             </Text>
           </View>
-        </View>
+          <Ionicons name="chevron-forward" size={16} color={palette.subtle} />
+        </Pressable>
       ))}
     </View>
   );
@@ -376,7 +396,17 @@ function ActivityHeatmap({ activity }: { activity: ActivityMap }) {
                         accessibilityRole="button"
                         accessibilityLabel={cell.isCurrentYear ? cell.key : undefined}
                         disabled={!cell.isCurrentYear}
-                        onPress={() => setSelected(cell)}
+                        onPress={() => {
+                          const openable = cell.tasks.filter((task) => task.projectId);
+                          if (openable.length === 1) {
+                            const href = taskHref(openable[0].projectId, openable[0].id);
+                            if (href) {
+                              router.push(href);
+                              return;
+                            }
+                          }
+                          setSelected(cell);
+                        }}
                         className={`h-6 w-6 rounded-md bg-accent dark:bg-dark-accent ${
                           selectedCell
                             ? "border border-primary dark:border-dark-primary"
@@ -410,29 +440,44 @@ function ActivityHeatmap({ activity }: { activity: ActivityMap }) {
 
         {activeCell?.tasks.length ? (
           <View className="mt-3 gap-3">
-            {activeCell.tasks.map((task, index) => (
-              <View key={`${task.title}-${index}`}>
-                <Text className="font-extrabold text-primary dark:text-dark-primary">
-                  {task.title}
-                </Text>
-                <Text className="mt-0.5 text-xs text-muted dark:text-dark-muted">
-                  {task.project}
-                </Text>
-                <View className="mt-2 flex-row items-center gap-2">
-                  <View className="h-2 flex-1 overflow-hidden rounded-full bg-glass-button dark:bg-dark-glass-button">
-                    <View
-                      className="h-full rounded-full bg-accent dark:bg-dark-accent"
-                      style={{
-                        width: `${Math.max(0, Math.min(100, task.progress))}%`,
-                      }}
-                    />
-                  </View>
-                  <Text className="text-xs font-black text-accent dark:text-dark-accent">
-                    {task.progress}%
+            {activeCell.tasks.map((task) => {
+              const href = taskHref(task.projectId, task.id);
+              const body = (
+                <>
+                  <Text className="font-extrabold text-primary dark:text-dark-primary">
+                    {task.title}
                   </Text>
-                </View>
-              </View>
-            ))}
+                  <Text className="mt-0.5 text-xs text-muted dark:text-dark-muted">
+                    {task.project}
+                  </Text>
+                  <View className="mt-2 flex-row items-center gap-2">
+                    <View className="h-2 flex-1 overflow-hidden rounded-full bg-glass-button dark:bg-dark-glass-button">
+                      <View
+                        className="h-full rounded-full bg-accent dark:bg-dark-accent"
+                        style={{
+                          width: `${Math.max(0, Math.min(100, task.progress))}%`,
+                        }}
+                      />
+                    </View>
+                    <Text className="text-xs font-black text-accent dark:text-dark-accent">
+                      {task.progress}%
+                    </Text>
+                  </View>
+                </>
+              );
+              if (!href) {
+                return <View key={task.id}>{body}</View>;
+              }
+              return (
+                <Pressable
+                  key={task.id}
+                  accessibilityRole="button"
+                  onPress={() => router.push(href)}
+                >
+                  {body}
+                </Pressable>
+              );
+            })}
           </View>
         ) : (
           <Text className="mt-2 text-sm text-muted dark:text-dark-muted">
@@ -463,8 +508,14 @@ function UrgentTasks({ tasks }: { tasks: UrgentTask[] }) {
         const isToday = dueLabel === "today";
 
         return (
-          <View
+          <Pressable
             key={task.id}
+            accessibilityRole="button"
+            disabled={!taskHref(task.projectId, task.id)}
+            onPress={() => {
+              const href = taskHref(task.projectId, task.id);
+              if (href) router.push(href);
+            }}
             className="rounded-nova border border-glass bg-glass-card p-4 dark:border-dark-glass dark:bg-dark-glass-card"
           >
             <View className="flex-row items-start gap-3">
@@ -498,9 +549,122 @@ function UrgentTasks({ tasks }: { tasks: UrgentTask[] }) {
                 </Text>
               </View>
             </View>
-          </View>
+          </Pressable>
         );
       })}
+    </View>
+  );
+}
+
+function ContinueStrip({ data }: { data: DashboardContinue }) {
+  const { colorScheme } = useColorScheme();
+  const palette = getPalette(colorScheme);
+  const projectHref = data.lastProject
+    ? (`/(main)/project/${data.lastProject.id}` as Href)
+    : ("/(main)/projects" as Href);
+  const boardHref = data.lastWhiteboard
+    ? (`/(main)/whiteboard/${data.lastWhiteboard.id}` as Href)
+    : ("/(main)/whiteboard" as Href);
+
+  return (
+    <View className="gap-3">
+      <Pressable
+        accessibilityRole="button"
+        onPress={() => router.push(projectHref)}
+        className="flex-row items-center gap-3 rounded-nova border border-glass bg-glass-card p-4 dark:border-dark-glass dark:bg-dark-glass-card"
+      >
+        <View className="h-10 w-10 items-center justify-center rounded-nova bg-accent/15 dark:bg-dark-accent/15">
+          <Ionicons name="folder-open-outline" size={18} color={palette.accent} />
+        </View>
+        <View className="flex-1">
+          <Text className="text-[10px] font-black uppercase tracking-[1.4px] text-subtle dark:text-dark-subtle">
+            Last project
+          </Text>
+          <Text className="mt-1 text-[15px] font-black text-primary dark:text-dark-primary">
+            {data.lastProject?.name ?? "Open projects"}
+          </Text>
+          <Text className="mt-0.5 text-xs text-muted dark:text-dark-muted">
+            {data.lastProject
+              ? `Updated ${formatDate(data.lastProject.updatedAt)}`
+              : "No project yet"}
+          </Text>
+        </View>
+        <Ionicons name="chevron-forward" size={16} color={palette.subtle} />
+      </Pressable>
+
+      <Pressable
+        accessibilityRole="button"
+        onPress={() => router.push(boardHref)}
+        className="flex-row items-center gap-3 rounded-nova border border-glass bg-glass-card p-4 dark:border-dark-glass dark:bg-dark-glass-card"
+      >
+        <View className="h-10 w-10 items-center justify-center rounded-nova bg-accent/15 dark:bg-dark-accent/15">
+          <Ionicons name="easel-outline" size={18} color={palette.accent} />
+        </View>
+        <View className="flex-1">
+          <Text className="text-[10px] font-black uppercase tracking-[1.4px] text-subtle dark:text-dark-subtle">
+            Last whiteboard
+          </Text>
+          <Text className="mt-1 text-[15px] font-black text-primary dark:text-dark-primary">
+            {data.lastWhiteboard?.title ?? "Open boards"}
+          </Text>
+          <Text className="mt-0.5 text-xs text-muted dark:text-dark-muted">
+            {data.lastWhiteboard
+              ? `Edited ${formatDate(data.lastWhiteboard.lastEditedAt)}`
+              : "No board yet"}
+          </Text>
+        </View>
+        <Ionicons name="chevron-forward" size={16} color={palette.subtle} />
+      </Pressable>
+
+      <View className="rounded-nova border border-glass bg-glass-card p-4 dark:border-dark-glass dark:bg-dark-glass-card">
+        <View className="flex-row items-center gap-3">
+          <View className="h-10 w-10 items-center justify-center rounded-nova bg-accent/15 dark:bg-dark-accent/15">
+            <Ionicons name="calendar-outline" size={18} color={palette.accent} />
+          </View>
+          <Text className="text-[10px] font-black uppercase tracking-[1.4px] text-subtle dark:text-dark-subtle">
+            Due today
+          </Text>
+        </View>
+        {data.dueToday.length > 0 ? (
+          <View className="mt-3 gap-2">
+            {data.dueToday.map((task) => {
+              const href = taskHref(task.projectId, task.id);
+              return (
+                <Pressable
+                  key={task.id}
+                  accessibilityRole="button"
+                  disabled={!href}
+                  onPress={() => {
+                    if (href) router.push(href);
+                  }}
+                >
+                  <Text className="text-[15px] font-black text-primary dark:text-dark-primary">
+                    {task.title}
+                  </Text>
+                  {task.projectName ? (
+                    <Text className="mt-0.5 text-xs text-muted dark:text-dark-muted">
+                      {task.projectName}
+                    </Text>
+                  ) : null}
+                </Pressable>
+              );
+            })}
+          </View>
+        ) : (
+          <Text className="mt-3 text-sm text-muted dark:text-dark-muted">
+            Nothing due today
+          </Text>
+        )}
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => router.push("/(main)/timeline?filter=today" as Href)}
+          className="mt-3"
+        >
+          <Text className="text-xs font-black text-accent dark:text-dark-accent">
+            Today's timeline
+          </Text>
+        </Pressable>
+      </View>
     </View>
   );
 }
@@ -523,22 +687,42 @@ function RecentActivityList({
 
   return (
     <View className="mt-4 gap-3">
-      {items.map((item) => (
-        <View
-          key={`${item.activityDate}-${item.id}`}
-          className="rounded-nova border border-glass bg-glass-card p-4 dark:border-dark-glass dark:bg-dark-glass-card"
-        >
-          <Text className="text-xs font-black uppercase tracking-[1.4px] text-subtle dark:text-dark-subtle">
-            {formatDate(item.activityDate)}
-          </Text>
-          <Text className="mt-2 font-extrabold text-primary dark:text-dark-primary">
-            {item.title}
-          </Text>
-          <Text className="mt-0.5 text-xs text-muted dark:text-dark-muted">
-            {item.projectName} - {item.status}
-          </Text>
-        </View>
-      ))}
+      {items.map((item) => {
+        const href = taskHref(item.projectId, item.id);
+        const body = (
+          <>
+            <Text className="text-xs font-black uppercase tracking-[1.4px] text-subtle dark:text-dark-subtle">
+              {formatDate(item.activityDate)}
+            </Text>
+            <Text className="mt-2 font-extrabold text-primary dark:text-dark-primary">
+              {item.title}
+            </Text>
+            <Text className="mt-0.5 text-xs text-muted dark:text-dark-muted">
+              {item.projectName} - {item.status}
+            </Text>
+          </>
+        );
+        if (!href) {
+          return (
+            <View
+              key={`${item.activityDate}-${item.id}`}
+              className="rounded-nova border border-glass bg-glass-card p-4 dark:border-dark-glass dark:bg-dark-glass-card"
+            >
+              {body}
+            </View>
+          );
+        }
+        return (
+          <Pressable
+            key={`${item.activityDate}-${item.id}`}
+            accessibilityRole="button"
+            onPress={() => router.push(href)}
+            className="rounded-nova border border-glass bg-glass-card p-4 dark:border-dark-glass dark:bg-dark-glass-card"
+          >
+            {body}
+          </Pressable>
+        );
+      })}
     </View>
   );
 }
@@ -549,9 +733,15 @@ export default function DashboardScreen() {
   const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
   const [activity, setActivity] = useState<ActivityMap>({});
   const [urgentTasks, setUrgentTasks] = useState<UrgentTask[]>([]);
+  const [continueData, setContinueData] = useState<DashboardContinue>({
+    lastProject: null,
+    lastWhiteboard: null,
+    dueToday: [],
+  });
   const [metricsLoading, setMetricsLoading] = useState(true);
   const [activityLoading, setActivityLoading] = useState(true);
   const [urgentLoading, setUrgentLoading] = useState(true);
+  const [continueLoading, setContinueLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   const loadMetrics = useCallback(async () => {
@@ -599,9 +789,29 @@ export default function DashboardScreen() {
     }
   }, [showSnackbar]);
 
+  const loadContinue = useCallback(async () => {
+    try {
+      const data = await getDashboardContinueApi();
+      setContinueData(data);
+    } catch {
+      setContinueData({
+        lastProject: null,
+        lastWhiteboard: null,
+        dueToday: [],
+      });
+    } finally {
+      setContinueLoading(false);
+    }
+  }, []);
+
   const loadDashboard = useCallback(async () => {
-    await Promise.all([loadMetrics(), loadActivity(), loadUrgentTasks()]);
-  }, [loadActivity, loadMetrics, loadUrgentTasks]);
+    await Promise.all([
+      loadMetrics(),
+      loadActivity(),
+      loadUrgentTasks(),
+      loadContinue(),
+    ]);
+  }, [loadActivity, loadContinue, loadMetrics, loadUrgentTasks]);
 
   useEffect(() => {
     void loadDashboard();
@@ -644,6 +854,8 @@ export default function DashboardScreen() {
           Welcome, {user?.fullName ?? "Nova user"}
         </Text>
       </View>
+
+      {continueLoading ? <UrgentSkeleton /> : <ContinueStrip data={continueData} />}
 
       <SectionCard icon="stats-chart-outline" title="Overview">
         {metricsLoading ? (

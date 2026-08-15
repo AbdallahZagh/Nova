@@ -120,6 +120,26 @@ export async function updateMeApi(payload: UpdateProfilePayload) {
   return data;
 }
 
+export async function uploadAvatarApi(file: {
+  uri: string;
+  name: string;
+  type: string;
+}) {
+  const body = new FormData();
+  body.append("file", file as unknown as Blob);
+  const { data } = await apiClient.post<ApiUser>("/api/users/me/avatar", body, {
+    skipOfflineQueue: true,
+  } as { skipOfflineQueue: boolean });
+  return data;
+}
+
+export async function deleteAvatarApi() {
+  const { data } = await apiClient.delete<ApiUser>("/api/users/me/avatar", {
+    skipOfflineQueue: true,
+  } as { skipOfflineQueue: boolean });
+  return data;
+}
+
 export async function deactivateMeApi() {
   const { data } = await apiClient.delete<MessageResponse>("/api/users/me");
   return data;

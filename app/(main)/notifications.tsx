@@ -18,47 +18,74 @@ import {
 import { getApiErrorMessage } from "@/api/apiClient";
 import { NOTIFICATION_PAGE_SIZE } from "@/config/notifications";
 import { PageSkeleton } from "@/components/Skeleton";
-import { hrefFromNotification, formatNotificationType } from "@/notifications/links";
+import {
+  formatNotificationTime,
+  formatNotificationType,
+  groupNotificationsByDay,
+  hrefFromNotification,
+  notificationKind,
+  notificationTone,
+  type NotificationKind,
+  type NotificationTone,
+} from "@/notifications/links";
 import { useNotificationStore } from "@/store/useNotificationStore";
 import { useSnackbarStore } from "@/store/useSnackbarStore";
 import { getPalette } from "@/theme/colors";
 
-function formatDate(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  return date.toLocaleString(undefined, {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
+type InboxFilter = "all" | "unread";
+
+const KIND_ICON: Record<NotificationKind, keyof typeof Ionicons.glyphMap> = {
+  overdue: "alert-circle-outline",
+  due: "time-outline",
+  mention: "at-outline",
+  assigned: "person-add-outline",
+  unassigned: "person-remove-outline",
+  done: "checkmark-circle-outline",
+  project: "people-outline",
+  whiteboard: "brush-outline",
+  comment: "chatbubble-ellipses-outline",
+  default: "notifications-outline",
+};
+
+function toneColor(
+  tone: NotificationTone,
+  palette: ReturnType<typeof getPalette>,
+) {
+  if (tone === "warning") return palette.warning;
+  if (tone === "success") return palette.success;
+  if (tone === "muted") return palette.muted;
+  return palette.accent;
 }
 
 function NotificationCard({
   notification,
-  selected,
   onPress,
 }: {
   notification: AppNotification;
-  selected: boolean;
   onPress: () => void;
 }) {
   const { colorScheme } = useColorScheme();
   const palette = getPalette(colorScheme);
+  const kind = notificationKind(notification.type);
+  const tone = notificationTone(notification.type);
+  const color = toneColor(tone, palette);
+  const unreadWarning = !notification.isRead && tone === "warning";
 
   return (
     <Pressable
       accessibilityRole="button"
       onPress={onPress}
       className={`rounded-nova-xl border p-4 active:opacity-75 ${
-        selected
-          ? "border-accent bg-accent/10 dark:border-dark-accent dark:bg-dark-accent/10"
-          : "border-glass bg-glass-card dark:border-dark-glass dark:bg-dark-glass-card"
+        unreadWarning
+          ? "border-warning/50 bg-warning/10 dark:border-dark-warning/50 dark:bg-dark-warning/10"
+          : notification.isRead
+            ? "border-glass bg-glass-card dark:border-dark-glass dark:bg-dark-glass-card"
+            : "border-accent/40 bg-accent/5 dark:border-dark-accent/40 dark:bg-dark-accent/10"
       }`}
     >
       <View className="flex-row items-start gap-3">
         <View className="relative h-12 w-12 items-center justify-center rounded-nova border border-glass bg-glass-button dark:border-dark-glass dark:bg-dark-glass-button">
-          <Ionicons name="notifications-outline" size={21} color={palette.accent} />
+          <Ionicons name={KIND_ICON[kind]} size={21} color={color} />
           {!notification.isRead ? (
             <View className="absolute right-2 top-2 h-2.5 w-2.5 rounded-full bg-accent dark:bg-dark-accent" />
           ) : null}
@@ -73,7 +100,7 @@ function NotificationCard({
               {notification.title}
             </Text>
             <Text className="text-[10px] font-bold text-muted dark:text-dark-muted">
-              {formatDate(notification.createdAt)}
+              {formatNotificationTime(notification.createdAt)}
             </Text>
           </View>
           <Text
@@ -82,79 +109,20 @@ function NotificationCard({
           >
             {notification.message}
           </Text>
-          <View className="mt-3 flex-row items-center gap-2">
-            <Text className="rounded-full border border-accent/40 bg-accent/10 px-2 py-1 text-[10px] font-black uppercase text-accent dark:border-dark-accent/40 dark:bg-dark-accent/10 dark:text-dark-accent">
-              {formatNotificationType(notification.type)}
-            </Text>
-            <Text className="text-[11px] font-bold text-muted dark:text-dark-muted">
-              {notification.isRead ? "Read" : "Unread"}
-            </Text>
-          </View>
+          <Text
+            className={`mt-3 self-start rounded-full border px-2 py-1 text-[10px] font-black ${
+              tone === "warning"
+                ? "border-warning/40 bg-warning/10 text-warning dark:border-dark-warning/40 dark:bg-dark-warning/10 dark:text-dark-warning"
+                : tone === "success"
+                  ? "border-success/40 bg-success/10 text-success dark:border-dark-success/40 dark:bg-dark-success/10 dark:text-dark-success"
+                  : "border-accent/40 bg-accent/10 text-accent dark:border-dark-accent/40 dark:bg-dark-accent/10 dark:text-dark-accent"
+            }`}
+          >
+            {formatNotificationType(notification.type)}
+          </Text>
         </View>
       </View>
     </Pressable>
-  );
-}
-
-function NotificationDetails({
-  notification,
-}: {
-  notification: AppNotification | null;
-}) {
-  if (!notification) {
-    return (
-      <View className="items-center rounded-nova-xl border border-glass bg-sidebar p-8 dark:border-dark-glass dark:bg-dark-sidebar">
-        <Ionicons name="mail-open-outline" size={34} color="#c56010" />
-        <Text className="mt-3 text-center font-black text-primary dark:text-dark-primary">
-          Select a notification
-        </Text>
-        <Text className="mt-1 text-center text-sm leading-5 text-muted dark:text-dark-muted">
-          Open an item to read the full message and metadata.
-        </Text>
-      </View>
-    );
-  }
-
-  return (
-    <View className="rounded-nova-xl border border-glass bg-sidebar p-5 dark:border-dark-glass dark:bg-dark-sidebar">
-      <View className="flex-row items-start gap-4">
-        <View className="h-12 w-12 items-center justify-center rounded-nova border border-glass bg-glass-button dark:border-dark-glass dark:bg-dark-glass-button">
-          <Ionicons name="notifications" size={22} color="#c56010" />
-        </View>
-        <View className="flex-1">
-          <Text className="text-[20px] font-black text-primary dark:text-dark-primary">
-            {notification.title}
-          </Text>
-          <Text className="mt-1 text-xs font-bold text-muted dark:text-dark-muted">
-            {formatDate(notification.createdAt)}
-          </Text>
-        </View>
-      </View>
-
-      <Text className="mt-5 text-[15px] leading-6 text-primary dark:text-dark-primary">
-        {notification.message}
-      </Text>
-
-      <View className="mt-5 flex-row flex-wrap gap-2">
-        <Text className="rounded-full border border-accent/40 bg-accent/10 px-3 py-1.5 text-[11px] font-black uppercase text-accent dark:border-dark-accent/40 dark:bg-dark-accent/10 dark:text-dark-accent">
-          {formatNotificationType(notification.type)}
-        </Text>
-        <Text className="rounded-full border border-glass bg-glass-button px-3 py-1.5 text-[11px] font-black text-muted dark:border-dark-glass dark:bg-dark-glass-button dark:text-dark-muted">
-          {notification.isRead ? "Read" : "Unread"}
-        </Text>
-      </View>
-
-      {notification.metadata ? (
-        <View className="mt-5 rounded-nova border border-glass bg-glass-card p-4 dark:border-dark-glass dark:bg-dark-glass-card">
-          <Text className="text-xs font-black uppercase tracking-[1.2px] text-muted dark:text-dark-muted">
-            Metadata
-          </Text>
-          <Text className="mt-3 font-mono text-xs leading-5 text-muted dark:text-dark-muted">
-            {JSON.stringify(notification.metadata, null, 2)}
-          </Text>
-        </View>
-      ) : null}
-    </View>
   );
 }
 
@@ -166,8 +134,9 @@ export default function NotificationsScreen() {
   const markReadInStore = useNotificationStore((state) => state.markRead);
   const markAllReadInStore = useNotificationStore((state) => state.markAllRead);
   const latest = useNotificationStore((state) => state.latest);
+  const unreadCount = useNotificationStore((state) => state.unreadCount);
   const [items, setItems] = useState<AppNotification[]>([]);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [filter, setFilter] = useState<InboxFilter>("all");
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
@@ -175,10 +144,11 @@ export default function NotificationsScreen() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
-  const selected = useMemo(
-    () => items.find((item) => item.id === selectedId) ?? null,
-    [items, selectedId],
+  const visible = useMemo(
+    () => (filter === "unread" ? items.filter((item) => !item.isRead) : items),
+    [filter, items],
   );
+  const groups = useMemo(() => groupNotificationsByDay(visible), [visible]);
 
   const loadPage = useCallback(
     async (nextPage: number, replace = false) => {
@@ -253,7 +223,6 @@ export default function NotificationsScreen() {
 
   const openNotification = useCallback(
     async (notification: AppNotification) => {
-      const href = hrefFromNotification(notification);
       if (!notification.isRead) {
         setItems((current) =>
           current.map((item) =>
@@ -270,17 +239,14 @@ export default function NotificationsScreen() {
         });
       }
 
-      if (href) {
-        router.push(href);
-        return;
-      }
-
-      setSelectedId(notification.id);
+      const href = hrefFromNotification(notification);
+      if (href) router.push(href);
     },
     [markReadInStore, showSnackbar],
   );
 
   const markAll = useCallback(async () => {
+    if (unreadCount === 0) return;
     setItems((current) => current.map((item) => ({ ...item, isRead: true })));
     markAllReadInStore();
     await markNotificationReadApi().catch((error) => {
@@ -290,7 +256,7 @@ export default function NotificationsScreen() {
         message: getApiErrorMessage(error, "Please try again."),
       });
     });
-  }, [markAllReadInStore, showSnackbar]);
+  }, [markAllReadInStore, showSnackbar, unreadCount]);
 
   if (loading) return <PageSkeleton />;
 
@@ -326,11 +292,44 @@ export default function NotificationsScreen() {
             </View>
           </View>
 
-          <View className="mt-5 flex-row gap-3">
+          <View className="mt-5 flex-row gap-2">
+            {(
+              [
+                { id: "all" as const, label: "All" },
+                {
+                  id: "unread" as const,
+                  label: unreadCount > 0 ? `Unread ${unreadCount}` : "Unread",
+                },
+              ]
+            ).map((chip) => (
+              <Pressable
+                key={chip.id}
+                onPress={() => setFilter(chip.id)}
+                className={`rounded-full border px-3 py-1.5 ${
+                  filter === chip.id
+                    ? "border-accent/50 bg-accent/15 dark:border-dark-accent/50 dark:bg-dark-accent/15"
+                    : "border-glass bg-glass-button dark:border-dark-glass dark:bg-dark-glass-button"
+                }`}
+              >
+                <Text
+                  className={`text-xs font-black ${
+                    filter === chip.id
+                      ? "text-accent dark:text-dark-accent"
+                      : "text-primary dark:text-dark-primary"
+                  }`}
+                >
+                  {chip.label}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+
+          <View className="mt-4 flex-row gap-3">
             <Pressable
               accessibilityRole="button"
+              disabled={unreadCount === 0}
               onPress={markAll}
-              className="min-h-[46px] flex-1 flex-row items-center justify-center gap-2 rounded-nova border border-glass bg-glass-button px-3 active:opacity-75 dark:border-dark-glass dark:bg-dark-glass-button"
+              className="min-h-[46px] flex-1 flex-row items-center justify-center gap-2 rounded-nova border border-glass bg-glass-button px-3 active:opacity-75 disabled:opacity-45 dark:border-dark-glass dark:bg-dark-glass-button"
             >
               <Ionicons name="checkmark-done-outline" size={18} color={palette.accent} />
               <Text className="text-sm font-black text-primary dark:text-dark-primary">
@@ -350,34 +349,34 @@ export default function NotificationsScreen() {
           </View>
         </View>
 
-        <NotificationDetails notification={selected} />
-
-        <View className="gap-3">
-          <Text className="text-xs font-black uppercase tracking-[1.4px] text-muted dark:text-dark-muted">
-            Inbox
-          </Text>
-
-          {items.length === 0 ? (
-            <View className="items-center rounded-nova-xl border border-glass bg-sidebar p-8 dark:border-dark-glass dark:bg-dark-sidebar">
-              <Ionicons name="file-tray-outline" size={32} color={palette.accent} />
-              <Text className="mt-3 text-center font-black text-primary dark:text-dark-primary">
-                No notifications yet
+        {visible.length === 0 ? (
+          <View className="items-center rounded-nova-xl border border-glass bg-sidebar p-8 dark:border-dark-glass dark:bg-dark-sidebar">
+            <Ionicons name="file-tray-outline" size={32} color={palette.accent} />
+            <Text className="mt-3 text-center font-black text-primary dark:text-dark-primary">
+              {filter === "unread" ? "You're all caught up" : "No notifications yet"}
+            </Text>
+            <Text className="mt-1 text-center text-sm text-muted dark:text-dark-muted">
+              {filter === "unread"
+                ? "New updates will show up here."
+                : "New project, task, and whiteboard updates will appear here."}
+            </Text>
+          </View>
+        ) : (
+          groups.map((group) => (
+            <View key={group.label} className="gap-3">
+              <Text className="text-xs font-black uppercase tracking-[1.4px] text-muted dark:text-dark-muted">
+                {group.label}
               </Text>
-              <Text className="mt-1 text-center text-sm text-muted dark:text-dark-muted">
-                New project, task, and whiteboard updates will appear here.
-              </Text>
+              {group.items.map((notification) => (
+                <NotificationCard
+                  key={notification.id}
+                  notification={notification}
+                  onPress={() => void openNotification(notification)}
+                />
+              ))}
             </View>
-          ) : (
-            items.map((notification) => (
-              <NotificationCard
-                key={notification.id}
-                notification={notification}
-                selected={notification.id === selectedId}
-                onPress={() => void openNotification(notification)}
-              />
-            ))
-          )}
-        </View>
+          ))
+        )}
 
         {loadingMore ? <ActivityIndicator color={palette.accent} /> : null}
       </ScrollView>

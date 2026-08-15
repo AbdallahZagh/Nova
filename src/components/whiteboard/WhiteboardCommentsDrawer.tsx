@@ -10,6 +10,8 @@ import {
   type WhiteboardComment,
 } from "@/api/whiteboards";
 import { BottomDrawer } from "@/components/BottomDrawer";
+import { UserAvatar } from "@/components/UserAvatar";
+import { UserProfileLink } from "@/components/UserProfileLink";
 import { MentionComposer } from "@/components/mentions/MentionComposer";
 import { MentionText } from "@/components/mentions/MentionText";
 import { mentionUsersFromPeople } from "@/mentions";
@@ -158,13 +160,22 @@ export function WhiteboardCommentsDrawer({
               className="rounded-nova border border-glass bg-glass-card p-3 dark:border-dark-glass dark:bg-dark-glass-card"
             >
               <View className="flex-row items-start justify-between gap-3">
-                <View className="flex-1">
-                  <Text className="font-black text-primary dark:text-dark-primary">
-                    {item.createdBy?.fullName || "Someone"}
-                  </Text>
+                <View className="flex-1 flex-row items-start gap-2.5">
+                  <UserAvatar
+                    name={item.createdBy?.fullName}
+                    avatarUrl={item.createdBy?.avatarUrl}
+                    size="sm"
+                  />
+                  <View className="flex-1">
+                  <UserProfileLink userId={item.createdBy?.id ?? item.createdById}>
+                    <Text className="font-black text-primary dark:text-dark-primary">
+                      {item.createdBy?.fullName || "Someone"}
+                    </Text>
+                  </UserProfileLink>
                   <Text className="mt-1 text-xs text-muted dark:text-dark-muted">
                     {new Date(item.createdAt).toLocaleString()}
                   </Text>
+                  </View>
                 </View>
                 {canDelete ? (
                   <Pressable onPress={() => void remove(item.id)} hitSlop={8}>
@@ -174,6 +185,7 @@ export function WhiteboardCommentsDrawer({
               </View>
               <MentionText
                 content={item.content}
+                users={users}
                 className="mt-2 text-sm leading-5 text-primary dark:text-dark-primary"
               />
             </View>

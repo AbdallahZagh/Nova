@@ -1,5 +1,6 @@
 import { useEffect, useState, type PropsWithChildren } from "react";
 import {
+  Image,
   Keyboard,
   KeyboardAvoidingView,
   Platform,
@@ -25,8 +26,15 @@ const tabs = [
   { href: "/(main)/projects", label: "Projects", icon: "folder-open-outline" },
   { href: "/(main)/whiteboard", label: "Board", icon: "easel-outline" },
   { href: "/(main)/timeline", label: "Timeline", icon: "git-compare-outline" },
-  { href: "/(main)/profile", label: "Profile", icon: "person-outline" },
 ] as const;
+
+function getInitials(name?: string | null) {
+  const parts = (name ?? "Nova User").trim().split(/\s+/).filter(Boolean);
+  return parts
+    .slice(0, 2)
+    .map((part) => part.slice(0, 1).toUpperCase())
+    .join("");
+}
 
 export function AppFrame({ children }: PropsWithChildren) {
   const insets = useSafeAreaInsets();
@@ -102,16 +110,26 @@ export function AppFrame({ children }: PropsWithChildren) {
             ) : null}
           </Pressable>
 
-          {/* <Pressable
+          <Pressable
             accessibilityLabel="Profile"
             accessibilityRole="button"
-            onPress={() => router.push("/(main)/profile")}
-            className="h-[42px] w-[42px] items-center justify-center rounded-full border border-glass bg-accent active:opacity-75"
+            onPress={() => go("/(main)/profile")}
+            className="h-[42px] w-[42px] overflow-hidden rounded-full border border-glass bg-accent active:opacity-75 dark:border-dark-glass dark:bg-dark-accent"
           >
-            <Text className="text-[13px] font-black text-white">
-              {getInitials(user?.fullName)}
-            </Text>
-          </Pressable> */}
+            {user?.avatarUrl ? (
+              <Image
+                source={{ uri: user.avatarUrl }}
+                className="h-full w-full"
+                resizeMode="cover"
+              />
+            ) : (
+              <View className="h-full w-full items-center justify-center">
+                <Text className="text-[13px] font-black text-white">
+                  {getInitials(user?.fullName)}
+                </Text>
+              </View>
+            )}
+          </Pressable>
         </View>
       </View>
       <OfflineBanner />

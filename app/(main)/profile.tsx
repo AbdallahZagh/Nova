@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   KeyboardAvoidingView,
   Modal,
@@ -10,6 +10,7 @@ import {
   View,
 } from "react-native";
 import Ionicons from "@expo/vector-icons/Ionicons";
+import * as ImagePicker from "expo-image-picker";
 import { router } from "expo-router";
 import { useColorScheme } from "nativewind";
 import { getApiErrorMessage } from "@/api/apiClient";
@@ -21,14 +22,19 @@ import {
   resendOtpApi,
   resetPasswordApi,
   updateMeApi,
+  uploadAvatarApi,
+  deleteAvatarApi,
   verifyOtpApi,
 } from "@/api/auth";
-import type { ApiUser, ApiUserActivityTask, ApiUserProject } from "@/api/types";
+import type { ApiUser, ApiUserProject } from "@/api/types";
+import { ActionSheet } from "@/components/ActionSheet";
+import { ActivityHeatmap } from "@/components/ActivityHeatmap";
 import { ConfirmationPopup } from "@/components/ConfirmationPopup";
 import { FormField } from "@/components/FormField";
 import { OtpInput } from "@/components/OtpInput";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { PageSkeleton } from "@/components/Skeleton";
+import { UserAvatar } from "@/components/UserAvatar";
 import { useAuthStore } from "@/store/useAuthStore";
 import {
   type AppearanceMode,
@@ -62,38 +68,6 @@ const taskCountKeys = [
   "total_tasks",
 ] as const;
 
-const monthNames = [
-  "Jan",
-  "Feb",
-  "Mar",
-  "Apr",
-  "May",
-  "Jun",
-  "Jul",
-  "Aug",
-  "Sep",
-  "Oct",
-  "Nov",
-  "Dec",
-] as const;
-
-const dayLabels = ["Mon", "", "Wed", "", "Fri", "", "Sun"] as const;
-
-type HeatmapTask = {
-  title: string;
-  project: string;
-  progress: number;
-};
-
-type HeatmapCell = {
-  key: string;
-  date: Date;
-  isCurrentYear: boolean;
-  count: number;
-  tasks: HeatmapTask[];
-};
-
-type ActivityItem = ApiUserActivityTask & { activityDate: string };
 type PasswordStep = "idle" | "sent" | "verified";
 
 function pickNumber(source: Record<string, unknown>, keys: readonly string[]) {
@@ -128,122 +102,14 @@ function extractCounts(user?: ApiUser | null) {
   };
 }
 
-function getInitials(name?: string | null) {
-  const parts = (name ?? "Nova User").trim().split(/\s+/).filter(Boolean);
-  return parts
-    .slice(0, 2)
-    .map((part) => part.slice(0, 1).toUpperCase())
-    .join("");
-}
-
 function usernameBody(username?: string | null) {
   return (username ?? "").replace(/^@/, "");
-}
-
-function formatDate(value?: string | null) {
-  if (!value) return "No date";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
-
-function formatActivityDate(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleDateString(undefined, {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-  });
 }
 
 function updateCompletion(project: ApiUserProject) {
   const assigned = project.userTasksCount ?? 0;
   if (!assigned) return 0;
   return Math.round(((project.completedUserTasksCount ?? 0) / assigned) * 100);
-}
-
-function toDateKey(date: Date) {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(
-    2,
-    "0",
-  )}-${String(date.getDate()).padStart(2, "0")}`;
-}
-
-function buildHeatmap(activity?: Record<string, ApiUserActivityTask[]>) {
-  const year = new Date().getFullYear();
-  const taskMap = new Map<string, HeatmapTask[]>();
-
-  for (const [isoKey, entries] of Object.entries(activity ?? {})) {
-    if (!entries?.length) continue;
-    const date = new Date(isoKey);
-    if (Number.isNaN(date.getTime()) || date.getFullYear() !== year) continue;
-    taskMap.set(
-      isoKey,
-      entries.map((task) => ({
-        title: task.title,
-        project: task.projectName,
-        progress: Math.round(task.completionPercentage ?? 0),
-      })),
-    );
-  }
-
-  const jan1 = new Date(year, 0, 1);
-  const startDay = jan1.getDay();
-  const gridStart = new Date(jan1);
-  gridStart.setDate(gridStart.getDate() - (startDay === 0 ? 6 : startDay - 1));
-
-  const dec31 = new Date(year, 11, 31);
-  const endDay = dec31.getDay();
-  const gridEnd = new Date(dec31);
-  gridEnd.setDate(gridEnd.getDate() + (endDay === 0 ? 0 : 7 - endDay));
-
-  const weeks: HeatmapCell[][] = [];
-  const monthCols: { label: string; col: number }[] = [];
-  const seenMonths = new Set<number>();
-  const cursor = new Date(gridStart);
-  let col = 0;
-
-  while (cursor <= gridEnd) {
-    const week: HeatmapCell[] = [];
-    for (let row = 0; row < 7; row++) {
-      const date = new Date(cursor);
-      date.setDate(date.getDate() + row);
-      const isCurrentYear = date.getFullYear() === year;
-      const key = toDateKey(date);
-      const tasks = taskMap.get(key) ?? [];
-
-      if (isCurrentYear && row === 0 && !seenMonths.has(date.getMonth())) {
-        seenMonths.add(date.getMonth());
-        monthCols.push({ label: monthNames[date.getMonth()], col });
-      }
-
-      week.push({
-        key,
-        date,
-        isCurrentYear,
-        count: tasks.length,
-        tasks,
-      });
-    }
-    weeks.push(week);
-    col++;
-    cursor.setDate(cursor.getDate() + 7);
-  }
-
-  return { weeks, monthCols, year };
-}
-
-function heatmapOpacity(count: number) {
-  if (count === 0) return 0.08;
-  if (count === 1) return 0.28;
-  if (count === 2) return 0.52;
-  if (count === 3) return 0.76;
-  return 1;
 }
 
 function SectionHeader({
@@ -272,159 +138,6 @@ function SectionHeader({
             {subtitle}
           </Text>
         ) : null}
-      </View>
-    </View>
-  );
-}
-
-function ActivityHeatmapMobile({
-  activity,
-}: {
-  activity?: Record<string, ApiUserActivityTask[]>;
-}) {
-  const { weeks, monthCols, year } = useMemo(
-    () => buildHeatmap(activity),
-    [activity],
-  );
-  const firstActiveCell = useMemo(
-    () =>
-      weeks
-        .flat()
-        .filter((cell) => cell.isCurrentYear && cell.tasks.length > 0)
-        .sort((a, b) => b.key.localeCompare(a.key))[0] ?? null,
-    [weeks],
-  );
-  const [selected, setSelected] = useState<HeatmapCell | null>(null);
-  const activeCell = selected ?? firstActiveCell;
-  const totalTasks = useMemo(
-    () => weeks.flat().reduce((total, cell) => total + cell.tasks.length, 0),
-    [weeks],
-  );
-
-  return (
-    <View>
-      <View className="mb-3 flex-row items-center justify-between gap-3">
-        <Text className="flex-1 text-xs text-subtle dark:text-dark-subtle">
-          {totalTasks} task{totalTasks === 1 ? "" : "s"} scheduled in {year}
-        </Text>
-        <View className="flex-row items-center gap-1.5">
-          <Text className="text-[10px] text-subtle dark:text-dark-subtle">
-            Less
-          </Text>
-          {[0.08, 0.28, 0.52, 0.76, 1].map((opacity) => (
-            <View
-              key={opacity}
-              className="h-[10px] w-[10px] rounded-[3px] bg-accent dark:bg-dark-accent"
-              style={{ opacity }}
-            />
-          ))}
-          <Text className="text-[10px] text-subtle dark:text-dark-subtle">
-            More
-          </Text>
-        </View>
-      </View>
-
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerClassName="pb-1"
-      >
-        <View>
-          <View className="relative mb-1 ml-8 h-[16px]">
-            {monthCols.map(({ label, col }) => (
-              <Text
-                key={`${label}-${col}`}
-                className="absolute text-[10px] text-subtle dark:text-dark-subtle"
-                style={{ left: col * 13 }}
-              >
-                {label}
-              </Text>
-            ))}
-          </View>
-
-          <View className="flex-row gap-1.5">
-            <View className="w-6 gap-[3px]">
-              {dayLabels.map((label, index) => (
-                <View key={`${label}-${index}`} className="h-[10px] justify-center">
-                  <Text className="text-[9px] text-subtle dark:text-dark-subtle">
-                    {label}
-                  </Text>
-                </View>
-              ))}
-            </View>
-
-            <View className="flex-row gap-[3px]">
-              {weeks.map((week, weekIndex) => (
-                <View key={weekIndex} className="gap-[3px]">
-                  {week.map((cell) => {
-                    const selectedCell = activeCell?.key === cell.key;
-                    return (
-                      <Pressable
-                        key={cell.key}
-                        accessibilityRole="button"
-                        accessibilityLabel={cell.isCurrentYear ? cell.key : undefined}
-                        disabled={!cell.isCurrentYear}
-                        onPress={() => setSelected(cell)}
-                        className={`h-6 w-6 rounded-md bg-accent dark:bg-dark-accent ${
-                          selectedCell ? "border border-primary dark:border-dark-primary" : ""
-                        }`}
-                        style={{
-                          opacity: cell.isCurrentYear
-                            ? heatmapOpacity(cell.count)
-                            : 0,
-                        }}
-                      />
-                    );
-                  })}
-                </View>
-              ))}
-            </View>
-          </View>
-        </View>
-      </ScrollView>
-
-      <View className="mt-4 rounded-nova border border-glass bg-glass-card p-4 dark:border-dark-glass dark:bg-dark-glass-card">
-        <Text className="text-xs font-black uppercase tracking-[1.4px] text-subtle dark:text-dark-subtle">
-          {activeCell
-            ? activeCell.date.toLocaleDateString(undefined, {
-                weekday: "short",
-                month: "short",
-                day: "numeric",
-              })
-            : "No activity"}
-        </Text>
-
-        {activeCell?.tasks.length ? (
-          <View className="mt-3 gap-3">
-            {activeCell.tasks.map((task, index) => (
-              <View key={`${task.title}-${index}`}>
-                <Text className="font-extrabold text-primary dark:text-dark-primary">
-                  {task.title}
-                </Text>
-                <Text className="mt-0.5 text-xs text-muted dark:text-dark-muted">
-                  {task.project}
-                </Text>
-                <View className="mt-2 flex-row items-center gap-2">
-                  <View className="h-2 flex-1 overflow-hidden rounded-full bg-glass-button dark:bg-dark-glass-button">
-                    <View
-                      className="h-full rounded-full bg-accent dark:bg-dark-accent"
-                      style={{
-                        width: `${Math.max(0, Math.min(100, task.progress))}%`,
-                      }}
-                    />
-                  </View>
-                  <Text className="text-xs font-black text-accent dark:text-dark-accent">
-                    {task.progress}%
-                  </Text>
-                </View>
-              </View>
-            ))}
-          </View>
-        ) : (
-          <Text className="mt-2 text-sm text-muted dark:text-dark-muted">
-            No activity for this day.
-          </Text>
-        )}
       </View>
     </View>
   );
@@ -672,6 +385,7 @@ function ChangePasswordModal({
 
 export default function ProfileScreen() {
   const storedUser = useAuthStore((state) => state.user);
+  const setUser = useAuthStore((state) => state.setUser);
   const clearSession = useAuthStore((state) => state.clearSession);
   const mode = useAppearanceStore((state) => state.mode);
   const setMode = useAppearanceStore((state) => state.setMode);
@@ -685,6 +399,9 @@ export default function ProfileScreen() {
   const [deactivating, setDeactivating] = useState(false);
   const [showDeactivatePopup, setShowDeactivatePopup] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [showAvatarSheet, setShowAvatarSheet] = useState(false);
+  const [showAvatarSourceSheet, setShowAvatarSourceSheet] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [error, setError] = useState("");
   const showSnackbar = useSnackbarStore((state) => state.showSnackbar);
   const [form, setForm] = useState({
@@ -696,7 +413,6 @@ export default function ProfileScreen() {
 
   const counts = extractCounts(profile);
   const isDemo = Boolean(profile?.isDemo ?? storedUser?.isDemo);
-  const activityGroups: { date: string; tasks: ActivityItem[] }[] = [];
   const projects = profile?.projects ?? [];
 
   const loadProfile = useCallback(async () => {
@@ -705,6 +421,7 @@ export default function ProfileScreen() {
     try {
       const next = await getMeApi();
       setProfile(next);
+      await setUser(next);
       setForm({
         fullName: next.fullName ?? "",
         roleTitle: next.roleTitle ?? "",
@@ -726,7 +443,7 @@ export default function ProfileScreen() {
       setLoading(false);
       setInitialLoading(false);
     }
-  }, [showSnackbar]);
+  }, [setUser, showSnackbar]);
 
   useEffect(() => {
     void loadProfile();
@@ -753,6 +470,7 @@ export default function ProfileScreen() {
         bio: form.bio,
       });
       setProfile(next);
+      await setUser(next);
       showSnackbar({
         variant: "success",
         title: "Profile updated",
@@ -770,6 +488,97 @@ export default function ProfileScreen() {
       });
     } finally {
       setSaving(false);
+    }
+  };
+
+  const pickAvatar = async (source: "camera" | "library") => {
+    setShowAvatarSourceSheet(false);
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    const permission =
+      source === "camera"
+        ? await ImagePicker.requestCameraPermissionsAsync()
+        : await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      showSnackbar({
+        variant: "error",
+        title: "Permission needed",
+        message:
+          source === "camera"
+            ? "Allow camera access to take a profile photo."
+            : "Allow photo access to choose a profile picture.",
+      });
+      return;
+    }
+
+    const result =
+      source === "camera"
+        ? await ImagePicker.launchCameraAsync({
+            allowsEditing: true,
+            aspect: [1, 1],
+            quality: 0.85,
+          })
+        : await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ["images"],
+            allowsEditing: true,
+            aspect: [1, 1],
+            quality: 0.85,
+          });
+
+    if (result.canceled || !result.assets[0]) return;
+    const asset = result.assets[0];
+    const mime = asset.mimeType ?? "image/jpeg";
+    const ext = mime.includes("png")
+      ? "png"
+      : mime.includes("webp")
+        ? "webp"
+        : mime.includes("gif")
+          ? "gif"
+          : "jpg";
+
+    setUploadingAvatar(true);
+    try {
+      const next = await uploadAvatarApi({
+        uri: asset.uri,
+        name: asset.fileName ?? `avatar.${ext}`,
+        type: mime,
+      });
+      setProfile(next);
+      await setUser(next);
+      showSnackbar({
+        variant: "success",
+        title: "Photo updated",
+        message: "Your profile photo is now live.",
+      });
+    } catch (error) {
+      showSnackbar({
+        variant: "error",
+        title: "Upload failed",
+        message: getApiErrorMessage(error, "Could not upload that photo."),
+      });
+    } finally {
+      setUploadingAvatar(false);
+    }
+  };
+
+  const removeAvatar = async () => {
+    setUploadingAvatar(true);
+    try {
+      const next = await deleteAvatarApi();
+      setProfile(next);
+      await setUser(next);
+      showSnackbar({
+        variant: "success",
+        title: "Photo removed",
+        message: "Your profile now uses initials.",
+      });
+    } catch (error) {
+      showSnackbar({
+        variant: "error",
+        title: "Could not remove photo",
+        message: getApiErrorMessage(error, "Please try again."),
+      });
+    } finally {
+      setUploadingAvatar(false);
     }
   };
 
@@ -841,10 +650,27 @@ export default function ProfileScreen() {
       >
       <View className="rounded-nova-xl border border-glass bg-sidebar p-5 dark:border-dark-glass dark:bg-dark-sidebar">
         <View className="flex-row items-center gap-4">
-          <View className="h-[68px] w-[68px] items-center justify-center rounded-full border border-glass bg-accent dark:border-dark-glass dark:bg-dark-accent">
-            <Text className="text-2xl font-black text-white">
-              {getInitials(profile?.fullName)}
-            </Text>
+          <View className="relative h-[68px] w-[68px]">
+            <UserAvatar
+              name={profile?.fullName}
+              avatarUrl={profile?.avatarUrl}
+              size="xl"
+            />
+            {isDemo ? null : (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Profile photo actions"
+                disabled={uploadingAvatar}
+                onPress={() => setShowAvatarSheet(true)}
+                className="absolute -bottom-1 -right-1 h-7 w-7 items-center justify-center rounded-full border-2 border-sidebar bg-sidebar dark:border-dark-sidebar dark:bg-dark-sidebar"
+              >
+                <Ionicons
+                  name={uploadingAvatar ? "hourglass-outline" : "ellipsis-horizontal"}
+                  size={14}
+                  color={palette.primary}
+                />
+              </Pressable>
+            )}
           </View>
           <View className="flex-1">
             <Text className="text-[24px] font-black text-primary dark:text-dark-primary">
@@ -959,61 +785,7 @@ export default function ProfileScreen() {
           title="Recent Activity"
           subtitle="Your yearly task activity map."
         />
-        <ActivityHeatmapMobile activity={profile?.activity} />
-        <View className="hidden">
-        {activityGroups.length === 0 ? (
-          <Text className="rounded-nova border border-glass bg-glass-card p-4 text-center text-sm text-muted dark:border-dark-glass dark:bg-dark-glass-card dark:text-dark-muted">
-            No activity yet.
-          </Text>
-        ) : (
-          <View className="gap-4">
-            {activityGroups.map((group) => (
-              <View key={group.date} className="gap-3">
-                <Text className="text-xs font-black uppercase tracking-[1.4px] text-subtle dark:text-dark-subtle">
-                  {formatActivityDate(group.date)}
-                </Text>
-                {group.tasks.map((task) => {
-                  const completion = Math.max(
-                    0,
-                    Math.min(100, task.completionPercentage ?? 0),
-                  );
-                  return (
-                    <View
-                      key={`${group.date}-${task.id}`}
-                      className="rounded-nova border border-glass bg-glass-card p-4 dark:border-dark-glass dark:bg-dark-glass-card"
-                    >
-                      <View className="flex-row items-start justify-between gap-3">
-                        <View className="flex-1">
-                          <Text className="font-extrabold text-primary dark:text-dark-primary">
-                            {task.title}
-                          </Text>
-                          <Text className="mt-1 text-xs text-muted dark:text-dark-muted">
-                            {task.projectName} · {task.status}
-                          </Text>
-                          {task.dueDate ? (
-                            <Text className="mt-1 text-xs text-subtle dark:text-dark-subtle">
-                              Due {formatDate(task.dueDate)}
-                            </Text>
-                          ) : null}
-                        </View>
-                        <Text className="text-xs font-black text-accent dark:text-dark-accent">
-                          {completion}%
-                        </Text>
-                      </View>
-                      <View className="mt-3 h-2 overflow-hidden rounded-full bg-glass-button dark:bg-dark-glass-button">
-                        <View
-                          className="h-full rounded-full bg-accent dark:bg-dark-accent"
-                          style={{ width: `${completion}%` }}
-                        />
-                      </View>
-                    </View>
-                  );
-                })}
-              </View>
-            ))}
-          </View>
-        )}
-        </View>
+        <ActivityHeatmap activity={profile?.activity} />
       </View>
 
       <View className="rounded-nova-xl border border-glass bg-sidebar p-5 dark:border-dark-glass dark:bg-dark-sidebar">
@@ -1208,6 +980,52 @@ export default function ProfileScreen() {
         visible={showPasswordModal}
         email={profile?.email ?? ""}
         onClose={() => setShowPasswordModal(false)}
+      />
+
+      <ActionSheet
+        visible={showAvatarSheet}
+        title="Profile photo"
+        onClose={() => setShowAvatarSheet(false)}
+        actions={[
+          {
+            key: "edit",
+            label: profile?.avatarUrl ? "Edit" : "Add photo",
+            icon: "create-outline",
+            onPress: () => {
+              setTimeout(() => setShowAvatarSourceSheet(true), 250);
+            },
+          },
+          ...(profile?.avatarUrl
+            ? [
+                {
+                  key: "delete",
+                  label: "Delete",
+                  icon: "trash-outline" as const,
+                  destructive: true,
+                  onPress: () => void removeAvatar(),
+                },
+              ]
+            : []),
+        ]}
+      />
+      <ActionSheet
+        visible={showAvatarSourceSheet}
+        title="Edit photo"
+        onClose={() => setShowAvatarSourceSheet(false)}
+        actions={[
+          {
+            key: "camera",
+            label: "Take photo",
+            icon: "camera-outline",
+            onPress: () => void pickAvatar("camera"),
+          },
+          {
+            key: "library",
+            label: "Choose from library",
+            icon: "image-outline",
+            onPress: () => void pickAvatar("library"),
+          },
+        ]}
       />
 
     </View>

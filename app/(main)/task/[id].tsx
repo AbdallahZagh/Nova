@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -15,14 +15,17 @@ import { getApiErrorMessage } from "@/api/apiClient";
 import {
   dateInputToIso,
   deleteTaskApi,
+  formatActivityTime,
   getTaskApi,
   isoToDateInputValue,
   TASK_COLUMNS,
   TASK_PRIORITIES,
   updateTaskApi,
   type Task,
+  type TaskPriority,
+  type TaskStatus,
 } from "@/api/tasks";
-import { getProjectApi, getProjectMemberRole, type Project } from "@/api/projects";
+import { getProjectApi, getProjectMemberRole, type Project, type ProjectTeamMember } from "@/api/projects";
 import {
   closeTaskCommentApi,
   createTaskCommentApi,
@@ -34,45 +37,67 @@ import { CalendarField } from "@/components/CalendarField";
 import { ConfirmationPopup } from "@/components/ConfirmationPopup";
 import { MentionComposer } from "@/components/mentions/MentionComposer";
 import { MentionText } from "@/components/mentions/MentionText";
+import { MultiSelectField } from "@/components/MultiSelectField";
 import { PageSkeleton } from "@/components/Skeleton";
+import { SelectField } from "@/components/SelectField";
+import { UserAvatar } from "@/components/UserAvatar";
+import { UserProfileLink } from "@/components/UserProfileLink";
 import { mentionUsersFromPeople } from "@/mentions";
 import { useAuthStore } from "@/store/useAuthStore";
 import { useSnackbarStore } from "@/store/useSnackbarStore";
 import { getPalette } from "@/theme/colors";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-function FieldLabel({ children }: { children: string }) {
-  return (
-    <Text className="mb-2 text-xs font-black uppercase tracking-[1.4px] text-muted dark:text-dark-muted">
-      {children}
-    </Text>
-  );
+const STATUS_OPTIONS = TASK_COLUMNS.map((status) => ({
+  value: status,
+  label: status,
+}));
+
+const PRIORITY_OPTIONS = TASK_PRIORITIES.map((priority) => ({
+  value: priority,
+  label: priority,
+}));
+
+function memberId(member: ProjectTeamMember) {
+  return member.userId ?? member.id ?? "";
 }
 
-function Chip<T extends string>({
-  label,
-  active,
-  disabled,
-  onPress,
+function memberOptions(members: ProjectTeamMember[]) {
+  return members
+    .map((member) => ({
+      value: memberId(member),
+      label: member.name ?? member.email ?? member.initials,
+      description: member.email,
+    }))
+    .filter((option) => option.value);
+}
+
+function Section({
+  title,
+  icon,
+  action,
+  children,
 }: {
-  label: T;
-  active: boolean;
-  disabled?: boolean;
-  onPress: () => void;
+  title: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  action?: ReactNode;
+  children: ReactNode;
 }) {
+  const { colorScheme } = useColorScheme();
+  const palette = getPalette(colorScheme);
   return (
-    <Pressable
-      disabled={disabled}
-      onPress={onPress}
-      className={`rounded-full border px-3 py-2 disabled:opacity-50 ${
-        active
-          ? "border-accent bg-accent/15 dark:border-dark-accent dark:bg-dark-accent/15"
-          : "border-glass bg-glass-button dark:border-dark-glass dark:bg-dark-glass-button"
-      }`}
-    >
-      <Text className="text-xs font-black text-primary dark:text-dark-primary">
-        {label}
-      </Text>
-    </Pressable>
+    <View className="rounded-nova-xl border border-glass bg-sidebar p-5 dark:border-dark-glass dark:bg-dark-sidebar">
+      <View className="mb-4 flex-row items-center gap-2">
+        <View className="h-8 w-8 items-center justify-center rounded-nova border border-glass bg-glass-button dark:border-dark-glass dark:bg-dark-glass-button">
+          <Ionicons name={icon} size={16} color={palette.accent} />
+        </View>
+        <Text className="flex-1 text-[16px] font-black text-primary dark:text-dark-primary">
+          {title}
+        </Text>
+        {action}
+      </View>
+      {children}
+    </View>
   );
 }
 
@@ -83,6 +108,7 @@ export default function TaskDetailScreen() {
   }>();
   const { colorScheme } = useColorScheme();
   const palette = getPalette(colorScheme);
+  const insets = useSafeAreaInsets();
   const user = useAuthStore((state) => state.user);
   const showSnackbar = useSnackbarStore((state) => state.showSnackbar);
   const [task, setTask] = useState<Task | null>(null);
@@ -103,8 +129,22 @@ export default function TaskDetailScreen() {
   const parentProjectId = Array.isArray(projectId) ? projectId[0] : projectId;
   const role = project ? getProjectMemberRole(project, user?.id) : null;
   const readOnly = role === "VIEWER";
+  const canAssign = role === "OWNER" || role === "ADMIN";
+  const canAssignSubtasks = Boolean(role && role !== "VIEWER");
   const canAddComment = Boolean(role && role !== "VIEWER");
   const canModerateComments = role === "OWNER" || role === "ADMIN";
+  const assignableMembers = useMemo(
+    () =>
+      (project?.teamMembers ?? []).filter(
+        (member) => member.role !== "VIEWER" && memberId(member),
+      ),
+    [project?.teamMembers],
+  );
+  const subtaskAssignableMembers = useMemo(() => {
+    if (canAssign) return assignableMembers;
+    if (!user?.id) return [];
+    return assignableMembers.filter((member) => memberId(member) === user.id);
+  }, [assignableMembers, canAssign, user?.id]);
   const mentionUsers = useMemo(
     () =>
       mentionUsersFromPeople([
@@ -286,101 +326,87 @@ export default function TaskDetailScreen() {
     );
   }
 
+  const doneCount = task.subtasks.filter((item) => item.done).length;
+  const assigneeChoices = memberOptions(assignableMembers);
+  const subtaskAssigneeChoices = memberOptions(subtaskAssignableMembers);
+  const footerPad = Math.max(insets.bottom, 12) + 70;
+
   return (
     <View className="flex-1 bg-main dark:bg-dark-main">
       <ScrollView
         keyboardShouldPersistTaps="handled"
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-        contentContainerClassName="gap-5 p-5 pb-32"
+        contentContainerClassName={`gap-4 p-5 ${readOnly ? "pb-32" : "pb-6"}`}
       >
-        <View className="rounded-nova-xl border border-glass bg-sidebar p-5 dark:border-dark-glass dark:bg-dark-sidebar">
-          <Pressable onPress={() => router.back()} className="mb-4 flex-row items-center gap-2">
+        <View className="flex-row items-center gap-3">
+          <Pressable
+            onPress={() => router.back()}
+            className="h-10 w-10 items-center justify-center rounded-nova border border-glass bg-glass-button dark:border-dark-glass dark:bg-dark-glass-button"
+          >
             <Ionicons name="chevron-back-outline" size={18} color={palette.accent} />
-            <Text className="font-black text-accent dark:text-dark-accent">
-              Back
-            </Text>
           </Pressable>
-          <Text className="text-[28px] font-black text-primary dark:text-dark-primary">
-            Task Details
-          </Text>
-          <Text className="mt-2 text-sm text-muted dark:text-dark-muted">
-            {readOnly
-              ? "You can view this task, but your project role cannot edit it."
-              : "Full task editing lives here so long tasks are easier on mobile."}
-          </Text>
-          {role ? (
-            <Text className="mt-3 self-start rounded-full border border-accent/40 px-3 py-1 text-xs font-black text-accent dark:text-dark-accent">
-              {role}
+          <View className="min-w-0 flex-1">
+            <Text numberOfLines={1} className="text-xs font-black uppercase tracking-[1.2px] text-muted dark:text-dark-muted">
+              {project?.title ?? "Task"}
             </Text>
-          ) : null}
+            {role ? (
+              <Text className="mt-0.5 text-[11px] font-bold text-accent dark:text-dark-accent">
+                {readOnly ? "View only" : role}
+              </Text>
+            ) : null}
+          </View>
         </View>
 
         <View className="rounded-nova-xl border border-glass bg-sidebar p-5 dark:border-dark-glass dark:bg-dark-sidebar">
-          <View>
-            <FieldLabel>Title</FieldLabel>
-            <TextInput
-              value={task.title}
-              onChangeText={(title) => updateTask({ title })}
-              editable={!readOnly}
-              placeholder="Task title"
-              placeholderTextColor={palette.muted}
-              className="rounded-nova border border-glass bg-glass-button px-3.5 py-3 text-primary dark:border-dark-glass dark:bg-dark-glass-button dark:text-dark-primary"
+          <Text className="mb-2 text-[11px] font-black uppercase tracking-[1.2px] text-muted dark:text-dark-muted">
+            Title
+          </Text>
+          <TextInput
+            value={task.title}
+            onChangeText={(title) => updateTask({ title })}
+            editable={!readOnly}
+            placeholder="Task title"
+            placeholderTextColor={palette.muted}
+            className="rounded-nova border border-glass bg-glass-button px-3.5 py-3 text-[15px] font-black text-primary dark:border-dark-glass dark:bg-dark-glass-button dark:text-dark-primary"
+          />
+          <Text className="mb-2 mt-4 text-[11px] font-black uppercase tracking-[1.2px] text-muted dark:text-dark-muted">
+            Description
+          </Text>
+          <TextInput
+            value={task.description}
+            onChangeText={(description) => updateTask({ description })}
+            editable={!readOnly}
+            placeholder="Add a description..."
+            placeholderTextColor={palette.muted}
+            multiline
+            textAlignVertical="top"
+            className="min-h-[88px] rounded-nova border border-glass bg-glass-button px-3.5 py-3 text-[15px] leading-6 text-primary dark:border-dark-glass dark:bg-dark-glass-button dark:text-dark-primary"
+          />
+        </View>
+
+        <Section title="Details" icon="options-outline">
+          <SelectField
+            label="Status"
+            value={task.status}
+            options={STATUS_OPTIONS}
+            onChange={(status) => updateTask({ status: status as TaskStatus })}
+            title="Status"
+            disabled={readOnly}
+          />
+          <View className="mt-4">
+            <SelectField
+              label="Priority"
+              value={task.priority}
+              options={PRIORITY_OPTIONS}
+              onChange={(priority) => updateTask({ priority: priority as TaskPriority })}
+              title="Priority"
+              disabled={readOnly}
             />
           </View>
-
           <View className="mt-4">
-            <FieldLabel>Description</FieldLabel>
-            <TextInput
-              value={task.description}
-              onChangeText={(description) => updateTask({ description })}
-              editable={!readOnly}
-              placeholder="Task description"
-              placeholderTextColor={palette.muted}
-              multiline
-              textAlignVertical="top"
-              className="min-h-[120px] rounded-nova border border-glass bg-glass-button px-3.5 py-3 text-primary dark:border-dark-glass dark:bg-dark-glass-button dark:text-dark-primary"
-            />
-          </View>
-
-          <View className="mt-4">
-            <FieldLabel>Status</FieldLabel>
-            <View className="flex-row flex-wrap gap-2">
-              {TASK_COLUMNS.map((status) => (
-                <Chip
-                  key={status}
-                  label={status}
-                  active={task.status === status}
-                  disabled={readOnly}
-                  onPress={() => updateTask({ status })}
-                />
-              ))}
-            </View>
-          </View>
-
-          <View className="mt-4">
-            <FieldLabel>Priority</FieldLabel>
-            <View className="flex-row gap-2">
-              {TASK_PRIORITIES.map((priority) => (
-                <Pressable
-                  key={priority}
-                  disabled={readOnly}
-                  onPress={() => updateTask({ priority })}
-                  className={`flex-1 rounded-nova border px-3 py-2 disabled:opacity-50 ${
-                    task.priority === priority
-                      ? "border-accent bg-accent/15 dark:border-dark-accent dark:bg-dark-accent/15"
-                      : "border-glass bg-glass-button dark:border-dark-glass dark:bg-dark-glass-button"
-                  }`}
-                >
-                  <Text className="text-center text-xs font-black text-primary dark:text-dark-primary">
-                    {priority}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
-          </View>
-
-          <View className="mt-4">
-            <FieldLabel>Due Date</FieldLabel>
+            <Text className="mb-2 text-[11px] font-black uppercase tracking-[1.2px] text-muted dark:text-dark-muted">
+              Due date
+            </Text>
             <CalendarField
               value={isoToDateInputValue(task.dueDateIso)}
               onChange={(value) =>
@@ -393,44 +419,77 @@ export default function TaskDetailScreen() {
               placeholder="Select due date"
             />
           </View>
-        </View>
+          {canAssign ? (
+            <View className="mt-4">
+              <MultiSelectField
+                label="Assigned to"
+                value={task.assigneeIds ?? []}
+                options={assigneeChoices}
+                onChange={(assigneeIds) => updateTask({ assigneeIds })}
+                placeholder="Select team members..."
+                title="Assigned to"
+                searchPlaceholder="Search people..."
+                disabled={readOnly}
+              />
+            </View>
+          ) : null}
+        </Section>
 
-        <View className="rounded-nova-xl border border-glass bg-sidebar p-5 dark:border-dark-glass dark:bg-dark-sidebar">
-          <View className="mb-4 flex-row items-center justify-between">
-            <Text className="text-[18px] font-black text-primary dark:text-dark-primary">
-              Subtasks
-            </Text>
-            {!readOnly ? (
-              <Pressable
-                onPress={() =>
-                  updateTask({
-                    subtasks: [
-                      ...task.subtasks,
-                      {
-                        id: `new-${Date.now()}`,
-                        label: "",
-                        done: false,
-                        assignees: [],
-                        assigneeIds: [],
-                      },
-                    ],
-                  })
-                }
-                className="h-9 w-9 items-center justify-center rounded-full bg-accent dark:bg-dark-accent"
-              >
-                <Ionicons name="add-outline" size={20} color={palette.white} />
-              </Pressable>
-            ) : null}
-          </View>
-
+        <Section
+          title="Subtasks"
+          icon="checkbox-outline"
+          action={
+            <View className="flex-row items-center gap-2">
+              {task.subtasks.length > 0 ? (
+                <Text className="text-xs font-black text-muted dark:text-dark-muted">
+                  {doneCount}/{task.subtasks.length}
+                </Text>
+              ) : null}
+              {!readOnly ? (
+                <Pressable
+                  onPress={() =>
+                    updateTask({
+                      subtasks: [
+                        ...task.subtasks,
+                        {
+                          id: `new-${Date.now()}`,
+                          label: "",
+                          done: false,
+                          assignees: [],
+                          assigneeIds: [],
+                        },
+                      ],
+                    })
+                  }
+                  className="h-8 w-8 items-center justify-center rounded-full bg-accent dark:bg-dark-accent"
+                >
+                  <Ionicons name="add-outline" size={18} color={palette.white} />
+                </Pressable>
+              ) : null}
+            </View>
+          }
+        >
+          {task.subtasks.length > 0 ? (
+            <View className="mb-4 h-1.5 overflow-hidden rounded-full bg-glass-button dark:bg-dark-glass-button">
+              <View
+                className="h-full rounded-full bg-accent dark:bg-dark-accent"
+                style={{
+                  width: `${Math.round((doneCount / task.subtasks.length) * 100)}%`,
+                }}
+              />
+            </View>
+          ) : null}
           <View className="gap-3">
             {task.subtasks.length === 0 ? (
               <Text className="text-sm text-muted dark:text-dark-muted">
-                No subtasks yet.
+                No subtasks yet. Add a checklist item to break this down.
               </Text>
             ) : (
               task.subtasks.map((subtask, index) => (
-                <View key={subtask.id} className="rounded-nova border border-glass bg-glass-card p-3 dark:border-dark-glass dark:bg-dark-glass-card">
+                <View
+                  key={subtask.id}
+                  className="rounded-nova border border-glass bg-glass-card p-3 dark:border-dark-glass dark:bg-dark-glass-card"
+                >
                   <View className="flex-row items-center gap-3">
                     <Pressable
                       disabled={readOnly}
@@ -443,14 +502,14 @@ export default function TaskDetailScreen() {
                           ),
                         })
                       }
-                      className={`h-8 w-8 items-center justify-center rounded-nova border disabled:opacity-50 ${
+                      className={`h-8 w-8 items-center justify-center rounded-full border disabled:opacity-50 ${
                         subtask.done
                           ? "border-accent bg-accent dark:border-dark-accent dark:bg-dark-accent"
                           : "border-glass bg-glass-button dark:border-dark-glass dark:bg-dark-glass-button"
                       }`}
                     >
                       {subtask.done ? (
-                        <Ionicons name="checkmark-outline" size={18} color={palette.white} />
+                        <Ionicons name="checkmark-outline" size={16} color={palette.white} />
                       ) : null}
                     </Pressable>
                     <TextInput
@@ -465,7 +524,11 @@ export default function TaskDetailScreen() {
                       editable={!readOnly}
                       placeholder={`Subtask ${index + 1}`}
                       placeholderTextColor={palette.muted}
-                      className="flex-1 text-primary dark:text-dark-primary"
+                      className={`flex-1 text-[15px] font-bold ${
+                        subtask.done
+                          ? "text-muted line-through dark:text-dark-muted"
+                          : "text-primary dark:text-dark-primary"
+                      }`}
                     />
                     {!readOnly ? (
                       <Pressable
@@ -476,38 +539,58 @@ export default function TaskDetailScreen() {
                         }
                         className="h-8 w-8 items-center justify-center rounded-full bg-glass-button dark:bg-dark-glass-button"
                       >
-                        <Ionicons name="close-outline" size={18} color={palette.muted} />
+                        <Ionicons name="close-outline" size={16} color={palette.muted} />
                       </Pressable>
                     ) : null}
                   </View>
+                  {canAssignSubtasks ? (
+                    <View className="mt-3">
+                      <MultiSelectField
+                        label="Assignees"
+                        value={subtask.assigneeIds ?? []}
+                        options={subtaskAssigneeChoices}
+                        onChange={(assigneeIds) =>
+                          updateTask({
+                            subtasks: task.subtasks.map((item) =>
+                              item.id === subtask.id ? { ...item, assigneeIds } : item,
+                            ),
+                          })
+                        }
+                        placeholder="Assign subtask..."
+                        title="Subtask assignees"
+                        searchPlaceholder="Search people..."
+                        disabled={readOnly}
+                      />
+                    </View>
+                  ) : null}
                 </View>
               ))
             )}
           </View>
-        </View>
+        </Section>
 
-        <View className="rounded-nova-xl border border-glass bg-sidebar p-5 dark:border-dark-glass dark:bg-dark-sidebar">
-          <View className="mb-4 flex-row items-center justify-between">
-            <Text className="text-[18px] font-black text-primary dark:text-dark-primary">
-              Comments
-            </Text>
-            <Text className="text-xs font-bold text-muted dark:text-dark-muted">
+        <Section
+          title="Comments"
+          icon="chatbubble-ellipses-outline"
+          action={
+            <Text className="text-xs font-black text-muted dark:text-dark-muted">
               {comments.length}
             </Text>
-          </View>
+          }
+        >
           {canAddComment ? (
             <View className="gap-3">
               <MentionComposer
                 value={commentContent}
                 onChange={setCommentContent}
                 users={mentionUsers}
-                placeholder="Add a task comment. Use @ to mention someone."
+                placeholder="Add a comment. Use @ to mention someone."
                 disabled={commentSubmitting}
               />
               <Pressable
                 disabled={!commentContent.trim() || commentSubmitting}
                 onPress={() => void addComment()}
-                className="min-h-[48px] items-center justify-center rounded-nova bg-accent disabled:opacity-50 dark:bg-dark-accent"
+                className="min-h-[46px] items-center justify-center rounded-nova bg-accent disabled:opacity-50 dark:bg-dark-accent"
               >
                 <Text className="font-black text-white">
                   {commentSubmitting ? "Posting..." : "Add Comment"}
@@ -515,7 +598,7 @@ export default function TaskDetailScreen() {
               </Pressable>
             </View>
           ) : null}
-          <View className="mt-4 gap-3">
+          <View className={`${canAddComment ? "mt-4" : ""} gap-3`}>
             {comments.length === 0 ? (
               <Text className="text-sm text-muted dark:text-dark-muted">
                 No comments yet.
@@ -529,45 +612,71 @@ export default function TaskDetailScreen() {
                 return (
                   <View
                     key={comment.id}
-                    className="rounded-nova border border-glass bg-glass-card p-3 dark:border-dark-glass dark:bg-dark-glass-card"
+                    className="rounded-nova border border-glass bg-glass-card p-3.5 dark:border-dark-glass dark:bg-dark-glass-card"
                   >
                     <View className="flex-row items-start justify-between gap-3">
-                      <View className="flex-1">
-                        <Text className="font-black text-primary dark:text-dark-primary">
-                          {comment.createdBy?.fullName ?? "Project member"}
+                      <View className="min-w-0 flex-1 flex-row items-start gap-2.5">
+                        <UserAvatar
+                          name={comment.createdBy?.fullName}
+                          avatarUrl={comment.createdBy?.avatarUrl}
+                          size="sm"
+                        />
+                        <View className="min-w-0 flex-1">
+                        <UserProfileLink userId={comment.createdBy?.id ?? comment.createdById}>
+                          <Text className="font-black text-primary dark:text-dark-primary">
+                            {comment.createdBy?.fullName ?? "Project member"}
+                          </Text>
+                        </UserProfileLink>
+                        <Text className="mt-0.5 text-xs text-muted dark:text-dark-muted">
+                          {formatActivityTime(comment.createdAt) || "Recently"}
                         </Text>
-                        <Text className="mt-1 text-xs text-muted dark:text-dark-muted">
-                          {comment.createdAt
-                            ? new Date(comment.createdAt).toLocaleString()
-                            : "Recently"}
-                        </Text>
+                        </View>
                       </View>
-                      <Text className="rounded-full border border-accent/40 px-2 py-1 text-[10px] font-black text-accent dark:text-dark-accent">
+                      <Text
+                        className={`rounded-full border px-2 py-1 text-[10px] font-black ${
+                          isClosed
+                            ? "border-glass text-muted dark:border-dark-glass dark:text-dark-muted"
+                            : "border-accent/40 text-accent dark:text-dark-accent"
+                        }`}
+                      >
                         {comment.status}
                       </Text>
                     </View>
                     <MentionText
                       content={comment.content}
+                      users={mentionUsers}
                       className="mt-3 text-sm leading-5 text-primary dark:text-dark-primary"
                     />
                     {comment.replyContent ? (
                       <View className="mt-3 rounded-nova border border-accent/25 bg-accent/10 p-3">
-                        <Text className="text-[10px] font-black uppercase tracking-[1.4px] text-accent dark:text-dark-accent">
-                          Reply
-                        </Text>
+                        <View className="flex-row flex-wrap items-center gap-1">
+                          <Text className="text-[10px] font-black uppercase tracking-[1.2px] text-accent dark:text-dark-accent">
+                            Reply ·
+                          </Text>
+                          <UserProfileLink userId={comment.repliedBy?.id}>
+                            <Text className="text-[10px] font-black uppercase tracking-[1.2px] text-accent dark:text-dark-accent">
+                              {comment.repliedBy?.fullName ?? "Admin"}
+                            </Text>
+                          </UserProfileLink>
+                        </View>
                         <MentionText
                           content={comment.replyContent}
+                          users={mentionUsers}
                           className="mt-1.5 text-sm leading-5 text-primary dark:text-dark-primary"
                         />
-                        <Text className="mt-1 text-xs text-muted dark:text-dark-muted">
-                          {comment.repliedBy?.fullName ?? "Admin"}
-                        </Text>
                       </View>
                     ) : null}
                     {isClosed && comment.closedAt ? (
-                      <Text className="mt-2 text-xs text-muted dark:text-dark-muted">
-                        Closed by {comment.closedBy?.fullName ?? "Admin"}
-                      </Text>
+                      <View className="mt-2 flex-row flex-wrap items-center gap-1">
+                        <Text className="text-xs text-muted dark:text-dark-muted">
+                          Closed by
+                        </Text>
+                        <UserProfileLink userId={comment.closedBy?.id}>
+                          <Text className="text-xs text-muted dark:text-dark-muted">
+                            {comment.closedBy?.fullName ?? "Admin"}
+                          </Text>
+                        </UserProfileLink>
+                      </View>
                     ) : null}
                     {isReplying && canAct ? (
                       <View className="mt-3 gap-2">
@@ -633,53 +742,65 @@ export default function TaskDetailScreen() {
               })
             )}
           </View>
-        </View>
+        </Section>
 
-        <View className="rounded-nova-xl border border-glass bg-sidebar p-5 dark:border-dark-glass dark:bg-dark-sidebar">
-          <Text className="text-[18px] font-black text-primary dark:text-dark-primary">
-            Activity
-          </Text>
-          <View className="mt-4 gap-3">
-            {task.activity.length === 0 ? (
-              <Text className="text-sm text-muted dark:text-dark-muted">
-                No activity yet.
-              </Text>
-            ) : (
-              task.activity.slice(0, 10).map((item) => (
-                <View key={item.id} className="rounded-nova border border-glass bg-glass-card p-3 dark:border-dark-glass dark:bg-dark-glass-card">
-                  <Text className="font-bold text-primary dark:text-dark-primary">
-                    {item.message}
-                  </Text>
-                  <Text className="mt-1 text-xs text-muted dark:text-dark-muted">
-                    {item.time}
-                  </Text>
+        <Section title="Activity" icon="time-outline">
+          {task.activity.length === 0 ? (
+            <Text className="text-sm text-muted dark:text-dark-muted">
+              No activity yet.
+            </Text>
+          ) : (
+            <View>
+              {task.activity.slice(0, 10).map((item, index, list) => (
+                <View key={item.id} className="flex-row gap-3">
+                  <View className="items-center">
+                    <View className="mt-1 h-2.5 w-2.5 rounded-full bg-accent dark:bg-dark-accent" />
+                    {index < list.length - 1 ? (
+                      <View className="w-px flex-1 bg-glass dark:bg-dark-glass" />
+                    ) : null}
+                  </View>
+                  <View className="flex-1 pb-4">
+                    <Text className="font-bold leading-5 text-primary dark:text-dark-primary">
+                      {item.message}
+                    </Text>
+                    <Text className="mt-1 text-xs text-muted dark:text-dark-muted">
+                      {item.time}
+                    </Text>
+                  </View>
                 </View>
-              ))
-            )}
-          </View>
-        </View>
-
-        {!readOnly ? (
-          <View className="flex-row gap-3">
-            <Pressable
-              disabled={saving}
-              onPress={save}
-              className="min-h-[52px] flex-1 flex-row items-center justify-center gap-2 rounded-nova bg-accent disabled:opacity-50 dark:bg-dark-accent"
-            >
-              {saving ? <ActivityIndicator color={palette.white} /> : null}
-              <Text className="font-black text-white">
-                {saving ? "Saving..." : "Save Changes"}
-              </Text>
-            </Pressable>
-            <Pressable
-              onPress={() => setConfirmDelete(true)}
-              className="min-h-[52px] w-[58px] items-center justify-center rounded-nova border border-danger/40 bg-danger/10 dark:border-dark-danger/40 dark:bg-dark-danger/10"
-            >
-              <Ionicons name="trash-outline" size={21} color={palette.danger} />
-            </Pressable>
-          </View>
-        ) : null}
+              ))}
+            </View>
+          )}
+        </Section>
       </ScrollView>
+
+      {!readOnly ? (
+        <View
+          className="flex-row items-center gap-3 border-t border-glass bg-sidebar px-5 pt-3 dark:border-dark-glass dark:bg-dark-sidebar"
+          style={{ paddingBottom: footerPad }}
+        >
+          <Pressable
+            onPress={() => setConfirmDelete(true)}
+            className="h-12 w-12 items-center justify-center rounded-nova border border-danger/40 bg-danger/10 dark:border-dark-danger/40 dark:bg-dark-danger/10"
+          >
+            <Ionicons name="trash-outline" size={18} color={palette.danger} />
+          </Pressable>
+          <Pressable
+            disabled={saving}
+            onPress={() => void save()}
+            className="h-12 min-h-[48px] flex-1 flex-row items-center justify-center gap-2 rounded-nova bg-accent disabled:opacity-50 dark:bg-dark-accent"
+          >
+            {saving ? (
+              <ActivityIndicator color={palette.white} size="small" />
+            ) : (
+              <Ionicons name="checkmark-outline" size={18} color={palette.white} />
+            )}
+            <Text className="font-black text-white">
+              {saving ? "Saving..." : "Save"}
+            </Text>
+          </Pressable>
+        </View>
+      ) : null}
 
       <ConfirmationPopup
         visible={confirmDelete}

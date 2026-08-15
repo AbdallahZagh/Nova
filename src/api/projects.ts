@@ -24,6 +24,15 @@ export type ProjectOwner = {
   roleTitle?: string;
 };
 
+export type ProjectDueAssignee = {
+  id?: string;
+  name: string;
+  initials: string;
+  avatarUrl?: string | null;
+};
+
+export type ProjectOwnershipFilter = "All" | "Mine" | "Shared";
+
 export type Project = {
   id: string;
   title: string;
@@ -37,6 +46,9 @@ export type Project = {
   completedTasks?: number;
   totalSubtasks?: number;
   completedSubtasks?: number;
+  overdueCount?: number;
+  nextDueDate?: string | null;
+  nextDueAssignees?: ProjectDueAssignee[];
   createdAt?: string;
   updatedAt?: string;
 };
@@ -77,6 +89,14 @@ type ApiProjectMember = {
   };
 };
 
+type ApiProjectDueAssignee = {
+  id?: string;
+  name?: string;
+  fullName?: string;
+  initials?: string;
+  avatarUrl?: string | null;
+};
+
 type ApiProjectTaskSummary = {
   id: string;
   status: string;
@@ -104,6 +124,9 @@ type ApiProject = {
   completedTasks?: number;
   totalSubtasks?: number;
   completedSubtasks?: number;
+  overdueCount?: number;
+  nextDueDate?: string | null;
+  nextDueAssignees?: ApiProjectDueAssignee[];
 };
 
 export const PROJECT_STATUS_OPTIONS: ProjectStatus[] = [
@@ -230,6 +253,16 @@ function mapProject(project: ApiProject): Project {
     completedTasks: project.completedTasks,
     totalSubtasks: project.totalSubtasks,
     completedSubtasks: project.completedSubtasks,
+    overdueCount: project.overdueCount ?? 0,
+    nextDueDate: project.nextDueDate ?? null,
+    nextDueAssignees: (project.nextDueAssignees ?? []).map((assignee) => ({
+      id: assignee.id,
+      name: assignee.name ?? assignee.fullName ?? "Member",
+      initials:
+        assignee.initials ??
+        initialsFromName(assignee.name ?? assignee.fullName ?? "NA"),
+      avatarUrl: assignee.avatarUrl,
+    })),
     createdAt: project.createdAt,
     updatedAt: project.updatedAt,
   };
@@ -261,6 +294,46 @@ export function canDeleteProject(role: ProjectMemberRole | null) {
 
 export function canEditProjectDetails(role: ProjectMemberRole | null) {
   return role !== null && role !== "VIEWER";
+}
+
+export function canManageProjectTeam(role: ProjectMemberRole | null) {
+  return role === "OWNER" || role === "ADMIN";
+}
+
+export function matchesOwnershipFilter(
+  project: Project,
+  filter: ProjectOwnershipFilter,
+  userId?: string | null,
+) {
+  if (filter === "All") return true;
+  const mine = Boolean(userId && project.ownerId === userId);
+  return filter === "Mine" ? mine : !mine;
+}
+
+export function shouldOfferMarkProjectComplete(
+  status: ProjectStatus,
+  totalTasks: number,
+  completedTasks: number,
+) {
+  if (status === "Completed" || status === "Archived") return false;
+  if (totalTasks <= 0) return false;
+  return completedTasks / totalTasks >= 0.8;
+}
+
+export function formatProjectLateCount(count?: number) {
+  const n = Math.max(0, count ?? 0);
+  if (n === 0) return "None late";
+  return n === 1 ? "1 late" : `${n} late`;
+}
+
+export function formatProjectNextDue(iso?: string | null) {
+  if (!iso) return "No upcoming";
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "No upcoming";
+  return `Next ${date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+  })}`;
 }
 
 function projectFormToPayload(input: ProjectFormInput) {
@@ -345,4 +418,48 @@ export async function addProjectMembersApi(
     `/api/projects/${projectId}/members`,
     validMembers.length === 1 ? validMembers[0] : { members: validMembers },
   );
+}
+
+export async function updateProjectMemberRoleApi(
+  projectId: string,
+  userId: string,
+  role: EditableProjectMemberRole,
+) {
+  await apiClient.patch(`/api/projects/${projectId}/members/${userId}`, { role });
+}
+
+export async function deleteProjectMemberApi(projectId: string, userId: string) {
+  await apiClient.delete(`/api/projects/${projectId}/members/${userId}`);
+}
+
+export type ProjectActivityItem = {
+  id: string;
+  type: string;
+  content: string;
+  createdAt: string;
+  authorName: string;
+  taskId?: string;
+  taskTitle?: string;
+};
+
+export async function listProjectActivityApi(projectId: string, limit = 12) {
+  const response = await apiClient.get<
+    Array<{
+      id: string;
+      type?: string;
+      content?: string;
+      createdAt?: string;
+      author?: { id?: string; name?: string; fullName?: string } | null;
+      task?: { id?: string; title?: string } | null;
+    }>
+  >(`/api/projects/${projectId}/activity`, { params: { limit } });
+  return (Array.isArray(response.data) ? response.data : []).map((item) => ({
+    id: item.id,
+    type: item.type ?? "ACTIVITY",
+    content: item.content ?? "",
+    createdAt: item.createdAt ?? "",
+    authorName: item.author?.name ?? item.author?.fullName ?? "Someone",
+    taskId: item.task?.id,
+    taskTitle: item.task?.title,
+  }));
 }

@@ -10,10 +10,13 @@ import {
   useOfflineStore,
   writeCachedGet,
 } from "@/offline/store";
+import { expoFetchAdapter } from "@/api/expoFetchAdapter";
 import { useAuthStore } from "@/store/useAuthStore";
 import { useSnackbarStore } from "@/store/useSnackbarStore";
 
-export const API_BASE_URL = "https://nova-l5df.onrender.com";
+export const API_BASE_URL = (
+  process.env.EXPO_PUBLIC_API_URL || "https://nova-l5df.onrender.com"
+).replace(/\/$/, "");
 
 type OfflineConfig = AxiosRequestConfig & { skipOfflineQueue?: boolean };
 
@@ -21,9 +24,12 @@ function createBaseClient() {
   return create({
     baseURL: API_BASE_URL,
     timeout: 20_000,
+    adapter: expoFetchAdapter,
     headers: {
       Accept: "application/json",
-      "Content-Type": "application/json",
+    },
+    transitional: {
+      clarifyTimeoutError: true,
     },
   });
 }
@@ -35,13 +41,31 @@ function skipped(config?: AxiosRequestConfig) {
   return Boolean((config as OfflineConfig | undefined)?.skipOfflineQueue);
 }
 
+function stripUnsafeHeaders(config: InternalAxiosRequestConfig) {
+  const method = (config.method ?? "get").toUpperCase();
+  const headers = config.headers;
+  if (!headers) return config;
+
+  headers.delete?.("User-Agent");
+  headers.delete?.("user-agent");
+  if (method === "GET" || method === "HEAD") {
+    headers.delete?.("Content-Type");
+    headers.delete?.("content-type");
+    config.data = undefined;
+  }
+  return config;
+}
+
 apiClient.interceptors.request.use((config) => {
   const token = useAuthStore.getState().accessToken;
   if (token) config.headers.Authorization = `Bearer ${token}`;
-  return config;
+  return stripUnsafeHeaders(config);
 });
 
+publicApiClient.interceptors.request.use(stripUnsafeHeaders);
+
 let handlingUnauthorized = false;
+let consecutiveNetworkFailures = 0;
 
 function fakeOk(config: InternalAxiosRequestConfig | undefined, data: unknown) {
   return {
@@ -55,6 +79,7 @@ function fakeOk(config: InternalAxiosRequestConfig | undefined, data: unknown) {
 
 apiClient.interceptors.response.use(
   (response) => {
+    consecutiveNetworkFailures = 0;
     useOfflineStore.getState().setOnline(true);
     if ((response.config.method ?? "get").toUpperCase() === "GET" && response.config.url) {
       void writeCachedGet(response.config.url, response.data);
@@ -99,11 +124,14 @@ apiClient.interceptors.response.use(
       !skipped(config) &&
       !shouldBypassOffline(url, config.data)
     ) {
-      useOfflineStore.getState().setOnline(false);
+      consecutiveNetworkFailures += 1;
+      if (consecutiveNetworkFailures >= 3) {
+        useOfflineStore.getState().setOnline(false);
+      }
       if (method === "GET") {
         const cached = await readCachedGet(url);
         if (cached !== null) return fakeOk(config, cached);
-      } else {
+      } else if (consecutiveNetworkFailures >= 3) {
         await enqueueMutation({ method, path: url, body: config.data });
         const data = await optimisticMutationResponse(method, url, config.data);
         return fakeOk(config, data);

@@ -4,6 +4,7 @@ import {
   createSubtaskApi,
   deleteSubtaskApi,
   isPersistedSubtaskId,
+  syncSubtaskAssigneesApi,
   updateSubtaskApi,
   type ApiSubtask,
   type SubtaskItem,
@@ -199,7 +200,7 @@ export function isoToDateInputValue(iso?: string | null) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
 
-function formatActivityTime(raw?: string) {
+export function formatActivityTime(raw?: string) {
   if (!raw) return "";
   const date = new Date(raw);
   if (Number.isNaN(date.getTime())) return raw;
@@ -359,10 +360,45 @@ function taskToUpdatePayload(task: Task) {
   };
 }
 
+function sameIds(a: string[] = [], b: string[] = []) {
+  const left = [...a].filter(isUuid).sort();
+  const right = [...b].filter(isUuid).sort();
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
+async function syncCreatedSubtasks(task: Task, input: CreateTaskInput) {
+  const pairs = input.subtasks
+    .map((subtask) => ({
+      ...subtask,
+      label: subtask.label.trim(),
+      assigneeIds: subtask.assigneeIds ?? [],
+    }))
+    .filter((subtask) => subtask.label.length > 0)
+    .map((subtask, index) => ({
+      created: task.subtasks[index],
+      assigneeIds: subtask.assigneeIds ?? [],
+      done: subtask.done,
+    }))
+    .filter((item) => item.created);
+
+  await Promise.all(
+    pairs.map(async (item) => {
+      if (item.done) {
+        await updateSubtaskApi(item.created.id, { isCompleted: true });
+      }
+      if (item.assigneeIds.length > 0) {
+        await syncSubtaskAssigneesApi(item.created.id, [], item.assigneeIds);
+      }
+    }),
+  );
+}
+
 export async function createTaskApi(projectId: string, input: CreateTaskInput) {
   const response = await apiClient.post<ApiTask>("/api/tasks", createInputToPayload(projectId, input));
   const task = apiTaskToTask(response.data);
   await syncTaskAssignees(task.id, [], input.assigneeIds);
+  const saved = await getTaskApi(task.id);
+  await syncCreatedSubtasks(saved, input);
   return getTaskApi(task.id);
 }
 
@@ -377,6 +413,14 @@ export async function updateTaskApi(task: Task) {
   );
   await syncTaskSubtasks(task.id, current.subtasks, task.subtasks);
   return getTaskApi(saved.id);
+}
+
+export async function patchTaskStatusApi(taskId: string, status: TaskStatus) {
+  const response = await apiClient.patch<ApiTask>(`/api/tasks/${taskId}`, {
+    status,
+    completedAt: status === "Completed" ? new Date().toISOString() : undefined,
+  });
+  return apiTaskToTask(response.data);
 }
 
 export async function deleteTaskApi(taskId: string) {
@@ -436,9 +480,13 @@ async function syncTaskSubtasks(
 
   await Promise.all(
     next.map(async (subtask) => {
+      const nextAssigneeIds = subtask.assigneeIds ?? [];
       if (!isPersistedSubtaskId(subtask.id)) {
         const created = await createSubtaskApi(taskId, subtask.label);
         if (subtask.done) await updateSubtaskApi(created.id, { isCompleted: true });
+        if (nextAssigneeIds.length > 0) {
+          await syncSubtaskAssigneesApi(created.id, [], nextAssigneeIds);
+        }
         return;
       }
       const current = currentById.get(subtask.id);
@@ -447,6 +495,9 @@ async function syncTaskSubtasks(
       if (subtask.label !== current.label.trim()) patch.title = subtask.label;
       if (subtask.done !== current.done) patch.isCompleted = subtask.done;
       if (Object.keys(patch).length > 0) await updateSubtaskApi(subtask.id, patch);
+      if (!sameIds(current.assigneeIds, nextAssigneeIds)) {
+        await syncSubtaskAssigneesApi(subtask.id, current.assigneeIds ?? [], nextAssigneeIds);
+      }
     }),
   );
 }

@@ -14,6 +14,8 @@ import {
   type WhiteboardRole,
 } from "@/api/whiteboards";
 import { BottomDrawer } from "@/components/BottomDrawer";
+import { UserAvatar } from "@/components/UserAvatar";
+import { UserProfileLink } from "@/components/UserProfileLink";
 import { getApiErrorMessage } from "@/api/apiClient";
 import { useSnackbarStore } from "@/store/useSnackbarStore";
 import { useAppPalette } from "@/theme/useAppPalette";
@@ -27,16 +29,6 @@ type WhiteboardMembersDrawerProps = {
   onClose: () => void;
   onChanged: (board: Whiteboard) => void;
 };
-
-function initials(name: string) {
-  return name
-    .split(/\s+/)
-    .filter(Boolean)
-    .map((part) => part[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
-}
 
 export function WhiteboardMembersDrawer({
   visible,
@@ -356,13 +348,15 @@ export function WhiteboardMembersDrawer({
           key={member.userId}
           className="mb-2 flex-row items-center gap-3 rounded-nova border border-glass bg-glass-card p-3 dark:border-dark-glass dark:bg-dark-glass-card"
         >
-          <View className="h-10 w-10 items-center justify-center rounded-full bg-glass-button dark:bg-dark-glass-button">
-            <Text className="font-black text-primary dark:text-dark-primary">
-              {initials(member.fullName)}
-            </Text>
-          </View>
+          <UserAvatar
+            name={member.fullName}
+            avatarUrl={member.avatarUrl}
+            size="lg"
+          />
           <View className="flex-1">
-            <Text className="font-black text-primary dark:text-dark-primary">{member.fullName}</Text>
+            <UserProfileLink userId={member.userId}>
+              <Text className="font-black text-primary dark:text-dark-primary">{member.fullName}</Text>
+            </UserProfileLink>
             <Text className="text-xs text-muted dark:text-dark-muted">{member.email}</Text>
             {canManage ? (
               <View className="mt-2 flex-row gap-1">

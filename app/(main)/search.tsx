@@ -84,7 +84,12 @@ function flattenResults(
       label: userName(user),
       subtitle: user.username ?? user.email ?? "",
       href:
-        user.id === currentUserId ? ("/(main)/profile" as Href) : null,
+        user.id === currentUserId
+          ? ("/(main)/profile" as Href)
+          : ({
+              pathname: "/(main)/user/[id]",
+              params: { id: user.id },
+            } as Href),
     })),
   ];
 }

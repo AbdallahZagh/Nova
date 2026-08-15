@@ -15,6 +15,7 @@ type PersistedSession = {
 type AuthState = PersistedSession & {
   isHydrated: boolean;
   setSession: (session: LoginResponse) => Promise<void>;
+  setUser: (user: ApiUser | null) => Promise<void>;
   clearSession: () => Promise<void>;
   setDeviceToken: (deviceToken: string | null) => Promise<void>;
   hydrate: () => Promise<void>;
@@ -71,6 +72,19 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     };
     set(next);
     await persistSession(next);
+  },
+
+  setUser: async (user) => {
+    const state = get();
+    set({ user });
+    if (state.accessToken) {
+      await persistSession({
+        accessToken: state.accessToken,
+        refreshToken: state.refreshToken,
+        user,
+        deviceToken: state.deviceToken,
+      });
+    }
   },
 
   clearSession: async () => {

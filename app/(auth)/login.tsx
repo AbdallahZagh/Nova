@@ -50,7 +50,7 @@ export default function LoginScreen() {
     if (!identifier.trim()) {
       showSnackbar({
         variant: "error",
-        title: "Email required",
+        title: "Email or username required",
         message: "Enter your email address or username.",
       });
       return;
@@ -77,6 +77,17 @@ export default function LoginScreen() {
     } catch (requestError) {
       if (isInactiveAccountError(requestError)) {
         try {
+          if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(identifier.trim())) {
+            showSnackbar({
+              variant: "error",
+              title: "Sign in failed",
+              message: getApiErrorMessage(
+                requestError,
+                "This account needs to be reactivated with the email on file.",
+              ),
+            });
+            return;
+          }
           await beginReactivation(identifier.trim());
         } catch (reactivateError) {
           showSnackbar({
@@ -150,8 +161,8 @@ export default function LoginScreen() {
           onChangeText={setIdentifier}
           autoCapitalize="none"
           autoCorrect={false}
-          keyboardType="email-address"
-          placeholder="you@company.com"
+          keyboardType="default"
+          placeholder="you@company.com or @username"
           textContentType="username"
         />
         <FormField

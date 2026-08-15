@@ -1,4 +1,10 @@
 import { apiClient } from "@/api/apiClient";
+import type { ApiUser } from "@/api/types";
+
+export async function getUserProfileApi(id: string) {
+  const { data } = await apiClient.get<ApiUser>(`/api/users/${id}/profile`);
+  return data;
+}
 
 export type SearchUser = {
   id: string;

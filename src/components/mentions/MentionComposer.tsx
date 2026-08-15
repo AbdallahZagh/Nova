@@ -66,11 +66,11 @@ export function MentionComposer({
               onPress={() => apply(user)}
               className="flex-row items-center justify-between gap-3 px-3 py-2.5"
             >
-              <Text className="font-black text-primary dark:text-dark-primary">
-                {user.fullName}
-              </Text>
-              <Text className="text-xs font-bold text-accent dark:text-dark-accent">
+              <Text className="font-black text-accent dark:text-dark-accent">
                 {user.username}
+              </Text>
+              <Text className="flex-1 text-right text-xs font-bold text-muted dark:text-dark-muted">
+                {user.fullName}
               </Text>
             </Pressable>
           ))}

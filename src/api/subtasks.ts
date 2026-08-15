@@ -122,3 +122,63 @@ export async function updateSubtaskApi(
 export async function deleteSubtaskApi(id: string) {
   await apiClient.delete(`/api/subtasks/${id}`);
 }
+
+type ApiSubtaskAssignmentResponse =
+  | ApiSubtask
+  | ApiSubtask[]
+  | { subtask?: ApiSubtask; subtasks?: ApiSubtask[]; message?: string };
+
+function responseToSubtasks(data: ApiSubtaskAssignmentResponse): SubtaskItem[] {
+  if (Array.isArray(data)) return data.map(apiSubtaskToSubtask);
+  if ("subtasks" in data && data.subtasks) {
+    return data.subtasks.map(apiSubtaskToSubtask);
+  }
+  if ("subtask" in data && data.subtask) {
+    return [apiSubtaskToSubtask(data.subtask)];
+  }
+  if ("id" in data) return [apiSubtaskToSubtask(data)];
+  return [];
+}
+
+export async function assignSubtasksApi(subtaskIds: string[], userIds: string[]) {
+  const validSubtaskIds = subtaskIds.filter(isPersistedSubtaskId);
+  const validUserIds = userIds.filter(isPersistedSubtaskId);
+  if (validSubtaskIds.length === 0 || validUserIds.length === 0) return [];
+
+  const response = await apiClient.post<ApiSubtaskAssignmentResponse>("/api/subtasks/assign", 
+    validUserIds.length === 1
+      ? { userId: validUserIds[0], subtaskIds: validSubtaskIds }
+      : {
+          assignments: validUserIds.map((userId) => ({
+            userId,
+            subtaskIds: validSubtaskIds,
+          })),
+        },
+  );
+  return responseToSubtasks(response.data);
+}
+
+export async function unassignSubtaskApi(subtaskId: string, userId: string) {
+  if (!isPersistedSubtaskId(subtaskId) || !isPersistedSubtaskId(userId)) return [];
+  const response = await apiClient.delete<ApiSubtaskAssignmentResponse>(
+    `/api/subtasks/${subtaskId}/assignees/${userId}`,
+  );
+  return responseToSubtasks(response.data);
+}
+
+export async function syncSubtaskAssigneesApi(
+  subtaskId: string,
+  currentUserIds: string[],
+  nextUserIds: string[],
+) {
+  const current = new Set(currentUserIds.filter(isPersistedSubtaskId));
+  const next = new Set(nextUserIds.filter(isPersistedSubtaskId));
+  const toAdd = [...next].filter((userId) => !current.has(userId));
+  const toRemove = [...current].filter((userId) => !next.has(userId));
+
+  const assigned = await assignSubtasksApi([subtaskId], toAdd);
+  const unassigned = await Promise.all(
+    toRemove.map((userId) => unassignSubtaskApi(subtaskId, userId)),
+  );
+  return [...assigned, ...unassigned.flat()].find((subtask) => subtask.id === subtaskId);
+}

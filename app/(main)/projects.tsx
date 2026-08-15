@@ -18,8 +18,11 @@ import {
   canEditProjectDetails,
   createProjectApi,
   deleteProjectApi,
+  formatProjectLateCount,
+  formatProjectNextDue,
   getProjectMemberRole,
   listProjectsApi,
+  matchesOwnershipFilter,
   PROJECT_STATUS_OPTIONS,
   projectStatusLabel,
   sortProjectsByStatus,
@@ -27,14 +30,18 @@ import {
   type EditableProjectMemberRole,
   type Project,
   type ProjectFormInput,
+  type ProjectOwnershipFilter,
   type ProjectStatus,
 } from "@/api/projects";
 import { searchUsersApi, type SearchUser } from "@/api/users";
+import { suggestProjectDescriptionApi } from "@/api/ai";
 import { BottomDrawer } from "@/components/BottomDrawer";
 import { ConfirmationPopup } from "@/components/ConfirmationPopup";
+import { SelectField } from "@/components/SelectField";
 import { PageSkeleton } from "@/components/Skeleton";
 import { useAuthStore } from "@/store/useAuthStore";
 import { useSnackbarStore } from "@/store/useSnackbarStore";
+import { requestOpenNewTask } from "@/pendingProjectAction";
 import { getPalette } from "@/theme/colors";
 
 type FilterStatus = "All" | ProjectStatus;
@@ -44,12 +51,18 @@ type SelectedProjectMember = {
   role: EditableProjectMemberRole;
 };
 
-const FILTERS: FilterStatus[] = [
-  "All",
-  "Active",
-  "In Progress",
-  "Completed",
-  "Archived",
+const OWNERSHIP_OPTIONS = [
+  { value: "All", label: "All", description: "Every project you can see" },
+  { value: "Mine", label: "Mine", description: "You own it" },
+  { value: "Shared", label: "Shared", description: "You’re on the team" },
+];
+
+const STATUS_OPTIONS = [
+  { value: "All", label: "All statuses" },
+  ...PROJECT_STATUS_OPTIONS.map((status) => ({
+    value: status,
+    label: projectStatusLabel(status),
+  })),
 ];
 
 const MEMBER_ROLE_OPTIONS: EditableProjectMemberRole[] = [
@@ -97,7 +110,17 @@ function ProjectCard({
   onOpen: (project: Project) => void;
 }) {
   const progress = Math.max(0, Math.min(100, project.progress));
-  const visibleMembers = project.teamMembers.slice(0, 4);
+  const who = project.nextDueDate
+    ? (project.nextDueAssignees ?? []).map((person) => ({
+        key: person.id ?? person.initials,
+        initials: person.initials,
+        imageUrl: person.avatarUrl,
+      }))
+    : project.teamMembers.map((member) => ({
+        key: member.userId ?? member.id ?? member.initials,
+        initials: member.initials,
+        imageUrl: member.imageUrl,
+      }));
 
   return (
     <Pressable
@@ -129,46 +152,48 @@ function ProjectCard({
             style={{ width: `${progress}%` }}
           />
         </View>
-        <View className="mt-3 flex-row items-center justify-between gap-3">
-          <View className="flex-1">
-            <Text className="text-xs font-bold text-muted dark:text-dark-muted">
-              {progress}% complete
-            </Text>
-            {project.totalTasks != null ? (
-              <Text className="mt-0.5 text-[11px] text-subtle dark:text-dark-subtle">
-                {project.completedTasks ?? 0}/{project.totalTasks} tasks
-                {project.totalSubtasks != null && project.totalSubtasks > 0
-                  ? ` - ${project.completedSubtasks ?? 0}/${project.totalSubtasks} subtasks`
-                  : ""}
-              </Text>
-            ) : null}
-          </View>
-
+        <Text className="mt-3 text-xs font-bold text-muted dark:text-dark-muted">
+          {progress}% complete
+          {project.totalTasks != null
+            ? ` · ${project.completedTasks ?? 0}/${project.totalTasks} tasks`
+            : ""}
+        </Text>
+        <View className="mt-3 flex-row items-center justify-between gap-2">
+          <Text
+            className={`text-[11px] font-bold ${
+              (project.overdueCount ?? 0) > 0
+                ? "text-warning dark:text-dark-warning"
+                : "text-muted dark:text-dark-muted"
+            }`}
+          >
+            {formatProjectLateCount(project.overdueCount)}
+          </Text>
+          <Text className="flex-1 text-center text-[11px] font-bold text-muted dark:text-dark-muted">
+            {formatProjectNextDue(project.nextDueDate)}
+          </Text>
           <View className="flex-row items-center">
-            {visibleMembers.map((member, index) => (
+            {who.slice(0, 3).map((person, index) => (
               <View
-                key={`${member.userId ?? member.id ?? member.initials}-${index}`}
-                className="-ml-2 h-8 w-8 items-center justify-center overflow-hidden rounded-full border border-accent/35 bg-glass-button first:ml-0 dark:border-dark-accent/35 dark:bg-dark-glass-button"
+                key={`${person.key}-${index}`}
+                className="-ml-1.5 h-6 w-6 items-center justify-center overflow-hidden rounded-full border border-accent/35 bg-glass-button first:ml-0 dark:border-dark-accent/35 dark:bg-dark-glass-button"
               >
-                {member.imageUrl ? (
+                {person.imageUrl ? (
                   <Image
-                    source={{ uri: member.imageUrl }}
+                    source={{ uri: person.imageUrl }}
                     className="h-full w-full"
                     resizeMode="cover"
                   />
                 ) : (
-                  <Text className="text-[10px] font-black text-primary dark:text-dark-primary">
-                    {member.initials}
+                  <Text className="text-[9px] font-black text-primary dark:text-dark-primary">
+                    {person.initials}
                   </Text>
                 )}
               </View>
             ))}
-            {project.teamMembers.length > visibleMembers.length ? (
-              <View className="-ml-2 h-8 w-8 items-center justify-center rounded-full border border-glass bg-glass-button dark:border-dark-glass dark:bg-dark-glass-button">
-                <Text className="text-[10px] font-black text-muted dark:text-dark-muted">
-                  +{project.teamMembers.length - visibleMembers.length}
-                </Text>
-              </View>
+            {who.length === 0 ? (
+              <Text className="text-[11px] font-bold text-muted dark:text-dark-muted">
+                Unassigned
+              </Text>
             ) : null}
           </View>
         </View>
@@ -463,6 +488,9 @@ function ProjectDrawer({
   const [description, setDescription] = useState("");
   const [status, setStatus] = useState<ProjectStatus>("Active");
   const [selectedMembers, setSelectedMembers] = useState<SelectedProjectMember[]>([]);
+  const [generatingDescription, setGeneratingDescription] = useState(false);
+  const user = useAuthStore((state) => state.user);
+  const showSnackbar = useSnackbarStore((state) => state.showSnackbar);
 
   useEffect(() => {
     if (!visible) return;
@@ -509,6 +537,60 @@ function ProjectDrawer({
                   className="px-3.5 py-3 text-[15px] text-primary dark:text-dark-primary"
                 />
               </View>
+              {!user?.isDemo ? (
+                <Pressable
+                  disabled={generatingDescription || !title.trim()}
+                  onPress={async () => {
+                    const trimmed = title.trim();
+                    if (!trimmed || generatingDescription) {
+                      if (!trimmed) {
+                        showSnackbar({
+                          variant: "warning",
+                          title: "Add a project name first",
+                          message: "The AI needs a project name before it can write a description.",
+                        });
+                      }
+                      return;
+                    }
+                    setGeneratingDescription(true);
+                    try {
+                      const suggestion = await suggestProjectDescriptionApi(trimmed);
+                      setDescription(suggestion.description ?? "");
+                      showSnackbar({
+                        variant: "success",
+                        title: "Description generated",
+                        message: "Review the AI suggestion before saving the project.",
+                      });
+                    } catch (error) {
+                      showSnackbar({
+                        variant: "error",
+                        title: "AI description failed",
+                        message: getApiErrorMessage(
+                          error,
+                          "Could not generate a project description.",
+                        ),
+                      });
+                    } finally {
+                      setGeneratingDescription(false);
+                    }
+                  }}
+                  className="mt-2 min-h-[46px] flex-row items-center justify-between rounded-nova border border-glass bg-glass-button px-3 disabled:opacity-50 dark:border-dark-glass dark:bg-dark-glass-button"
+                >
+                  <View className="flex-1">
+                    <Text className="text-xs font-black text-primary dark:text-dark-primary">
+                      {generatingDescription
+                        ? "Writing project description"
+                        : "Generate with AI"}
+                    </Text>
+                    <Text className="mt-0.5 text-[11px] text-muted dark:text-dark-muted">
+                      Create a concise description from the project name.
+                    </Text>
+                  </View>
+                  <Text className="rounded-full border border-accent/40 px-2 py-0.5 text-[10px] font-black text-accent dark:text-dark-accent">
+                    AI
+                  </Text>
+                </Pressable>
+              ) : null}
             </View>
 
             <View>
@@ -584,6 +666,8 @@ export default function ProjectsScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [activeFilter, setActiveFilter] = useState<FilterStatus>("All");
+  const [ownershipFilter, setOwnershipFilter] =
+    useState<ProjectOwnershipFilter>("All");
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerMode, setDrawerMode] = useState<DrawerMode>("create");
   const [editingProject, setEditingProject] = useState<Project | null>(null);
@@ -611,12 +695,16 @@ export default function ProjectsScreen() {
   }, [loadProjects]);
 
   const filteredProjects = useMemo(() => {
-    const list =
-      activeFilter === "All"
-        ? projects
-        : projects.filter((project) => project.status === activeFilter);
+    const list = projects.filter((project) => {
+      const matchesStatus =
+        activeFilter === "All" || project.status === activeFilter;
+      return (
+        matchesStatus &&
+        matchesOwnershipFilter(project, ownershipFilter, user?.id)
+      );
+    });
     return sortProjectsByStatus(list);
-  }, [activeFilter, projects]);
+  }, [activeFilter, ownershipFilter, projects, user?.id]);
 
   const canCreateProjects = useMemo(() => {
     if (user?.isDemo) return false;
@@ -679,6 +767,13 @@ export default function ProjectsScreen() {
           title: "Project created",
           message: `"${input.title}" is ready to use.`,
         });
+        setDrawerOpen(false);
+        requestOpenNewTask(created.id);
+        router.push({
+          pathname: "/project/[id]",
+          params: { id: created.id, newTask: "1" },
+        });
+        return;
       }
       setDrawerOpen(false);
     } catch (error) {
@@ -754,37 +849,30 @@ export default function ProjectsScreen() {
           ) : null}
         </View>
 
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerClassName="gap-2 rounded-nova-xl border border-accent/35 bg-glass-card p-3 dark:bg-dark-glass-card"
-        >
-          {FILTERS.map((filter) => {
-            const active = activeFilter === filter;
-            return (
-              <Pressable
-                key={filter}
-                accessibilityRole="button"
-                onPress={() => setActiveFilter(filter)}
-                className={`rounded-full border px-3 py-2 ${
-                  active
-                    ? "border-accent bg-accent/20 dark:border-dark-accent dark:bg-dark-accent/20"
-                    : "border-accent/35 bg-glass-button dark:border-dark-accent/35 dark:bg-dark-glass-button"
-                }`}
-              >
-                <Text
-                  className={`text-xs font-black ${
-                    active
-                      ? "text-accent dark:text-dark-accent"
-                      : "text-primary dark:text-dark-primary"
-                  }`}
-                >
-                  {filter === "All" ? "All" : projectStatusLabel(filter)}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
+        <View className="flex-row gap-3">
+          <View className="flex-1">
+            <SelectField
+              label="Ownership"
+              value={ownershipFilter}
+              options={OWNERSHIP_OPTIONS}
+              onChange={(value) =>
+                setOwnershipFilter(value as ProjectOwnershipFilter)
+              }
+              title="Ownership"
+              subtitle="Show projects you own or share."
+            />
+          </View>
+          <View className="flex-1">
+            <SelectField
+              label="Status"
+              value={activeFilter}
+              options={STATUS_OPTIONS}
+              onChange={(value) => setActiveFilter(value as FilterStatus)}
+              title="Status"
+              subtitle="Filter by project status."
+            />
+          </View>
+        </View>
 
         {filteredProjects.length === 0 ? (
           <View className="items-center rounded-nova-xl border border-glass bg-sidebar p-8 dark:border-dark-glass dark:bg-dark-sidebar">
