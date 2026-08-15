@@ -159,31 +159,6 @@ function parseRegion(raw: unknown, index: number): SemanticRegion {
   };
 }
 
-export function validateWhiteboardDocument(
-  raw: unknown,
-): WhiteboardDocumentContent {
-  const doc = assertPlainObject(raw, 'documentJson');
-  rejectForbiddenKeys(doc, 'documentJson');
-
-  const canvas = assertPlainObject(doc.canvas, 'canvas');
-  if (typeof canvas.width !== 'number' || typeof canvas.height !== 'number') {
-    throw new BadRequestException('canvas.width and canvas.height are required');
-  }
-
-  if (!Array.isArray(doc.strokes)) {
-    throw new BadRequestException('strokes must be an array');
-  }
-  if (!Array.isArray(doc.regions)) {
-    throw new BadRequestException('regions must be an array');
-  }
-
-  return {
-    canvas: { width: canvas.width, height: canvas.height },
-    strokes: doc.strokes.map((s, i) => parseStroke(s, i)),
-    regions: doc.regions.map((r, i) => parseRegion(r, i)),
-  };
-}
-
 export function emptyWhiteboardDocument(): WhiteboardDocumentContent {
   return {
     canvas: { width: 2000, height: 1500 },
@@ -200,6 +175,28 @@ export type WhiteboardOps = {
   canvas?: { width: number; height: number };
 };
 
+/** Trust already-persisted ink; only parse incoming ops. O(K) not O(K·Q). */
+function readStoredDocument(raw: unknown): WhiteboardDocumentContent {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    return emptyWhiteboardDocument();
+  }
+  const doc = raw as Record<string, unknown>;
+  const canvasRaw =
+    doc.canvas && typeof doc.canvas === 'object' && !Array.isArray(doc.canvas)
+      ? (doc.canvas as Record<string, unknown>)
+      : null;
+  const width =
+    typeof canvasRaw?.width === 'number' ? canvasRaw.width : 2000;
+  const height =
+    typeof canvasRaw?.height === 'number' ? canvasRaw.height : 1500;
+
+  return {
+    canvas: { width, height },
+    strokes: Array.isArray(doc.strokes) ? (doc.strokes as Stroke[]) : [],
+    regions: Array.isArray(doc.regions) ? (doc.regions as SemanticRegion[]) : [],
+  };
+}
+
 export function applyWhiteboardOps(
   current: unknown,
   ops: WhiteboardOps,
@@ -215,10 +212,7 @@ export function applyWhiteboardOps(
     throw new BadRequestException('At least one whiteboard op is required');
   }
 
-  const base =
-    current && typeof current === 'object'
-      ? validateWhiteboardDocument(current)
-      : emptyWhiteboardDocument();
+  const base = readStoredDocument(current);
 
   const removedStrokeIds = new Set(ops.removedStrokeIds ?? []);
   const strokeMap = new Map(

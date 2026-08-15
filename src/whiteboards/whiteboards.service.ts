@@ -27,6 +27,12 @@ import {
   emptyWhiteboardDocument,
 } from './validate-document';
 import {
+  BoardRow,
+  boardTitle,
+  formatWhiteboard,
+  hasWhiteboardDocumentOps,
+} from './whiteboard-format';
+import {
   EDIT_ACTIVITY_WINDOW_MS,
   WhiteboardActivityType,
 } from './whiteboard-activity';
@@ -58,6 +64,15 @@ const PAGE_INCLUDE = {
   snapshot: true,
 } as const;
 
+const PAGE_LIST_SELECT = {
+  id: true,
+  index: true,
+  version: true,
+  createdAt: true,
+  updatedAt: true,
+  snapshot: true,
+} as const;
+
 const BOARD_INCLUDE = {
   members: { include: { user: { select: MEMBER_SELECT } } },
   pages: { orderBy: { index: 'asc' as const }, include: PAGE_INCLUDE },
@@ -66,55 +81,12 @@ const BOARD_INCLUDE = {
   },
 };
 
-type SnapshotRow = {
-  imageUrl: string;
-  storagePath: string;
-  width: number;
-  height: number;
-  updatedAt: Date;
-} | null;
-
-type PageRow = {
-  id: string;
-  index: number;
-  documentJson: unknown;
-  version: number;
-  createdAt: Date;
-  updatedAt: Date;
-  snapshot: SnapshotRow;
-};
-
-type MemberRow = {
-  userId: string;
-  role: WhiteboardRole;
-  user: {
-    id: string;
-    fullName: string;
-    email: string;
-    username: string;
-    avatarUrl: string | null;
-    roleTitle: string | null;
-  };
-};
-
-type BoardRow = {
-  id: string;
-  title: string | null;
-  projectId: string | null;
-  createdById: string;
-  createdAt: Date;
-  updatedAt: Date;
-  lastEditedAt: Date | null;
-  lastEditedById: string | null;
+const BOARD_LIST_INCLUDE = {
+  members: { include: { user: { select: MEMBER_SELECT } } },
+  pages: { orderBy: { index: 'asc' as const }, select: PAGE_LIST_SELECT },
   lastEditedBy: {
-    id: string;
-    fullName: string;
-    avatarUrl: string | null;
-    username: string | null;
-  } | null;
-  duplicatedFromId: string | null;
-  pages: PageRow[];
-  members: MemberRow[];
+    select: { id: true, fullName: true, avatarUrl: true, username: true },
+  },
 };
 
 @Injectable()
@@ -127,76 +99,6 @@ export class WhiteboardsService {
     private readonly notifications: NotificationsService,
     private readonly demoService: DemoService,
   ) {}
-
-  private formatSnapshot(row: NonNullable<SnapshotRow>) {
-    return {
-      imageUrl: row.imageUrl,
-      storagePath: row.storagePath,
-      width: row.width,
-      height: row.height,
-      updatedAt: row.updatedAt.toISOString(),
-    };
-  }
-
-  private formatPage(page: PageRow, includeDocument: boolean) {
-    return {
-      id: page.id,
-      index: page.index,
-      version: page.version,
-      createdAt: page.createdAt.toISOString(),
-      updatedAt: page.updatedAt.toISOString(),
-      snapshot: page.snapshot ? this.formatSnapshot(page.snapshot) : null,
-      ...(includeDocument ? { documentJson: page.documentJson } : {}),
-    };
-  }
-
-  private formatMember(member: MemberRow) {
-    return {
-      userId: member.userId,
-      role: member.role,
-      fullName: member.user.fullName,
-      email: member.user.email,
-      username: member.user.username,
-      avatarUrl: member.user.avatarUrl,
-      roleTitle: member.user.roleTitle,
-    };
-  }
-
-  private formatWhiteboard(
-    row: BoardRow,
-    userId: string,
-    includeDocuments: boolean,
-  ) {
-    const cover =
-      row.pages.find((page) => page.snapshot)?.snapshot ??
-      row.pages[0]?.snapshot ??
-      null;
-
-    return {
-      id: row.id,
-      title: row.title,
-      projectId: row.projectId,
-      createdById: row.createdById,
-      createdAt: row.createdAt.toISOString(),
-      updatedAt: row.updatedAt.toISOString(),
-      lastEditedAt: row.lastEditedAt?.toISOString() ?? row.updatedAt.toISOString(),
-      lastEditedBy: row.lastEditedBy
-        ? {
-            id: row.lastEditedBy.id,
-            fullName: row.lastEditedBy.fullName,
-            avatarUrl: row.lastEditedBy.avatarUrl,
-            username: row.lastEditedBy.username,
-          }
-        : null,
-      duplicatedFromId: row.duplicatedFromId,
-      myRole:
-        row.members.find((member) => member.userId === userId)?.role ??
-        (row.createdById === userId ? WhiteboardRole.ADMIN : null),
-      members: row.members.map((member) => this.formatMember(member)),
-      pages: row.pages.map((page) => this.formatPage(page, includeDocuments)),
-      snapshot: cover ? this.formatSnapshot(cover) : null,
-    };
-  }
 
   private async loadBoard(id: string) {
     const row = await this.prisma.whiteboard.findUnique({
@@ -261,12 +163,6 @@ export class WhiteboardsService {
     }
   }
 
-  private ensureCanSaveImage(role: WhiteboardRole) {
-    if (role !== WhiteboardRole.ADMIN) {
-      throw new ForbiddenException('Only admins can save the board as an image');
-    }
-  }
-
   private adminCount(board: BoardRow) {
     return board.members.filter((member) => member.role === WhiteboardRole.ADMIN)
       .length;
@@ -304,7 +200,7 @@ export class WhiteboardsService {
     );
     await this.touchLastEdited(row.id, userId);
 
-    return this.formatWhiteboard(row as unknown as BoardRow, userId, true);
+    return formatWhiteboard(row as unknown as BoardRow, userId, true);
   }
 
   async findByProject(userId: string, projectId: string) {
@@ -316,11 +212,11 @@ export class WhiteboardsService {
         members: { some: { userId } },
       },
       orderBy: { updatedAt: 'desc' },
-      include: BOARD_INCLUDE,
+      include: BOARD_LIST_INCLUDE,
     });
 
     return rows.map((row) =>
-      this.formatWhiteboard(row as unknown as BoardRow, userId, false),
+      formatWhiteboard(row as unknown as BoardRow, userId, false),
     );
   }
 
@@ -330,18 +226,18 @@ export class WhiteboardsService {
         OR: [{ createdById: userId }, { members: { some: { userId } } }],
       },
       orderBy: { updatedAt: 'desc' },
-      include: BOARD_INCLUDE,
+      include: BOARD_LIST_INCLUDE,
     });
 
     return rows.map((row) =>
-      this.formatWhiteboard(row as unknown as BoardRow, userId, false),
+      formatWhiteboard(row as unknown as BoardRow, userId, false),
     );
   }
 
   async findOne(userId: string, id: string) {
     const row = await this.loadBoard(id);
     await this.ensureWhiteboardAccess(userId, row);
-    return this.formatWhiteboard(row, userId, true);
+    return formatWhiteboard(row, userId, true);
   }
 
   async update(userId: string, id: string, dto: UpdateWhiteboardDto) {
@@ -367,7 +263,7 @@ export class WhiteboardsService {
     }
     await this.touchLastEdited(id, userId);
 
-    return this.formatWhiteboard(updated as unknown as BoardRow, userId, true);
+    return formatWhiteboard(updated as unknown as BoardRow, userId, true);
   }
 
   async applyBoardOps(userId: string, id: string, dto: ApplyWhiteboardOpsDto) {
@@ -376,19 +272,11 @@ export class WhiteboardsService {
     const firstPage = row.pages[0];
     if (!firstPage) throw new NotFoundException('Whiteboard page not found');
 
-    const hasDocumentOps =
-      (dto.addedStrokes?.length ?? 0) > 0 ||
-      (dto.removedStrokeIds?.length ?? 0) > 0 ||
-      (dto.addedRegions?.length ?? 0) > 0 ||
-      (dto.removedRegionIds?.length ?? 0) > 0 ||
-      dto.canvas != null;
-
-    if (hasDocumentOps) this.ensureCanDraw(member.role);
-    else if (dto.title === undefined) {
+    const hasDocumentOps = hasWhiteboardDocumentOps(dto);
+    if (!hasDocumentOps && dto.title === undefined) {
       throw new BadRequestException('At least one whiteboard op is required');
-    } else {
-      this.ensureCanDraw(member.role);
     }
+    this.ensureCanDraw(member.role);
 
     if (hasDocumentOps) {
       return this.applyPageOps(userId, id, firstPage.id, dto);
@@ -400,7 +288,7 @@ export class WhiteboardsService {
       include: BOARD_INCLUDE,
     });
 
-    return this.formatWhiteboard(updated as unknown as BoardRow, userId, true);
+    return formatWhiteboard(updated as unknown as BoardRow, userId, true);
   }
 
   async applyPageOps(
@@ -416,13 +304,7 @@ export class WhiteboardsService {
     const page = row.pages.find((item) => item.id === pageId);
     if (!page) throw new NotFoundException('Whiteboard page not found');
 
-    const hasDocumentOps =
-      (dto.addedStrokes?.length ?? 0) > 0 ||
-      (dto.removedStrokeIds?.length ?? 0) > 0 ||
-      (dto.addedRegions?.length ?? 0) > 0 ||
-      (dto.removedRegionIds?.length ?? 0) > 0 ||
-      dto.canvas != null;
-
+    const hasDocumentOps = hasWhiteboardDocumentOps(dto);
     if (!hasDocumentOps && dto.title === undefined) {
       throw new BadRequestException('At least one whiteboard op is required');
     }
@@ -452,7 +334,7 @@ export class WhiteboardsService {
     }
     await this.touchLastEdited(whiteboardId, userId);
 
-    return this.formatWhiteboard(await this.loadBoard(whiteboardId), userId, true);
+    return formatWhiteboard(await this.loadBoard(whiteboardId), userId, true);
   }
 
   /** Merge ops onto the latest page document using version as a compare-and-swap. */
@@ -514,7 +396,7 @@ export class WhiteboardsService {
     );
     await this.touchLastEdited(whiteboardId, userId);
 
-    return this.formatWhiteboard(await this.loadBoard(whiteboardId), userId, true);
+    return formatWhiteboard(await this.loadBoard(whiteboardId), userId, true);
   }
 
   async removePage(userId: string, whiteboardId: string, pageId: string) {
@@ -562,7 +444,7 @@ export class WhiteboardsService {
     );
     await this.touchLastEdited(whiteboardId, userId);
 
-    return this.formatWhiteboard(await this.loadBoard(whiteboardId), userId, true);
+    return formatWhiteboard(await this.loadBoard(whiteboardId), userId, true);
   }
 
   async remove(userId: string, id: string) {
@@ -586,7 +468,7 @@ export class WhiteboardsService {
       this.notifications.notifyWhiteboardDeleted(
         recipientIds,
         id,
-        this.boardTitle(row),
+        boardTitle(row),
         row.projectId,
       ),
     );
@@ -604,7 +486,7 @@ export class WhiteboardsService {
   ) {
     const row = await this.loadBoard(whiteboardId);
     const member = await this.ensureWhiteboardAccess(userId, row);
-    this.ensureCanSaveImage(member.role);
+    this.ensureCanManage(member.role);
 
     const page = row.pages.find((item) => item.id === pageId);
     if (!page) throw new NotFoundException('Whiteboard page not found');
@@ -734,7 +616,7 @@ export class WhiteboardsService {
           this.notifications.notifyWhiteboardMemberAdded(
             input.userId,
             whiteboardId,
-            this.boardTitle(row),
+            boardTitle(row),
             inviterName,
             input.role,
             row.projectId,
@@ -764,7 +646,7 @@ export class WhiteboardsService {
       ),
     );
 
-    return this.formatWhiteboard(await this.loadBoard(whiteboardId), userId, true);
+    return formatWhiteboard(await this.loadBoard(whiteboardId), userId, true);
   }
 
   async updateMember(
@@ -808,13 +690,13 @@ export class WhiteboardsService {
         this.notifications.notifyWhiteboardRoleChanged(
           userId,
           whiteboardId,
-          this.boardTitle(row),
+          boardTitle(row),
           dto.role,
         ),
       );
     }
 
-    return this.formatWhiteboard(await this.loadBoard(whiteboardId), actorId, true);
+    return formatWhiteboard(await this.loadBoard(whiteboardId), actorId, true);
   }
 
   async removeMember(actorId: string, whiteboardId: string, userId: string) {
@@ -845,12 +727,12 @@ export class WhiteboardsService {
         this.notifications.notifyWhiteboardMemberRemoved(
           userId,
           whiteboardId,
-          this.boardTitle(row),
+          boardTitle(row),
         ),
       );
     }
 
-    return this.formatWhiteboard(await this.loadBoard(whiteboardId), actorId, true);
+    return formatWhiteboard(await this.loadBoard(whiteboardId), actorId, true);
   }
 
   async duplicate(userId: string, id: string) {
@@ -861,7 +743,7 @@ export class WhiteboardsService {
       await this.ensureProjectAccess(userId, source.projectId, false);
     }
 
-    const title = `${this.boardTitle(source)} (copy)`;
+    const title = `${boardTitle(source)} (copy)`;
     const created = await this.prisma.whiteboard.create({
       data: {
         title,
@@ -909,10 +791,10 @@ export class WhiteboardsService {
 
     await this.recordActivity(created.id, userId, WhiteboardActivityType.DUPLICATED, {
       sourceWhiteboardId: source.id,
-      sourceTitle: this.boardTitle(source),
+      sourceTitle: boardTitle(source),
     });
 
-    return this.formatWhiteboard(await this.loadBoard(created.id), userId, true);
+    return formatWhiteboard(await this.loadBoard(created.id), userId, true);
   }
 
   async listActivity(userId: string, id: string) {
@@ -1025,7 +907,7 @@ export class WhiteboardsService {
       this.notifications.notifyWhiteboardCommentMention(
         mentioned.map((user) => user.id).filter((mentionedId) => mentionedId !== userId),
         actorName,
-        this.boardTitle(row),
+        boardTitle(row),
         id,
         row.projectId,
       ),
@@ -1081,7 +963,7 @@ export class WhiteboardsService {
     return {
       token: invite.token,
       role: invite.role,
-      title: this.boardTitle(invite.whiteboard as unknown as BoardRow),
+      title: boardTitle(invite.whiteboard as unknown as BoardRow),
       projectId: invite.whiteboard.projectId,
     };
   }
@@ -1095,7 +977,7 @@ export class WhiteboardsService {
     const board = invite.whiteboard as unknown as BoardRow;
     const existing = this.membership(board, userId);
     if (existing) {
-      return this.formatWhiteboard(board, userId, true);
+      return formatWhiteboard(board, userId, true);
     }
 
     if (board.projectId) {
@@ -1129,14 +1011,14 @@ export class WhiteboardsService {
       this.notifications.notifyWhiteboardMemberAdded(
         userId,
         board.id,
-        this.boardTitle(board),
+        boardTitle(board),
         inviterName,
         invite.role,
         board.projectId,
       ),
     );
 
-    return this.formatWhiteboard(await this.loadBoard(board.id), userId, true);
+    return formatWhiteboard(await this.loadBoard(board.id), userId, true);
   }
 
   async exportBoard(
@@ -1181,7 +1063,7 @@ export class WhiteboardsService {
       );
     }
 
-    const slug = this.boardTitle(row)
+    const slug = boardTitle(row)
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-|-$/g, '') || 'whiteboard';
@@ -1346,10 +1228,6 @@ export class WhiteboardsService {
       actorId,
       WhiteboardActivityType.EDITED,
     );
-  }
-
-  private boardTitle(row: BoardRow) {
-    return row.title?.trim() || 'Untitled whiteboard';
   }
 
   private async notifySafely(send: () => Promise<unknown>) {

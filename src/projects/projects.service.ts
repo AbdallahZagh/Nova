@@ -8,6 +8,7 @@ import { ProjectRole } from '../common/decorators/require-project-role.decorator
 import { EmailService } from '../mail/email.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { myProjectsWhere } from '../common/task-access';
 import {
   AddProjectMemberDto,
   ProjectMemberInputDto,
@@ -83,9 +84,7 @@ export class ProjectsService {
 
   async findAll(userId: string) {
     const projects = await (this.prisma as any).project.findMany({
-      where: {
-        OR: [{ ownerId: userId }, { members: { some: { userId } } }],
-      },
+      where: myProjectsWhere(userId),
       include: {
         owner: { select: MEMBER_SELECT },
         members: {

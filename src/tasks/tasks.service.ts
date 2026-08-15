@@ -39,7 +39,7 @@ const ASSIGNABLE_PROJECT_ROLES = [
   ProjectRole.MEMBER,
 ];
 
-const TASK_INCLUDE = {
+const TASK_CARD_INCLUDE = {
   subtasks: {
     include: {
       assignments: {
@@ -53,6 +53,15 @@ const TASK_INCLUDE = {
     include: { user: { select: ASSIGNEE_SELECT } },
     orderBy: { assignedAt: 'asc' as const },
   },
+  taskActivities: {
+    orderBy: { createdAt: 'desc' as const },
+    take: 1,
+    include: { createdBy: { select: ACTIVITY_USER_SELECT } },
+  },
+};
+
+const TASK_INCLUDE = {
+  ...TASK_CARD_INCLUDE,
   taskActivities: {
     orderBy: { createdAt: 'desc' as const },
     include: { createdBy: { select: ACTIVITY_USER_SELECT } },
@@ -157,7 +166,7 @@ export class TasksService {
   async findByProject(projectId: string) {
     const tasks = await (this.prisma as any).task.findMany({
       where: { projectId },
-      include: TASK_INCLUDE,
+      include: TASK_CARD_INCLUDE,
       orderBy: { createdAt: 'desc' },
     });
 

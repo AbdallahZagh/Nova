@@ -4,6 +4,7 @@ import {
   Injectable,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { myProjectsWhere } from '../common/task-access';
 
 export type TimelineFilter =
   | 'today'
@@ -56,7 +57,7 @@ export class TimelineService {
       const project = await (this.prisma as any).project.findFirst({
         where: {
           id: projectId,
-          OR: [{ ownerId: userId }, { members: { some: { userId } } }],
+          ...myProjectsWhere(userId),
         },
         select: { id: true },
       });
@@ -65,9 +66,7 @@ export class TimelineService {
       }
       where.projectId = projectId;
     } else {
-      where.project = {
-        OR: [{ ownerId: userId }, { members: { some: { userId } } }],
-      };
+      where.project = myProjectsWhere(userId);
     }
 
     const tasks = await (this.prisma as any).task.findMany({

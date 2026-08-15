@@ -1,28 +1,6 @@
 import { Injectable } from '@nestjs/common';
+import { myProjectsWhere, myTasksWhere } from '../common/task-access';
 import { PrismaService } from '../prisma/prisma.service';
-
-/**
- * "My tasks" — tasks that belong to the requesting user:
- *   1. Explicitly assigned to them
- *   2. Unassigned tasks inside projects they own or are a member of
- *      (covers data created before the auto-assign feature was added)
- *
- * Tasks assigned to a *different* user are never included.
- */
-function myTasksWhere(userId: string) {
-  return {
-    OR: [
-      { assigneeId: userId },
-      { assignments: { some: { userId } } },
-      {
-        assigneeId: null,
-        project: {
-          OR: [{ ownerId: userId }, { members: { some: { userId } } }],
-        },
-      },
-    ],
-  };
-}
 
 const PRIORITY_WEIGHT: Record<string, number> = {
   Critical: 4,
@@ -31,61 +9,80 @@ const PRIORITY_WEIGHT: Record<string, number> = {
   Low: 1,
 };
 
+type ActivityEntry = {
+  id: string;
+  title: string;
+  status: string;
+  dueDate: string | null;
+  projectId: string | null;
+  projectName: string | null;
+  completionPercentage: number;
+};
+
 @Injectable()
 export class DashboardService {
   constructor(private readonly prisma: PrismaService) {}
 
-  // ─── Metrics ──────────────────────────────────────────────────────────────
+  async getSummary(userId: string) {
+    const [metrics, activity, urgentTasks, continueData] = await Promise.all([
+      this.getMetrics(userId),
+      this.getActivity(userId),
+      this.getUrgentTasks(userId),
+      this.getContinue(userId),
+    ]);
 
-  async getMetrics(userId: string) {
-    const today = new Date();
+    return {
+      metrics,
+      activity,
+      urgentTasks,
+      continue: continueData,
+    };
+  }
 
-    const tasks = await (this.prisma as any).task.findMany({
-      where: myTasksWhere(userId),
-      select: {
-        status: true,
-        dueDate: true,
-        subtasks: { select: { isCompleted: true } },
-      },
-    });
+  private async getMetrics(userId: string) {
+    const today = this.startOfDay(new Date());
+    const tomorrow = this.addDays(today, 1);
+    const mine = myTasksWhere(userId);
 
-    const tasksDueToday = tasks.filter(
-      (t: any) =>
-        t.dueDate &&
-        t.status !== 'Completed' &&
-        this.sameCalendarDay(new Date(t.dueDate), today),
-    ).length;
+    const [
+      tasksDueToday,
+      activeProjectsCount,
+      totalSubtasks,
+      completedSubtasks,
+      totalTasks,
+      completedTasks,
+    ] = await Promise.all([
+      this.prisma.task.count({
+        where: {
+          AND: [
+            mine,
+            {
+              status: { not: 'Completed' },
+              dueDate: { gte: today, lt: tomorrow },
+            },
+          ],
+        },
+      }),
+      this.prisma.project.count({
+        where: { status: 'Active', ...myProjectsWhere(userId) },
+      }),
+      this.prisma.subtask.count({ where: { task: mine } }),
+      this.prisma.subtask.count({
+        where: { isCompleted: true, task: mine },
+      }),
+      this.prisma.task.count({ where: mine }),
+      this.prisma.task.count({
+        where: { AND: [mine, { status: 'Completed' }] },
+      }),
+    ]);
 
-    const activeProjectsCount = await (this.prisma as any).project.count({
-      where: {
-        status: 'Active',
-        OR: [{ ownerId: userId }, { members: { some: { userId } } }],
-      },
-    });
-
-    let totalSubtasks = 0;
-    let completedSubtasks = 0;
-
-    for (const task of tasks) {
-      totalSubtasks += task.subtasks.length;
-      completedSubtasks += task.subtasks.filter(
-        (s: any) => s.isCompleted,
-      ).length;
-    }
-
-    let productivityPercentage: number;
-
+    let productivityPercentage = 0;
     if (totalSubtasks > 0) {
       productivityPercentage = Math.round(
         (completedSubtasks / totalSubtasks) * 100,
       );
-    } else if (tasks.length > 0) {
-      const doneTasks = tasks.filter(
-        (t: any) => t.status === 'Completed',
-      ).length;
-      productivityPercentage = Math.round((doneTasks / tasks.length) * 100);
-    } else {
-      productivityPercentage = 0;
+    } else if (totalTasks > 0) {
+      productivityPercentage = Math.round((completedTasks / totalTasks) * 100);
     }
 
     return {
@@ -95,18 +92,18 @@ export class DashboardService {
       _meta: {
         totalSubtasks,
         completedSubtasks,
-        totalTasks: tasks.length,
+        totalTasks,
       },
     };
   }
 
-  // ─── Activity heatmap ─────────────────────────────────────────────────────
-
-  async getActivity(userId: string): Promise<Record<string, ActivityEntry[]>> {
+  private async getActivity(
+    userId: string,
+  ): Promise<Record<string, ActivityEntry[]>> {
     const oneYearAgo = new Date();
     oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
 
-    const tasks = await (this.prisma as any).task.findMany({
+    const tasks = await this.prisma.task.findMany({
       where: {
         AND: [
           myTasksWhere(userId),
@@ -127,18 +124,39 @@ export class DashboardService {
         createdAt: true,
         completedAt: true,
         project: { select: { id: true, name: true } },
-        subtasks: { select: { isCompleted: true } },
+        _count: { select: { subtasks: true } },
       },
     });
+
+    const completedByTask = new Map<string, number>();
+    if (tasks.length > 0) {
+      const grouped = await this.prisma.subtask.groupBy({
+        by: ['taskId'],
+        where: {
+          isCompleted: true,
+          taskId: { in: tasks.map((task) => task.id) },
+        },
+        _count: { _all: true },
+      });
+      for (const row of grouped) {
+        completedByTask.set(row.taskId, row._count._all);
+      }
+    }
 
     const map: Record<string, ActivityEntry[]> = {};
 
     for (const task of tasks) {
       const dateKey = this.resolveDateKey(task);
-      const completionPercentage = this.calcCompletion(task);
+      const total = task._count.subtasks;
+      const done = completedByTask.get(task.id) ?? 0;
+      const completionPercentage =
+        total === 0
+          ? task.status === 'Completed'
+            ? 100
+            : 0
+          : Math.round((done / total) * 1000) / 10;
 
       if (!map[dateKey]) map[dateKey] = [];
-
       map[dateKey].push({
         id: task.id,
         title: task.title,
@@ -151,16 +169,17 @@ export class DashboardService {
     }
 
     for (const key of Object.keys(map)) {
-      map[key].sort((a, b) => b.completionPercentage - a.completionPercentage);
+      map[key].sort(
+        (a, b) => b.completionPercentage - a.completionPercentage,
+      );
     }
 
     return map;
   }
 
-  // ─── Urgent tasks ─────────────────────────────────────────────────────────
-
-  async getUrgentTasks(userId: string) {
-    const tasks = await (this.prisma as any).task.findMany({
+  private async getUrgentTasks(userId: string) {
+    const today = this.startOfDay(new Date());
+    const tasks = await this.prisma.task.findMany({
       where: {
         AND: [
           myTasksWhere(userId),
@@ -177,12 +196,12 @@ export class DashboardService {
         dueDate: true,
         project: { select: { id: true, name: true } },
       },
+      orderBy: { dueDate: { sort: 'asc', nulls: 'last' } },
+      take: 6,
     });
 
-    const today = this.startOfDay(new Date());
-
-    const sorted = tasks
-      .map((task: any) => ({
+    return tasks
+      .map((task) => ({
         id: task.id,
         title: task.title,
         projectId: task.project?.id ?? null,
@@ -194,36 +213,29 @@ export class DashboardService {
           ? this.computeDueLabel(task.dueDate, today)
           : 'No due date',
         _dueTime: task.dueDate
-          ? new Date(task.dueDate).getTime()
+          ? task.dueDate.getTime()
           : Number.MAX_SAFE_INTEGER,
         _weight: PRIORITY_WEIGHT[task.priority] ?? 0,
       }))
-      .sort((a: any, b: any) => {
+      .sort((a, b) => {
         if (a._dueTime !== b._dueTime) return a._dueTime - b._dueTime;
         return b._weight - a._weight;
       })
-      .slice(0, 6)
-      .map(({ _dueTime, _weight, ...rest }: any) => rest);
-
-    return sorted;
+      .map(({ _dueTime, _weight, ...rest }) => rest);
   }
 
-  // ─── Continue strip ───────────────────────────────────────────────────────
-
-  async getContinue(userId: string) {
+  private async getContinue(userId: string) {
     const today = this.startOfDay(new Date());
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
+    const tomorrow = this.addDays(today, 1);
+    const projectsWhere = myProjectsWhere(userId);
 
     const [lastProject, lastWhiteboard, dueToday] = await Promise.all([
-      (this.prisma as any).project.findFirst({
-        where: {
-          OR: [{ ownerId: userId }, { members: { some: { userId } } }],
-        },
+      this.prisma.project.findFirst({
+        where: projectsWhere,
         orderBy: { updatedAt: 'desc' },
         select: { id: true, name: true, status: true, updatedAt: true },
       }),
-      (this.prisma as any).whiteboard.findFirst({
+      this.prisma.whiteboard.findFirst({
         where: {
           OR: [{ createdById: userId }, { members: { some: { userId } } }],
         },
@@ -236,7 +248,7 @@ export class DashboardService {
           projectId: true,
         },
       }),
-      (this.prisma as any).task.findMany({
+      this.prisma.task.findMany({
         where: {
           AND: [
             myTasksWhere(userId),
@@ -277,7 +289,7 @@ export class DashboardService {
             ).toISOString(),
           }
         : null,
-      dueToday: dueToday.map((task: any) => ({
+      dueToday: dueToday.map((task) => ({
         id: task.id,
         title: task.title,
         status: task.status,
@@ -288,15 +300,17 @@ export class DashboardService {
     };
   }
 
-  // ─── Private helpers ──────────────────────────────────────────────────────
-
-  /** UI label: High and Critical both surface as "Urgent" in the widget. */
   private mapUrgency(priority: string): string {
     if (priority === 'Critical' || priority === 'High') return 'Urgent';
     return priority;
   }
 
-  private resolveDateKey(task: any): string {
+  private resolveDateKey(task: {
+    status: string;
+    completedAt: Date | null;
+    dueDate: Date | null;
+    createdAt: Date;
+  }): string {
     if (task.status === 'Completed' && task.completedAt) {
       return this.toDateString(task.completedAt);
     }
@@ -304,23 +318,6 @@ export class DashboardService {
       return this.toDateString(task.dueDate);
     }
     return this.toDateString(task.createdAt);
-  }
-
-  private calcCompletion(task: any): number {
-    const total: number = task.subtasks.length;
-    if (total === 0) {
-      return task.status === 'Completed' ? 100 : 0;
-    }
-    const done = task.subtasks.filter((s: any) => s.isCompleted).length;
-    return Math.round((done / total) * 1000) / 10;
-  }
-
-  private sameCalendarDay(a: Date, b: Date): boolean {
-    return (
-      a.getFullYear() === b.getFullYear() &&
-      a.getMonth() === b.getMonth() &&
-      a.getDate() === b.getDate()
-    );
   }
 
   private toDateString(date: Date): string {
@@ -331,10 +328,17 @@ export class DashboardService {
     return new Date(date.getFullYear(), date.getMonth(), date.getDate());
   }
 
+  private addDays(date: Date, days: number) {
+    const next = new Date(date);
+    next.setDate(next.getDate() + days);
+    return next;
+  }
+
   private computeDueLabel(dueDate: Date, today: Date): string {
     const due = this.startOfDay(dueDate);
-    const diffMs = due.getTime() - today.getTime();
-    const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
+    const diffDays = Math.round(
+      (due.getTime() - today.getTime()) / (1000 * 60 * 60 * 24),
+    );
 
     if (diffDays < -1) return `${Math.abs(diffDays)}d overdue`;
     if (diffDays === -1) return 'Yesterday';
@@ -342,14 +346,4 @@ export class DashboardService {
     if (diffDays === 1) return 'Tomorrow';
     return `In ${diffDays} days`;
   }
-}
-
-interface ActivityEntry {
-  id: string;
-  title: string;
-  status: string;
-  dueDate: string | null;
-  projectId: string | null;
-  projectName: string | null;
-  completionPercentage: number;
 }

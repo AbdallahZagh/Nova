@@ -83,6 +83,8 @@ model Project {
   suggestions ProjectSuggestion[]
   whiteboards Whiteboard[]
 
+  @@index([ownerId])
+  @@index([status])
   @@map("projects")
 }
 
@@ -101,6 +103,7 @@ model ProjectSuggestion {
 
   mentionedUserIds Json @default("[]")
 
+  @@index([projectId])
   @@map("project_suggestions")
 }
 
@@ -146,6 +149,11 @@ model Task {
   comments       TaskComment[]
   assignments    TaskAssignment[]
 
+  @@index([projectId])
+  @@index([assigneeId])
+  @@index([dueDate])
+  @@index([status])
+  @@index([projectId, status])
   @@map("tasks")
 }
 
@@ -158,6 +166,7 @@ model TaskAssignment {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@id([taskId, userId])
+  @@index([userId])
   @@map("task_assignments")
 }
 
@@ -187,6 +196,7 @@ model TaskComment {
   mentionedUserIds Json @default("[]")
   replyMentionedUserIds Json @default("[]")
 
+  @@index([taskId])
   @@map("task_comments")
 }
 
@@ -205,6 +215,7 @@ model Subtask {
 
   assignments SubtaskAssignment[]
 
+  @@index([taskId])
   @@map("subtasks")
 }
 
@@ -236,6 +247,7 @@ model TaskActivity {
   createdById String?
   createdBy   User?   @relation(fields: [createdById], references: [id], onDelete: SetNull)
 
+  @@index([taskId])
   @@map("task_activities")
 }
 

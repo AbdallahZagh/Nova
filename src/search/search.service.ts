@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { myProjectsWhere } from '../common/task-access';
 
 const EMPTY_SEARCH_RESULTS = {
   projects: [],
@@ -16,9 +17,7 @@ export class SearchService {
     const q = query?.trim();
     if (!q) return EMPTY_SEARCH_RESULTS;
 
-    const accessibleProjectWhere = {
-      OR: [{ ownerId: userId }, { members: { some: { userId } } }],
-    };
+    const accessibleProjectWhere = myProjectsWhere(userId);
 
     const [projects, tasks, users, whiteboards] = await Promise.all([
       (this.prisma as any).project.findMany({

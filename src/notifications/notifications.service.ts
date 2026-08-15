@@ -1,5 +1,4 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
-import { Cron } from '@nestjs/schedule';
 import { cert, getApps, initializeApp } from 'firebase-admin/app';
 import { getMessaging } from 'firebase-admin/messaging';
 import { PrismaService } from '../prisma/prisma.service';
@@ -547,153 +546,6 @@ export class NotificationsService implements OnModuleInit {
     );
   }
 
-  @Cron('0 6 * * *')
-  async sendDueDateReminders() {
-    const today = this.startOfDay(new Date());
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    const afterTomorrow = new Date(today);
-    afterTomorrow.setDate(afterTomorrow.getDate() + 2);
-
-    const tasks = await (this.prisma as any).task.findMany({
-      where: {
-        status: { not: 'Completed' },
-        dueDate: { gte: today, lt: afterTomorrow },
-      },
-      select: {
-        id: true,
-        title: true,
-        dueDate: true,
-        projectId: true,
-        assigneeId: true,
-        assignments: { select: { userId: true } },
-      },
-    });
-
-    const subtasks = await (this.prisma as any).subtask.findMany({
-      where: {
-        isCompleted: false,
-        dueDate: { gte: today, lt: afterTomorrow },
-      },
-      select: {
-        id: true,
-        title: true,
-        dueDate: true,
-        assignments: { select: { userId: true } },
-        task: { select: { id: true, title: true, projectId: true } },
-      },
-    });
-
-    for (const task of tasks) {
-      const userIds = [
-        task.assigneeId,
-        ...task.assignments.map((assignment: any) => assignment.userId),
-      ].filter(Boolean);
-      const dueLabel =
-        task.dueDate >= tomorrow ? 'tomorrow' : 'today';
-
-      await this.notifyUsers(
-        userIds,
-        'TASK_DUE_REMINDER',
-        'Task due soon',
-        `${task.title} is due ${dueLabel}.`,
-        {
-          taskId: task.id,
-          projectId: task.projectId,
-          dueDate: task.dueDate,
-          url: `/projects/${task.projectId}?task=${task.id}`,
-        },
-      );
-    }
-
-    for (const subtask of subtasks) {
-      const userIds = subtask.assignments
-        .map((assignment: any) => assignment.userId)
-        .filter(Boolean);
-      const dueLabel =
-        subtask.dueDate && subtask.dueDate >= tomorrow ? 'tomorrow' : 'today';
-
-      await this.notifyUsers(
-        userIds,
-        'SUBTASK_DUE_REMINDER',
-        'Subtask due soon',
-        `${subtask.title} is due ${dueLabel}.`,
-        {
-          subtaskId: subtask.id,
-          taskId: subtask.task.id,
-          projectId: subtask.task.projectId,
-          dueDate: subtask.dueDate,
-          url: `/projects/${subtask.task.projectId}?task=${subtask.task.id}`,
-        },
-      );
-    }
-  }
-
-  @Cron('0 7 * * *')
-  async sendOverdueNudges() {
-    const today = this.startOfDay(new Date());
-    const since = new Date(Date.now() - 20 * 60 * 60 * 1000);
-
-    const tasks = await (this.prisma as any).task.findMany({
-      where: {
-        status: { not: 'Completed' },
-        dueDate: { lt: today },
-      },
-      select: {
-        id: true,
-        title: true,
-        dueDate: true,
-        projectId: true,
-        assigneeId: true,
-        assignments: { select: { userId: true } },
-      },
-    });
-
-    if (tasks.length === 0) return;
-
-    const recent = await (this.prisma as any).notification.findMany({
-      where: {
-        type: 'TASK_OVERDUE',
-        createdAt: { gte: since },
-      },
-      select: { userId: true, metadata: true },
-    });
-    const alreadyNudged = new Set(
-      recent.map((item: any) => {
-        const taskId = item?.metadata?.taskId;
-        return taskId ? `${item.userId}:${taskId}` : '';
-      }),
-    );
-
-    for (const task of tasks) {
-      const userIds = [
-        ...new Set(
-          [task.assigneeId, ...task.assignments.map((a: any) => a.userId)].filter(
-            Boolean,
-          ),
-        ),
-      ] as string[];
-
-      const recipients = userIds.filter(
-        (userId) => !alreadyNudged.has(`${userId}:${task.id}`),
-      );
-      if (recipients.length === 0) continue;
-
-      await this.notifyUsers(
-        recipients,
-        'TASK_OVERDUE',
-        'Task is late',
-        `${task.title} is past due.`,
-        {
-          taskId: task.id,
-          projectId: task.projectId,
-          dueDate: task.dueDate,
-          url: `/projects/${task.projectId}?task=${task.id}`,
-        },
-      );
-    }
-  }
-
   private initializeFirebase() {
     if (getApps().length) {
       this.firebaseReady = true;
@@ -872,9 +724,5 @@ export class NotificationsService implements OnModuleInit {
         typeof value === 'string' ? value : JSON.stringify(value),
       ]),
     );
-  }
-
-  private startOfDay(date: Date) {
-    return new Date(date.getFullYear(), date.getMonth(), date.getDate());
   }
 }

@@ -75,13 +75,14 @@ export class UsersController {
   @ApiOperation({
     summary: 'Send a test email to the current user',
     description:
-      'Useful for checking SMTP configuration without creating a new OTP.',
+      "Requires a Bearer token. Sends the EmailJS test message to the authenticated user's email. Demo accounts are blocked.",
   })
   @ApiResponse({ status: 200, description: 'Test email sent' })
   @ApiResponse({ status: 401, description: 'Missing or invalid Bearer token' })
+  @ApiResponse({ status: 403, description: 'Demo account cannot send email' })
   async sendTestEmail(@CurrentUser('id') userId: string) {
-    const profile = await this.usersService.getProfile(userId);
-    await this.emailService.sendTestEmail(profile.email);
+    const email = await this.usersService.getEmail(userId);
+    await this.emailService.sendTestEmail(email);
     return { message: 'Test email sent successfully' };
   }
 

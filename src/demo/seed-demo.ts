@@ -177,12 +177,3 @@ export async function seedDemoWorkspace(prisma: DemoPrisma) {
 
   return user;
 }
-
-export async function findDemoUser(prisma: {
-  user: { findUnique: (args: unknown) => Promise<{ id: string; isDemo?: boolean } | null> };
-}) {
-  return prisma.user.findUnique({
-    where: { email: DEMO_EMAIL },
-    select: { id: true, isDemo: true },
-  });
-}

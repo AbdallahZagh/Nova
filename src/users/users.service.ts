@@ -3,6 +3,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { assignedTasksWhere, myProjectsWhere } from '../common/task-access';
 import { normalizeUsername } from '../common/utils/username.util';
 import { PrismaService } from '../prisma/prisma.service';
 import { StorageService } from '../storage/storage.service';
@@ -68,12 +69,10 @@ export class UsersService {
 
     const [projectsCount, tasksCount, projects, activity] = await Promise.all([
       (this.prisma as any).project.count({
-        where: {
-          OR: [{ ownerId: userId }, { members: { some: { userId } } }],
-        },
+        where: myProjectsWhere(userId),
       }),
       (this.prisma as any).task.count({
-        where: this.assignedTasksWhere(userId),
+        where: assignedTasksWhere(userId),
       }),
       this.getUserProjects(userId),
       this.getUserActivity(userId),
@@ -86,6 +85,15 @@ export class UsersService {
       activity,
       projects,
     };
+  }
+
+  async getEmail(userId: string) {
+    const user = await (this.prisma as any).user.findUnique({
+      where: { id: userId },
+      select: { email: true },
+    });
+    if (!user?.email) throw new NotFoundException('User not found');
+    return user.email as string;
   }
 
   async updateProfile(userId: string, dto: UpdateProfileDto) {
@@ -162,9 +170,7 @@ export class UsersService {
 
   private async getUserProjects(userId: string) {
     const projects = await (this.prisma as any).project.findMany({
-      where: {
-        OR: [{ ownerId: userId }, { members: { some: { userId } } }],
-      },
+      where: myProjectsWhere(userId),
       select: {
         id: true,
         name: true,
@@ -178,7 +184,7 @@ export class UsersService {
           select: { role: true },
         },
         tasks: {
-          where: this.assignedTasksWhere(userId),
+          where: assignedTasksWhere(userId),
           select: {
             id: true,
             status: true,
@@ -218,7 +224,7 @@ export class UsersService {
     const tasks = await (this.prisma as any).task.findMany({
       where: {
         AND: [
-          this.assignedTasksWhere(userId),
+          assignedTasksWhere(userId),
           {
             OR: [
               { createdAt: { gte: oneYearAgo } },
@@ -264,12 +270,6 @@ export class UsersService {
     }
 
     return map;
-  }
-
-  private assignedTasksWhere(userId: string) {
-    return {
-      OR: [{ assigneeId: userId }, { assignments: { some: { userId } } }],
-    };
   }
 
   private resolveDateKey(task: any): string {

@@ -64,19 +64,6 @@ export class EmailService {
     await this.sendOtp(email, code);
   }
 
-  async sendProjectInviteEmail(
-    email: string,
-    projectName: string,
-    role: string,
-  ): Promise<void> {
-    await this.sendProjectAddedNotification(
-      email,
-      projectName,
-      `Nova (${role})`,
-      '#',
-    );
-  }
-
   async sendTestEmail(email: string): Promise<void> {
     await this.sendUniversalEmail(
       email,
