@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  Suspense,
   useCallback,
   useEffect,
   useMemo,
@@ -990,7 +991,7 @@ function GanttBoard({
   );
 }
 
-export default function TimelinePage() {
+function TimelinePage() {
   const { toast } = useToast();
   const searchParams = useSearchParams();
   const { projects, projectsLoading, updateTask, deleteTask } = useAppData();
@@ -1285,5 +1286,13 @@ export default function TimelinePage() {
         itemName={deleteTarget?.title}
       />
     </div>
+  );
+}
+
+export default function TimelinePageRoute() {
+  return (
+    <Suspense fallback={<TimelineSkeleton />}>
+      <TimelinePage />
+    </Suspense>
   );
 }
