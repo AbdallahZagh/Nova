@@ -25,10 +25,23 @@ const MEMBER_SELECT = {
   roleTitle: true,
 };
 
-/** Task shape needed to compute project progress (tasks + subtasks). */
+/** Task shape needed to compute project progress and due summaries. */
 const TASK_PROGRESS_SELECT = {
   id: true,
   status: true,
+  dueDate: true,
+  assignments: {
+    select: {
+      user: {
+        select: {
+          id: true,
+          fullName: true,
+          username: true,
+          avatarUrl: true,
+        },
+      },
+    },
+  },
   subtasks: { select: { isCompleted: true } },
 };
 
@@ -319,6 +332,72 @@ export class ProjectsService {
     };
   }
 
+  private startOfUtcDay(date = new Date()) {
+    return Date.UTC(
+      date.getUTCFullYear(),
+      date.getUTCMonth(),
+      date.getUTCDate(),
+    );
+  }
+
+  private initialsFromName(fullName?: string | null) {
+    const initials = (fullName ?? '')
+      .split(/\s+/)
+      .filter(Boolean)
+      .map((part) => part[0])
+      .join('')
+      .slice(0, 2)
+      .toUpperCase();
+    return initials || '?';
+  }
+
+  private computeDueSummary(tasks: any[]) {
+    const startToday = this.startOfUtcDay();
+    const openTasks = tasks.filter((task) => task.status !== 'Completed');
+    let overdueCount = 0;
+    let nextTask: any = null;
+    let nextTime = Number.POSITIVE_INFINITY;
+
+    for (const task of openTasks) {
+      if (!task.dueDate) continue;
+      const due = new Date(task.dueDate);
+      const dueMs = due.getTime();
+      if (Number.isNaN(dueMs)) continue;
+      if (this.startOfUtcDay(due) < startToday) {
+        overdueCount += 1;
+        continue;
+      }
+      if (dueMs < nextTime) {
+        nextTime = dueMs;
+        nextTask = task;
+      }
+    }
+
+    const assignmentSource = nextTask?.assignments ?? nextTask?.assignees ?? [];
+    const nextDueAssignees = (
+      Array.isArray(assignmentSource) ? assignmentSource : []
+    )
+      .map((item: any) => {
+        const user = item?.user ?? item;
+        if (!user?.id) return null;
+        return {
+          id: user.id,
+          name: user.fullName ?? user.name ?? user.username ?? 'Member',
+          initials: this.initialsFromName(user.fullName ?? user.name),
+          avatarUrl: user.avatarUrl ?? null,
+        };
+      })
+      .filter(Boolean);
+
+    return {
+      overdueCount,
+      nextDueDate: nextTask?.dueDate
+        ? new Date(nextTask.dueDate).toISOString()
+        : null,
+      nextDueAssignees,
+    };
+  }
+
   private withCompletion(project: any) {
     const tasks: any[] = project.tasks ?? [];
     const progress = this.computeProgress(tasks);
@@ -351,6 +430,7 @@ export class ProjectsService {
       createdAt: project.createdAt,
       updatedAt: project.updatedAt,
       ...progress,
+      ...this.computeDueSummary(tasks),
     };
   }
 
