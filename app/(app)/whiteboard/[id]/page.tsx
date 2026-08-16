@@ -334,7 +334,7 @@ export default function WhiteboardEditorPage() {
         onDelete={(target) => void sync.removePage(target)}
       />
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-6 md:px-6 mt-2">
+      <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-6 pt-2 md:px-6">
         <div
           className="relative w-full"
           style={{ aspectRatio: BOARD_VIEW_ASPECT }}

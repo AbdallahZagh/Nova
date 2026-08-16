@@ -36,8 +36,8 @@ export function ActivityHeatmapSkeleton() {
             <Skeleton key={i} className="h-3 flex-1 rounded-sm" />
           ))}
         </div>
-        <div className="grid min-w-0 flex-1 grid-cols-12 gap-[3px]">
-          {Array.from({ length: 12 * 7 }).map((_, i) => (
+        <div className="grid min-w-0 flex-1 grid-cols-53 gap-[3px]">
+          {Array.from({ length: 369 }).map((_, i) => (
             <Skeleton key={i} className="aspect-square w-full rounded-[2px]" />
           ))}
         </div>
@@ -52,10 +52,12 @@ export function UrgentTasksTableSkeleton() {
       {Array.from({ length: 4 }).map((_, i) => (
         <div
           key={i}
-          className="flex items-center gap-4 border-b border-glass/40 pb-3 last:border-0"
+          className="flex items-center justify-between gap-4 border-b border-glass/40 pb-3 last:border-0"
         >
-          <Skeleton className="size-2 shrink-0 rounded-full" />
-          <Skeleton className="h-4 flex-1 max-w-xs" />
+          <div className="flex items-center gap-2">
+            <Skeleton className="size-2 shrink-0 rounded-full" />
+            <Skeleton className="h-4 w-32" />
+            </div>
           <Skeleton className="h-5 w-24 rounded-md" />
           <Skeleton className="h-4 w-16" />
         </div>

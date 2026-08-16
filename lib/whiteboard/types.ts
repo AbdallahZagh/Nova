@@ -82,6 +82,14 @@ export type Whiteboard = {
   snapshot: WhiteboardSnapshot | null;
 };
 
+export type WhiteboardOpsAck = {
+  ok: true;
+  whiteboardId: string;
+  pageId: string;
+  version: number;
+  updatedAt: string;
+};
+
 export type WhiteboardOps = {
   addedStrokes?: Stroke[];
   removedStrokeIds?: string[];
@@ -179,7 +187,6 @@ export function canManageBoard(role: WhiteboardRole | null | undefined) {
 
 export const DEFAULT_CANVAS = { width: 2000, height: 1500 } as const;
 
-/** Phone-like surface used on web so both clients share one aspect ratio. */
 export const BOARD_VIEW_ASPECT = "9 / 16";
 
 export const BOARD_INSET = 16;

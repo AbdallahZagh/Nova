@@ -32,6 +32,7 @@ type HeatmapTask = {
 
 type CellData = {
   date: Date;
+  dateKey: string;
   isCurrentYear: boolean;
   count: number;
   tasks: HeatmapTask[];
@@ -78,6 +79,7 @@ function buildHeatmap(activity: ActivityMap) {
   const seenMonths = new Set<number>();
   const cursor = new Date(gridStart);
   let col = 0;
+  let totalTasks = 0;
 
   while (cursor <= gridEnd) {
     const week: CellData[] = [];
@@ -87,6 +89,7 @@ function buildHeatmap(activity: ActivityMap) {
       const isCurrentYear = d.getFullYear() === year;
       const key = toDateKey(d);
       const tasks = taskMap.get(key) ?? [];
+      if (isCurrentYear) totalTasks += tasks.length;
 
       if (isCurrentYear && row === 0 && !seenMonths.has(d.getMonth())) {
         seenMonths.add(d.getMonth());
@@ -95,6 +98,7 @@ function buildHeatmap(activity: ActivityMap) {
 
       week.push({
         date: new Date(d),
+        dateKey: key,
         isCurrentYear,
         count: tasks.length,
         tasks,
@@ -105,7 +109,7 @@ function buildHeatmap(activity: ActivityMap) {
     cursor.setDate(cursor.getDate() + 7);
   }
 
-  return { weeks, monthCols };
+  return { weeks, monthCols, totalTasks };
 }
 
 function HeatmapTaskRow({
@@ -151,16 +155,14 @@ export function ActivityHeatmap({
   activity: ActivityMap;
   onOpenTask?: OpenHeatmapTask;
 }) {
-  const { weeks, monthCols } = useMemo(() => buildHeatmap(activity), [activity]);
+  const { weeks, monthCols, totalTasks } = useMemo(
+    () => buildHeatmap(activity),
+    [activity],
+  );
   const [tooltip, setTooltip] = useState<TooltipState>(null);
   const [selected, setSelected] = useState<CellData | null>(null);
   const nWeeks = weeks.length;
   const interactive = Boolean(onOpenTask);
-
-  const totalTasks = useMemo(
-    () => weeks.flat().reduce((total, cell) => total + cell.tasks.length, 0),
-    [weeks],
-  );
 
   const handleEnter = useCallback((cell: CellData, e: React.MouseEvent) => {
     if (!cell.isCurrentYear) return;
@@ -198,7 +200,7 @@ export function ActivityHeatmap({
       })()
     : {};
 
-  const selectedKey = selected ? toDateKey(selected.date) : null;
+  const selectedKey = selected?.dateKey ?? null;
 
   return (
     <div>
@@ -252,16 +254,16 @@ export function ActivityHeatmap({
             <div key={weekIndex} className="flex flex-col gap-[3px]">
               {week.map((cell, dayIndex) => {
                 const isSelected =
-                  interactive && selectedKey === toDateKey(cell.date);
+                  interactive && selectedKey === cell.dateKey;
                 return (
                   <button
-                    key={dayIndex}
+                    key={cell.dateKey}
                     type="button"
                     aria-label={
                       cell.isCurrentYear
                         ? interactive
-                          ? `${toDateKey(cell.date)}${cell.tasks.length ? `, ${cell.tasks.length} tasks` : ""}`
-                          : toDateKey(cell.date)
+                          ? `${cell.dateKey}${cell.tasks.length ? `, ${cell.tasks.length} tasks` : ""}`
+                          : cell.dateKey
                         : undefined
                     }
                     className={cn(
@@ -307,25 +309,13 @@ export function ActivityHeatmap({
           </p>
 
           {tooltip.cell.tasks.length > 0 ? (
-            <div className="mt-2 space-y-2.5">
+            <div className="mt-2 space-y-1">
               {tooltip.cell.tasks.map((task) => (
-                <div key={task.id}>
-                  <p className="text-xs font-semibold leading-snug text-primary">
-                    {task.title}
-                  </p>
-                  <p className="mt-0.5 text-[10px] text-primary/50">{task.project}</p>
-                  <div className="mt-1.5 flex items-center gap-2">
-                    <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/10">
-                      <div
-                        className="h-full rounded-full bg-accent"
-                        style={{ width: `${task.progress}%` }}
-                      />
-                    </div>
-                    <span className="text-[10px] font-medium text-accent">
-                      {task.progress}%
-                    </span>
-                  </div>
-                </div>
+                <HeatmapTaskRow
+                  key={task.id}
+                  task={task}
+                  onOpenTask={onOpenTask ?? (() => undefined)}
+                />
               ))}
             </div>
           ) : (

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef } from "react";
-import { fitBoard } from "@/lib/whiteboard/fit";
+import { boardViewWorld } from "@/lib/whiteboard/fit";
 import { drawCursors, drawDocument, drawStroke } from "@/lib/whiteboard/render";
 import type {
   Stroke,
@@ -55,6 +55,7 @@ export function WhiteboardCanvas({
   color,
   width,
   paper,
+  surround,
   dark,
   onStrokeComplete,
   onDraftChange,
@@ -72,10 +73,12 @@ export function WhiteboardCanvas({
   const draftThrottleRef = useRef(0);
   const strokeStartRef = useRef(0);
   const committedRef = useRef<HTMLCanvasElement | null>(null);
+  const committedWorldRef = useRef({ x: 0, y: 0, w: 1, h: 1 });
   const documentRef = useRef(document);
   const draftsRef = useRef(remoteDrafts);
   const presenceRef = useRef(presence);
   const paperRef = useRef(paper);
+  const surroundRef = useRef(surround);
   const darkRef = useRef(dark);
   const onStrokeCompleteRef = useRef(onStrokeComplete);
   const onDraftChangeRef = useRef(onDraftChange);
@@ -85,6 +88,7 @@ export function WhiteboardCanvas({
   draftsRef.current = remoteDrafts;
   presenceRef.current = presence;
   paperRef.current = paper;
+  surroundRef.current = surround;
   darkRef.current = dark;
   onStrokeCompleteRef.current = onStrokeComplete;
   onDraftChangeRef.current = onDraftChange;
@@ -107,20 +111,42 @@ export function WhiteboardCanvas({
 
   const rebuildCommitted = useCallback(() => {
     const doc = documentRef.current;
+    const wrap = wrapRef.current;
+    const cssW = wrap
+      ? Math.max(1, Math.floor(wrap.getBoundingClientRect().width))
+      : doc.canvas.width;
+    const cssH = wrap
+      ? Math.max(1, Math.floor(wrap.getBoundingClientRect().height))
+      : Math.round((doc.canvas.width * 16) / 9);
+    const world = boardViewWorld(
+      cssW,
+      cssH,
+      doc.canvas.width,
+      doc.canvas.height,
+    );
+    committedWorldRef.current = {
+      x: world.x,
+      y: world.y,
+      w: world.w,
+      h: world.h,
+    };
+
     let committed = committedRef.current;
     if (!committed) {
       committed = globalThis.document.createElement("canvas");
       committedRef.current = committed;
     }
-    if (
-      committed.width !== doc.canvas.width ||
-      committed.height !== doc.canvas.height
-    ) {
-      committed.width = doc.canvas.width;
-      committed.height = doc.canvas.height;
+    const nextW = Math.max(1, Math.ceil(world.w));
+    const nextH = Math.max(1, Math.ceil(world.h));
+    if (committed.width !== nextW || committed.height !== nextH) {
+      committed.width = nextW;
+      committed.height = nextH;
     }
     const committedCtx = committed.getContext("2d");
     if (!committedCtx) return;
+    committedCtx.setTransform(1, 0, 0, 1, -world.x, -world.y);
+    committedCtx.fillStyle = paperRef.current;
+    committedCtx.fillRect(world.x, world.y, world.w, world.h);
     drawDocument(committedCtx, doc, {
       paper: paperRef.current,
       dark: darkRef.current,
@@ -151,19 +177,27 @@ export function WhiteboardCanvas({
     ctx.fillRect(0, 0, cssW, cssH);
 
     const doc = documentRef.current;
-    viewRef.current = fitBoard(
+    const world = boardViewWorld(
       cssW,
       cssH,
       doc.canvas.width,
       doc.canvas.height,
     );
+    viewRef.current = {
+      panX: world.panX,
+      panY: world.panY,
+      zoomX: world.zoomX,
+      zoomY: world.zoomY,
+    };
 
-    const { zoomX, zoomY, panX, panY } = viewRef.current;
     ctx.save();
-    ctx.translate(panX, panY);
-    ctx.scale(zoomX, zoomY);
+    ctx.translate(world.panX, world.panY);
+    ctx.scale(world.zoomX, world.zoomY);
     const committed = committedRef.current;
-    if (committed) ctx.drawImage(committed, 0, 0);
+    const committedWorld = committedWorldRef.current;
+    if (committed) {
+      ctx.drawImage(committed, committedWorld.x, committedWorld.y);
+    }
     for (const stroke of draftsRef.current) {
       drawStroke(ctx, stroke, paperRef.current, darkRef.current);
     }
@@ -182,7 +216,7 @@ export function WhiteboardCanvas({
   useEffect(() => {
     rebuildCommitted();
     paintFrame();
-  }, [dark, document, paintFrame, paper, rebuildCommitted]);
+  }, [dark, document, paintFrame, paper, rebuildCommitted, surround]);
 
   useEffect(() => {
     paintFrame();

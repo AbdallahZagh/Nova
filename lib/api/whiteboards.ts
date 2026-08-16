@@ -5,6 +5,7 @@ import type {
   WhiteboardDocument,
   WhiteboardMember,
   WhiteboardOps,
+  WhiteboardOpsAck,
   WhiteboardPage,
   WhiteboardRole,
   WhiteboardSnapshot,
@@ -268,14 +269,13 @@ export async function applyWhiteboardPageOpsApi(
   pageId: string,
   ops: WhiteboardOps,
 ) {
-  const row = await apiFetch<ApiWhiteboard>(
+  return apiFetch<WhiteboardOpsAck>(
     `/api/whiteboards/${id}/pages/${pageId}/ops`,
     {
       method: "POST",
       body: JSON.stringify(ops),
     },
   );
-  return mapWhiteboard(row);
 }
 
 export async function addWhiteboardPageApi(id: string) {
