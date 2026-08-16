@@ -71,7 +71,7 @@ export function AppFrame({ children }: PropsWithChildren) {
   return (
     <View className="flex-1 bg-main dark:bg-dark-main">
       <View
-        className="min-h-[82px] flex-row items-center gap-5 border-b border-glass bg-sidebar px-4 pb-2.5 dark:border-dark-glass dark:bg-dark-sidebar"
+        className="min-h-[82px] flex-row items-center gap-2.5 border-b border-glass bg-sidebar px-4 pb-2.5 dark:border-dark-glass dark:bg-dark-sidebar"
         style={{ paddingTop: insets.top + 10 }}
       >
         <Pressable

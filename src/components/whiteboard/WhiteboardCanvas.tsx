@@ -16,7 +16,12 @@ import {
   type WhiteboardDocument,
   type WhiteboardPresence,
 } from "@/api/whiteboards";
-import { strokeColor, strokeOpacity, strokeToPath } from "@/whiteboard/render";
+import {
+  cachedStrokeToPath,
+  pruneStrokePathCache,
+  strokeColor,
+  strokeOpacity,
+} from "@/whiteboard/render";
 
 type WhiteboardCanvasProps = {
   document: WhiteboardDocument;
@@ -70,7 +75,7 @@ const StrokePath = memo(function StrokePath({
 }) {
   return (
     <Path
-      d={strokeToPath(stroke)}
+      d={cachedStrokeToPath(stroke)}
       stroke={strokeColor(stroke, paper)}
       strokeWidth={stroke.width}
       strokeLinecap="round"
@@ -78,6 +83,47 @@ const StrokePath = memo(function StrokePath({
       fill="none"
       opacity={strokeOpacity(stroke, dark)}
     />
+  );
+}, (prev, next) => (
+  prev.paper === next.paper &&
+  prev.dark === next.dark &&
+  prev.stroke.id === next.stroke.id &&
+  prev.stroke.points === next.stroke.points &&
+  prev.stroke.color === next.stroke.color &&
+  prev.stroke.width === next.stroke.width &&
+  prev.stroke.tool === next.stroke.tool
+));
+
+const CommittedInk = memo(function CommittedInk({
+  strokes,
+  paper,
+  dark,
+}: {
+  strokes: Stroke[];
+  paper: string;
+  dark: boolean;
+}) {
+  pruneStrokePathCache(strokes.map((stroke) => stroke.id));
+  return (
+    <>
+      {strokes.map((stroke) => (
+        <StrokePath
+          key={stroke.id}
+          stroke={stroke}
+          paper={paper}
+          dark={dark}
+        />
+      ))}
+    </>
+  );
+}, (prev, next) => {
+  if (prev.paper !== next.paper || prev.dark !== next.dark) return false;
+  if (prev.strokes === next.strokes) return true;
+  if (prev.strokes.length !== next.strokes.length) return false;
+  return prev.strokes.every(
+    (stroke, index) =>
+      stroke.id === next.strokes[index]?.id &&
+      stroke.points === next.strokes[index]?.points,
   );
 });
 
@@ -424,14 +470,11 @@ export const WhiteboardCanvas = memo(
                 d={`M ${viewDocX} ${viewDocY} H ${viewDocX + viewDocW} V ${viewDocY + viewDocH} H ${viewDocX} Z`}
                 fill={paper}
               />
-              {document.strokes.map((stroke) => (
-                <StrokePath
-                  key={stroke.id}
-                  stroke={stroke}
-                  paper={paper}
-                  dark={dark}
-                />
-              ))}
+              <CommittedInk
+                strokes={document.strokes}
+                paper={paper}
+                dark={dark}
+              />
               {remoteDrafts.map((stroke) => (
                 <StrokePath
                   key={stroke.id}

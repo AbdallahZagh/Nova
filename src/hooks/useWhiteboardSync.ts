@@ -197,13 +197,24 @@ export function useWhiteboardSync(whiteboardId: string) {
           // pending is cleared so strokes drawn during the request queue again.
           pendingByPageRef.current[targetPageId] = {};
           try {
-            const updated = await applyWhiteboardPageOpsApi(
+            const ack = await applyWhiteboardPageOpsApi(
               whiteboardId,
               targetPageId,
               ops,
             );
             persistPending();
-            adoptBoard(updated, pageIdRef.current);
+            setBoard((current) =>
+              current
+                ? {
+                    ...current,
+                    pages: current.pages.map((page) =>
+                      page.id === targetPageId
+                        ? { ...page, version: ack.version }
+                        : page,
+                    ),
+                  }
+                : current,
+            );
           } catch {
             pendingByPageRef.current[targetPageId] = mergePending(
               ops,
@@ -222,7 +233,7 @@ export function useWhiteboardSync(whiteboardId: string) {
     } finally {
       flushingRef.current = false;
     }
-  }, [adoptBoard, persistPending, whiteboardId]);
+  }, [persistPending, whiteboardId]);
 
   const queueOps = useCallback(
     (ops: WhiteboardOps) => {

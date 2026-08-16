@@ -81,6 +81,14 @@ export type Whiteboard = {
   snapshot: WhiteboardSnapshot | null;
 };
 
+export type WhiteboardOpsAck = {
+  ok: true;
+  whiteboardId: string;
+  pageId: string;
+  version: number;
+  updatedAt: string;
+};
+
 export type WhiteboardOps = {
   addedStrokes?: Stroke[];
   removedStrokeIds?: string[];
@@ -607,11 +615,11 @@ export async function applyWhiteboardPageOpsApi(
   pageId: string,
   ops: WhiteboardOps,
 ) {
-  const response = await apiClient.post<ApiWhiteboard>(
+  const response = await apiClient.post<WhiteboardOpsAck>(
     `/api/whiteboards/${id}/pages/${pageId}/ops`,
     ops,
   );
-  return mapWhiteboard(response.data);
+  return response.data;
 }
 
 export async function addWhiteboardPageApi(id: string) {

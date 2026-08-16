@@ -1,5 +1,28 @@
 import type { Stroke } from "@/api/whiteboards";
 
+const pathCache = new Map<string, { token: string; d: string }>();
+
+function strokeToken(stroke: Stroke) {
+  const last = stroke.points[stroke.points.length - 1];
+  return `${stroke.points.length}:${stroke.color}:${stroke.width}:${stroke.tool}:${last?.x ?? 0}:${last?.y ?? 0}`;
+}
+
+export function cachedStrokeToPath(stroke: Stroke) {
+  const token = strokeToken(stroke);
+  const hit = pathCache.get(stroke.id);
+  if (hit && hit.token === token) return hit.d;
+  const d = strokeToPath(stroke);
+  pathCache.set(stroke.id, { token, d });
+  return d;
+}
+
+export function pruneStrokePathCache(ids: Iterable<string>) {
+  const keep = new Set(ids);
+  for (const id of pathCache.keys()) {
+    if (!keep.has(id)) pathCache.delete(id);
+  }
+}
+
 export function strokeToPath(stroke: Stroke) {
   const points = stroke.points;
   if (!points.length) return "";
