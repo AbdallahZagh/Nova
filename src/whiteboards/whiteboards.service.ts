@@ -297,31 +297,56 @@ export class WhiteboardsService {
     pageId: string,
     dto: ApplyWhiteboardOpsDto,
   ) {
-    const row = await this.loadBoard(whiteboardId);
-    const member = await this.ensureWhiteboardAccess(userId, row);
-    this.ensureCanDraw(member.role);
+    const board = await this.prisma.whiteboard.findUnique({
+      where: { id: whiteboardId },
+      select: {
+        id: true,
+        title: true,
+        createdById: true,
+        members: {
+          where: { userId },
+          select: { role: true },
+        },
+      },
+    });
+    if (!board) throw new NotFoundException('Whiteboard not found');
 
-    const page = row.pages.find((item) => item.id === pageId);
-    if (!page) throw new NotFoundException('Whiteboard page not found');
+    const memberRole =
+      board.members[0]?.role ??
+      (board.createdById === userId ? WhiteboardRole.ADMIN : null);
+    if (!memberRole) {
+      throw new ForbiddenException('You do not have access to this whiteboard');
+    }
+    this.ensureCanDraw(memberRole);
+
+    const page = await this.prisma.whiteboardPage.findUnique({
+      where: { id: pageId },
+      select: { id: true, whiteboardId: true, version: true },
+    });
+    if (!page || page.whiteboardId !== whiteboardId) {
+      throw new NotFoundException('Whiteboard page not found');
+    }
 
     const hasDocumentOps = hasWhiteboardDocumentOps(dto);
     if (!hasDocumentOps && dto.title === undefined) {
       throw new BadRequestException('At least one whiteboard op is required');
     }
 
+    let version = page.version;
     if (hasDocumentOps) {
-      await this.commitPageOps(whiteboardId, pageId, dto);
+      version = await this.commitPageOps(whiteboardId, pageId, dto);
     }
 
-    await this.prisma.whiteboard.update({
+    const updated = await this.prisma.whiteboard.update({
       where: { id: whiteboardId },
       data: {
         ...(dto.title !== undefined ? { title: dto.title } : {}),
         updatedAt: new Date(),
       },
+      select: { updatedAt: true },
     });
 
-    if (dto.title !== undefined && dto.title !== row.title) {
+    if (dto.title !== undefined && dto.title !== board.title) {
       await this.recordActivity(
         whiteboardId,
         userId,
@@ -334,7 +359,13 @@ export class WhiteboardsService {
     }
     await this.touchLastEdited(whiteboardId, userId);
 
-    return formatWhiteboard(await this.loadBoard(whiteboardId), userId, true);
+    return {
+      ok: true as const,
+      whiteboardId,
+      pageId,
+      version,
+      updatedAt: updated.updatedAt.toISOString(),
+    };
   }
 
   /** Merge ops onto the latest page document using version as a compare-and-swap. */
@@ -342,7 +373,7 @@ export class WhiteboardsService {
     whiteboardId: string,
     pageId: string,
     dto: ApplyWhiteboardOpsDto,
-  ) {
+  ): Promise<number> {
     for (let attempt = 0; attempt < 8; attempt++) {
       const page = await this.prisma.whiteboardPage.findUnique({
         where: { id: pageId },
@@ -359,7 +390,7 @@ export class WhiteboardsService {
           version: { increment: 1 },
         },
       });
-      if (result.count === 1) return;
+      if (result.count === 1) return page.version + 1;
     }
 
     throw new ConflictException(
