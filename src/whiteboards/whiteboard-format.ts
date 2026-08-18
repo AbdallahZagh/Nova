@@ -40,6 +40,7 @@ export type BoardRow = {
   updatedAt: Date;
   lastEditedAt: Date | null;
   lastEditedById: string | null;
+  autoSaveSnapshotOnExit?: boolean;
   lastEditedBy: {
     id: string;
     fullName: string;
@@ -119,6 +120,7 @@ export function formatWhiteboard(
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
     lastEditedAt: row.lastEditedAt?.toISOString() ?? row.updatedAt.toISOString(),
+    autoSaveSnapshotOnExit: Boolean(row.autoSaveSnapshotOnExit),
     lastEditedBy: row.lastEditedBy
       ? {
           id: row.lastEditedBy.id,

@@ -326,6 +326,8 @@ model Whiteboard {
   lastEditedById String?
   lastEditedBy   User?    @relation("WhiteboardLastEditor", fields: [lastEditedById], references: [id], onDelete: SetNull)
 
+  autoSaveSnapshotOnExit Boolean @default(false)
+
   duplicatedFromId String?
 
   pages      WhiteboardPage[]

@@ -1,5 +1,5 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsBoolean, IsOptional, IsString, MaxLength } from 'class-validator';
 
 export class UpdateWhiteboardDto {
   @ApiPropertyOptional()
@@ -7,4 +7,12 @@ export class UpdateWhiteboardDto {
   @IsString()
   @MaxLength(200)
   title?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'When true, admins skip the exit prompt and a cover snapshot is saved in the background.',
+  })
+  @IsOptional()
+  @IsBoolean()
+  autoSaveSnapshotOnExit?: boolean;
 }

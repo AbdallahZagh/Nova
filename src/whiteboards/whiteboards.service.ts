@@ -243,20 +243,32 @@ export class WhiteboardsService {
   async update(userId: string, id: string, dto: UpdateWhiteboardDto) {
     const row = await this.loadBoard(id);
     const member = await this.ensureWhiteboardAccess(userId, row);
-    this.ensureCanDraw(member.role);
 
-    if (dto.title === undefined) {
-      throw new BadRequestException('Title is required');
+    if (dto.title === undefined && dto.autoSaveSnapshotOnExit === undefined) {
+      throw new BadRequestException('Nothing to update');
+    }
+    if (dto.autoSaveSnapshotOnExit !== undefined) {
+      this.ensureCanManage(member.role);
+    } else {
+      this.ensureCanDraw(member.role);
     }
 
     const previousTitle = row.title;
     const updated = await this.prisma.whiteboard.update({
       where: { id },
-      data: { title: dto.title },
+      data: {
+        ...(dto.title !== undefined ? { title: dto.title } : {}),
+        ...(dto.autoSaveSnapshotOnExit !== undefined
+          ? { autoSaveSnapshotOnExit: dto.autoSaveSnapshotOnExit }
+          : {}),
+      },
       include: BOARD_INCLUDE,
     });
 
-    if ((dto.title ?? '') !== (previousTitle ?? '')) {
+    if (
+      dto.title !== undefined &&
+      (dto.title ?? '') !== (previousTitle ?? '')
+    ) {
       await this.recordActivity(id, userId, WhiteboardActivityType.TITLE_CHANGED, {
         title: dto.title,
       });
@@ -781,6 +793,7 @@ export class WhiteboardsService {
         projectId: source.projectId,
         createdById: userId,
         duplicatedFromId: source.id,
+        autoSaveSnapshotOnExit: Boolean(source.autoSaveSnapshotOnExit),
         lastEditedAt: new Date(),
         lastEditedById: userId,
         members: {

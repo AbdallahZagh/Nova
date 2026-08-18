@@ -39,6 +39,28 @@ const ASSIGNABLE_PROJECT_ROLES = [
   ProjectRole.MEMBER,
 ];
 
+const MERGE_FIELDS = [
+  'title',
+  'description',
+  'status',
+  'priority',
+  'dueDate',
+  'completedAt',
+  'assigneeId',
+] as const;
+
+type MergeField = (typeof MERGE_FIELDS)[number];
+
+function comparableTaskValue(field: MergeField, value: unknown) {
+  if (value === undefined) return undefined;
+  if (value === null || value === '') return null;
+  if (field === 'dueDate' || field === 'completedAt') {
+    const time = new Date(String(value)).getTime();
+    return Number.isNaN(time) ? null : time;
+  }
+  return String(value);
+}
+
 const TASK_CARD_INCLUDE = {
   subtasks: {
     include: {
@@ -313,76 +335,99 @@ export class TasksService {
     const task = await (this.prisma as any).task.findUnique({ where: { id } });
     if (!task) throw new NotFoundException('Task not found');
 
-    if (dto.assigneeId) {
-      await this.ensureAssignableProjectMember(task.projectId, dto.assigneeId);
+    const applied: UpdateTaskDto = { ...dto };
+    delete applied.base;
+    const rejected: MergeField[] = [];
+
+    if (dto.base && typeof dto.base === 'object') {
+      for (const field of MERGE_FIELDS) {
+        if (applied[field] === undefined) continue;
+        if (!(field in dto.base)) continue;
+        const expected = comparableTaskValue(field, dto.base[field]);
+        const current = comparableTaskValue(field, task[field]);
+        if (expected !== current) {
+          rejected.push(field);
+          delete applied[field];
+        }
+      }
     }
 
-    const activityLogs = await this.buildUpdateActivities(userId, task, dto);
+    if (applied.assigneeId) {
+      await this.ensureAssignableProjectMember(task.projectId, applied.assigneeId);
+    }
+
+    const activityLogs = await this.buildUpdateActivities(userId, task, applied);
 
     const data: Record<string, any> = {};
-    if (dto.title !== undefined) data.title = dto.title;
-    if (dto.description !== undefined) data.description = dto.description;
-    if (dto.status !== undefined) data.status = dto.status;
-    if (dto.priority !== undefined) data.priority = dto.priority;
-    if (dto.assigneeId !== undefined) data.assigneeId = dto.assigneeId;
-    if (dto.dueDate !== undefined) data.dueDate = new Date(dto.dueDate);
-    if (dto.completedAt !== undefined)
-      data.completedAt = new Date(dto.completedAt);
+    if (applied.title !== undefined) data.title = applied.title;
+    if (applied.description !== undefined) data.description = applied.description;
+    if (applied.status !== undefined) data.status = applied.status;
+    if (applied.priority !== undefined) data.priority = applied.priority;
+    if (applied.assigneeId !== undefined) data.assigneeId = applied.assigneeId;
+    if (applied.dueDate !== undefined) data.dueDate = new Date(applied.dueDate);
+    if (applied.completedAt !== undefined)
+      data.completedAt = new Date(applied.completedAt);
 
     if (
-      dto.status === 'Completed' &&
+      applied.status === 'Completed' &&
       task.status !== 'Completed' &&
-      dto.completedAt === undefined
+      applied.completedAt === undefined
     ) {
       data.completedAt = new Date();
     }
 
-    const updated = await (this.prisma as any).task.update({
-      where: { id },
-      data: {
-        ...data,
-        ...(dto.assigneeId === null
-          ? { assignments: { deleteMany: {} } }
-          : dto.assigneeId
-            ? {
-                assignments: {
-                  upsert: {
-                    where: {
-                      taskId_userId: {
-                        taskId: id,
-                        userId: dto.assigneeId,
+    const hasChanges = Object.keys(data).length > 0 || activityLogs.length > 0;
+    const updated = hasChanges
+      ? await (this.prisma as any).task.update({
+          where: { id },
+          data: {
+            ...data,
+            ...(applied.assigneeId === null
+              ? { assignments: { deleteMany: {} } }
+              : applied.assigneeId
+                ? {
+                    assignments: {
+                      upsert: {
+                        where: {
+                          taskId_userId: {
+                            taskId: id,
+                            userId: applied.assigneeId,
+                          },
+                        },
+                        update: {},
+                        create: { userId: applied.assigneeId },
                       },
                     },
-                    update: {},
-                    create: { userId: dto.assigneeId },
+                  }
+                : {}),
+            ...(activityLogs.length
+              ? {
+                  taskActivities: {
+                    create: activityLogs.map((log) => ({
+                      type: log.type,
+                      content: log.content,
+                      createdById: log.createdById ?? userId,
+                    })),
                   },
-                },
-              }
-            : {}),
-        ...(activityLogs.length
-          ? {
-              taskActivities: {
-                create: activityLogs.map((log) => ({
-                  type: log.type,
-                  content: log.content,
-                  createdById: log.createdById ?? userId,
-                })),
-              },
-            }
-          : {}),
-      },
-      include: TASK_INCLUDE,
-    });
+                }
+              : {}),
+          },
+          include: TASK_INCLUDE,
+        })
+      : await (this.prisma as any).task.findUnique({
+          where: { id },
+          include: TASK_INCLUDE,
+        });
 
-    if (dto.assigneeId && dto.assigneeId !== task.assigneeId) {
+    if (applied.assigneeId && applied.assigneeId !== task.assigneeId) {
       await this.notificationsService.notifyTaskAssigned(
-        dto.assigneeId,
+        applied.assigneeId,
         updated.id,
         updated.title,
       );
     }
 
-    if (dto.assigneeId === null && task.assigneeId) {
+    if (applied.assigneeId === null && task.assigneeId) {
       await this.notificationsService.notifyTaskUnassigned(
         task.assigneeId,
         updated.id,
@@ -398,14 +443,49 @@ export class TasksService {
     }
 
     if (
-      dto.status !== undefined &&
-      dto.status !== task.status &&
-      this.isDoneStatus(dto.status)
+      applied.status !== undefined &&
+      applied.status !== task.status &&
+      this.isDoneStatus(applied.status)
     ) {
       await this.notificationsService.notifyTaskDone(updated.id, updated.title);
     }
 
-    return this.formatTask(updated);
+    let conflictBy: {
+      id: string;
+      fullName: string;
+      username?: string | null;
+    } | null = null;
+    if (rejected.length) {
+      const latest = await (this.prisma as any).taskActivity.findFirst({
+        where: { taskId: id, createdById: { not: userId } },
+        orderBy: { createdAt: 'desc' },
+        include: {
+          createdBy: {
+            select: { id: true, fullName: true, username: true },
+          },
+        },
+      });
+      if (latest?.createdBy) {
+        conflictBy = {
+          id: latest.createdBy.id,
+          fullName: latest.createdBy.fullName,
+          username: latest.createdBy.username ?? null,
+        };
+      }
+    }
+
+    return {
+      ...this.formatTask(updated),
+      ...(rejected.length
+        ? {
+            conflicts: rejected.map((field) => ({
+              field,
+              serverValue: updated[field] ?? task[field] ?? null,
+            })),
+            conflictBy,
+          }
+        : {}),
+    };
   }
 
   // ─── Delete ───────────────────────────────────────────────────────────────

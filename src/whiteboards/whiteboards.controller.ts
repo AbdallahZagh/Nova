@@ -241,7 +241,7 @@ export class WhiteboardsController {
   }
 
   @Patch('whiteboards/:id')
-  @ApiOperation({ summary: 'Rename a whiteboard' })
+  @ApiOperation({ summary: 'Rename a whiteboard or update board settings' })
   update(
     @CurrentUser('id') userId: string,
     @Param('id', ParseUUIDPipe) id: string,

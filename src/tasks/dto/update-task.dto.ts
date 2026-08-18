@@ -1,5 +1,5 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsDateString, IsEnum, IsOptional, IsString } from 'class-validator';
+import { IsDateString, IsEnum, IsObject, IsOptional, IsString } from 'class-validator';
 import { TaskPriority, TaskStatus } from './create-task.dto';
 
 export class UpdateTaskDto {
@@ -62,4 +62,12 @@ export class UpdateTaskDto {
   @IsOptional()
   @IsString()
   assigneeId?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Snapshot of fields the client last knew. When present, a field is skipped if the server value no longer matches (server wins that field; other fields still merge).',
+  })
+  @IsOptional()
+  @IsObject()
+  base?: Record<string, unknown>;
 }
