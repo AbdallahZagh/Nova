@@ -59,11 +59,11 @@ export function SaveSnapshotModal({
           </div>
           <div>
             <h2 className="text-lg font-semibold text-primary">
-              {canSave ? "Save board as an image?" : "Leave this board?"}
+              {canSave ? "Exit board?" : "Leave this board?"}
             </h2>
             <p className="mt-1.5 text-sm leading-relaxed text-primary/60">
               {canSave
-                ? "Upload a PNG for each page. If a page already has an image, the old one is replaced."
+                ? "Save a new cover image, or leave with your live strokes already stored. You can turn on auto-save in Board settings."
                 : "Your strokes stay on the board. Only admins can save pages as images."}
             </p>
           </div>
@@ -76,7 +76,7 @@ export function SaveSnapshotModal({
               onClick={onSave}
               className="rounded-xl bg-accent px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-60"
             >
-              {saving ? "Saving…" : "Save image"}
+              {saving ? "Saving…" : "Save & Exit"}
             </button>
           ) : null}
           <button
@@ -85,7 +85,7 @@ export function SaveSnapshotModal({
             onClick={onSkip}
             className="rounded-xl border border-glass bg-glass-button px-4 py-2.5 text-sm font-semibold text-primary disabled:opacity-60"
           >
-            Don’t save
+            Exit Without Saving
           </button>
           <button
             type="button"
@@ -93,7 +93,7 @@ export function SaveSnapshotModal({
             onClick={onStay}
             className="rounded-xl px-4 py-2.5 text-sm font-medium text-primary/60 hover:text-primary"
           >
-            Stay
+            Cancel
           </button>
         </div>
       </div>

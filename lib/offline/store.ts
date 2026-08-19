@@ -1,3 +1,8 @@
+import {
+  attachTaskBase,
+  stripTaskBase,
+} from "@/lib/offline/conflicts";
+
 const CACHE_PREFIX = "nova.offline.cache:";
 const QUEUE_KEY = "nova.offline.queue";
 const STATUS_KEY = "nova.offline.status";
@@ -144,6 +149,14 @@ export function enqueueMutation(input: {
   path: string;
   body?: string;
 }): OfflineMutation {
+  const path = normalizePath(input.path);
+  let body = input.body;
+  if (input.method.toUpperCase() === "PATCH") {
+    const parsed = parseBody(body);
+    const cached = readCachedGet<Record<string, unknown>>(path);
+    const next = attachTaskBase(path, parsed, cached);
+    if (next) body = JSON.stringify(next);
+  }
   const rows = readQueue();
   const item: OfflineMutation = {
     id:
@@ -151,8 +164,8 @@ export function enqueueMutation(input: {
         ? crypto.randomUUID()
         : `offline-${Date.now()}`,
     method: input.method.toUpperCase(),
-    path: normalizePath(input.path),
-    body: input.body,
+    path,
+    body,
     createdAt: Date.now(),
   };
   writeQueue([...rows, item]);
@@ -230,7 +243,8 @@ export function optimisticMutationResponse(
 
   if (method === "PATCH" && normalized.startsWith("/api/tasks/") && parsed) {
     const cached = readCachedGet<Record<string, unknown>>(normalized) ?? {};
-    const row: Record<string, unknown> = { ...cached, ...parsed, updatedAt: now };
+    const fields = stripTaskBase(parsed) ?? parsed;
+    const row: Record<string, unknown> = { ...cached, ...fields, updatedAt: now };
     writeCachedGet(normalized, row);
     if (typeof row.projectId === "string") {
       patchListCache(`/api/tasks/project/${row.projectId}`, (rows) =>

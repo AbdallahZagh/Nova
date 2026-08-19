@@ -44,6 +44,7 @@ export type UserProfile = {
   bio: string;
   avatarUrl: string | null;
   isDemo: boolean;
+  accountRole: "USER" | "SUPER_ADMIN";
   projectCount: number;
   taskCount: number;
   activity: ActivityMap;

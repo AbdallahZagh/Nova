@@ -72,8 +72,8 @@ export function SideDrawer({
         aria-modal="true"
         aria-labelledby="side-drawer-title"
         className={cn(
-          "fixed inset-y-0 right-0 z-160 flex w-full max-w-md flex-col border-l border-glass bg-sidebar/95 shadow-2xl shadow-black/30 backdrop-blur-3xl animate-in slide-in-from-right duration-300 ease-out",
-          panelClassName,
+          "fixed inset-y-0 right-0 z-160 flex w-full flex-col border-l border-glass bg-sidebar/95 shadow-2xl shadow-black/30 backdrop-blur-3xl animate-in slide-in-from-right duration-300 ease-out",
+          panelClassName ?? "max-w-md",
         )}
       >
         <div className="flex items-center justify-between border-b border-glass px-6 py-4">
@@ -93,7 +93,7 @@ export function SideDrawer({
           </button>
         </div>
 
-        <div className={cn("flex-1 overflow-y-auto px-6 py-5", bodyClassName)}>
+        <div className={cn("flex-1", bodyClassName ?? "overflow-y-auto px-6 py-5")}>
           {children}
         </div>
       </aside>

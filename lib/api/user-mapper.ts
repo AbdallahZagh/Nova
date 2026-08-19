@@ -66,6 +66,10 @@ export function apiUserToProfile(user: ApiUser): UserProfile {
     bio: user.bio ?? "",
     avatarUrl: user.avatarUrl ?? null,
     isDemo: Boolean(user.isDemo),
+    accountRole:
+      user.accountRole === "SUPER_ADMIN" || user.role === "SUPER_ADMIN"
+        ? "SUPER_ADMIN"
+        : "USER",
     projectCount,
     taskCount,
     activity: user.activity ?? {},

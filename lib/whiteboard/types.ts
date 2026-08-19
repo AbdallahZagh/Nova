@@ -75,6 +75,7 @@ export type Whiteboard = {
   updatedAt: string;
   lastEditedAt?: string | null;
   lastEditedBy?: WhiteboardLastEditor | null;
+  autoSaveSnapshotOnExit?: boolean;
   duplicatedFromId?: string | null;
   myRole: WhiteboardRole | null;
   members: WhiteboardMember[];

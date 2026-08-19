@@ -8,6 +8,7 @@ import {
   Bell,
   Check,
   CheckCheck,
+  ChevronLeft,
   Clock,
   Loader2,
   MessageSquare,
@@ -27,6 +28,7 @@ import {
   formatNotificationType,
   groupNotificationsByDay,
   hrefFromNotification,
+  notificationActionLabel,
   notificationKind,
   notificationTone,
   type NotificationKind,
@@ -69,11 +71,27 @@ const TONE_ICON: Record<NotificationTone, string> = {
   default: "border-glass bg-glass-button text-accent",
 };
 
+function formatFullDate(raw?: string) {
+  if (!raw) return "";
+  const date = new Date(raw);
+  if (Number.isNaN(date.getTime())) return raw;
+  return date.toLocaleString("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
 function NotificationListItem({
   item,
+  selected,
   onSelect,
 }: {
   item: AppNotification;
+  selected: boolean;
   onSelect: () => void;
 }) {
   const kind = notificationKind(item.type);
@@ -85,29 +103,34 @@ function NotificationListItem({
       type="button"
       onClick={onSelect}
       className={cn(
-        "w-full rounded-2xl border p-4 text-left transition hover:border-accent/25 hover:bg-glass-button/60",
-        item.isRead
-          ? "border-glass bg-glass-card/50"
-          : tone === "warning"
-            ? "border-warning/40 bg-warning/5"
-            : "border-accent/25 bg-accent/5",
+        "w-full rounded-2xl border p-4 text-left transition",
+        selected
+          ? "border-accent/50 bg-accent/10"
+          : item.isRead
+            ? "border-glass bg-glass-card/50 hover:border-accent/25"
+            : tone === "warning"
+              ? "border-warning/40 bg-warning/5 hover:border-warning/60"
+              : "border-accent/25 bg-accent/5 hover:border-accent/40",
       )}
     >
       <div className="flex items-start gap-3">
         <div
           className={cn(
-            "mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-xl border",
+            "relative mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-xl border",
             TONE_ICON[tone],
           )}
         >
           <Icon className="size-4" />
+          {!item.isRead ? (
+            <span className="absolute -right-0.5 -top-0.5 size-2 rounded-full bg-accent" />
+          ) : null}
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-3">
             <h3 className="line-clamp-2 text-sm font-semibold leading-snug text-primary">
               {item.title}
             </h3>
-            {!item.isRead ? (
+            {!item.isRead && !selected ? (
               <span className="mt-1 size-2 shrink-0 rounded-full bg-accent" />
             ) : null}
           </div>
@@ -133,6 +156,91 @@ function NotificationListItem({
   );
 }
 
+function NotificationDetails({
+  item,
+  onBack,
+  onNavigate,
+}: {
+  item: AppNotification;
+  onBack: () => void;
+  onNavigate: () => void;
+}) {
+  const kind = notificationKind(item.type);
+  const tone = notificationTone(item.type);
+  const Icon = KIND_ICON[kind];
+  const actionLabel = notificationActionLabel(item);
+
+  return (
+    <div className="flex min-h-full flex-col">
+      <button
+        type="button"
+        onClick={onBack}
+        className="mb-5 inline-flex w-fit items-center gap-1 text-sm font-semibold text-primary/60 transition hover:text-accent"
+      >
+        <ChevronLeft className="size-4" />
+        Back
+      </button>
+
+      <div
+        className={cn(
+          "flex size-14 items-center justify-center rounded-2xl border",
+          TONE_ICON[tone],
+        )}
+      >
+        <Icon className="size-6" />
+      </div>
+
+      <h3 className="mt-5 text-xl font-semibold leading-snug text-primary">
+        {item.title}
+      </h3>
+      <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-primary/70">
+        {item.message}
+      </p>
+
+      <div className="mt-5 flex flex-wrap items-center gap-2">
+        <span
+          className={cn(
+            "rounded-full border px-2.5 py-1 text-[11px] font-semibold",
+            TONE_PILL[tone],
+          )}
+        >
+          {formatNotificationType(item.type)}
+        </span>
+        {item.isRead ? (
+          <span className="rounded-full border border-success/40 bg-success/10 px-2.5 py-1 text-[11px] font-semibold text-success">
+            Read
+          </span>
+        ) : (
+          <span className="rounded-full border border-accent/40 bg-accent/10 px-2.5 py-1 text-[11px] font-semibold text-accent">
+            Unread
+          </span>
+        )}
+      </div>
+
+      <p className="mt-4 text-xs text-primary/45">
+        {formatNotificationTime(item.createdAt)}
+        {item.createdAt ? ` · ${formatFullDate(item.createdAt)}` : ""}
+      </p>
+
+      <div className="mt-auto pt-8">
+        {actionLabel ? (
+          <button
+            type="button"
+            onClick={onNavigate}
+            className="w-full rounded-xl bg-accent px-4 py-3 text-sm font-semibold text-white transition hover:opacity-90"
+          >
+            {actionLabel}
+          </button>
+        ) : (
+          <p className="text-center text-sm text-primary/45">
+            No further action needed.
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function NotificationDrawer({ open, onClose }: NotificationDrawerProps) {
   const router = useRouter();
   const {
@@ -148,6 +256,7 @@ export function NotificationDrawer({ open, onClose }: NotificationDrawerProps) {
     markAllNotificationsRead,
   } = useNotifications();
   const [filter, setFilter] = useState<InboxFilter>("all");
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
 
   const visible = useMemo(
@@ -158,6 +267,20 @@ export function NotificationDrawer({ open, onClose }: NotificationDrawerProps) {
     [filter, notifications],
   );
   const groups = useMemo(() => groupNotificationsByDay(visible), [visible]);
+  const selected = useMemo(
+    () => notifications.find((item) => item.id === selectedId) ?? null,
+    [notifications, selectedId],
+  );
+
+  useEffect(() => {
+    if (!open) setSelectedId(null);
+  }, [open]);
+
+  useEffect(() => {
+    if (selectedId && !visible.some((item) => item.id === selectedId)) {
+      setSelectedId(null);
+    }
+  }, [selectedId, visible]);
 
   useEffect(() => {
     if (!open || !sentinelRef.current) return;
@@ -171,16 +294,23 @@ export function NotificationDrawer({ open, onClose }: NotificationDrawerProps) {
   }, [loadMoreNotifications, open]);
 
   const handleSelect = (item: AppNotification) => {
-    void markNotificationRead(item.id);
-    const href = hrefFromNotification(item);
-    if (href) {
-      onClose();
-      router.push(href);
+    if (selectedId === item.id) {
+      setSelectedId(null);
+      return;
     }
+    setSelectedId(item.id);
+    if (!item.isRead) void markNotificationRead(item.id);
   };
 
-  return (
-    <SideDrawer isOpen={open} onClose={onClose} title="Notifications">
+  const handleNavigate = (item: AppNotification) => {
+    const href = hrefFromNotification(item);
+    if (!href) return;
+    onClose();
+    router.push(href);
+  };
+
+  const list = (
+    <>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-primary/55">
           {total || notifications.length
@@ -269,6 +399,7 @@ export function NotificationDrawer({ open, onClose }: NotificationDrawerProps) {
                 <NotificationListItem
                   key={item.id}
                   item={item}
+                  selected={selectedId === item.id}
                   onSelect={() => handleSelect(item)}
                 />
               ))}
@@ -291,6 +422,32 @@ export function NotificationDrawer({ open, onClose }: NotificationDrawerProps) {
           ) : null}
         </div>
       )}
+    </>
+  );
+
+  return (
+    <SideDrawer
+      isOpen={open}
+      onClose={onClose}
+      title="Notifications"
+      panelClassName={cn(
+        "transition-[max-width] duration-300 ease-out",
+        selected ? "max-w-4xl" : "max-w-md",
+      )}
+      bodyClassName="flex overflow-hidden p-0"
+    >
+      <div className="h-full w-full max-w-md shrink-0 overflow-y-auto px-6 py-5">
+        {list}
+      </div>
+      {selected ? (
+        <div className="h-full min-w-0 flex-1 overflow-y-auto border-l border-glass px-6 py-5">
+          <NotificationDetails
+            item={selected}
+            onBack={() => setSelectedId(null)}
+            onNavigate={() => handleNavigate(selected)}
+          />
+        </div>
+      ) : null}
     </SideDrawer>
   );
 }

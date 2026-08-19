@@ -20,6 +20,7 @@ import { clearSession } from "@/app/actions/session";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { ActivityHeatmap } from "@/components/dashboard/ActivityHeatmap";
 import { ProfileHero } from "@/components/profile/ProfileHero";
+import { ReportProblemCard } from "@/components/support/ReportProblemCard";
 import { DeleteConfirmModal } from "@/components/ui/DeleteConfirmModal";
 import { Input, PasswordInput, Textarea } from "@/components/ui/input";
 import { useToast } from "@/components/ui/Toast";
@@ -905,6 +906,8 @@ export default function ProfilePage() {
       <ProfileActivitySection />
 
       <ProfileProjectsSection />
+
+      <ReportProblemCard />
 
       {profile.isDemo ? null : (
         <div className="flex flex-col gap-3 rounded-2xl border border-red-500/20 bg-red-500/5 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">

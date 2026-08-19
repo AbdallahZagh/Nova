@@ -23,6 +23,9 @@ export type ApiUser = {
   _meta?: Record<string, unknown>;
   stats?: Record<string, unknown>;
   isDemo?: boolean;
+  /** Platform role. Job title is `roleTitle`. */
+  role?: "USER" | "SUPER_ADMIN";
+  accountRole?: "USER" | "SUPER_ADMIN";
 };
 
 export type ApiUserActivityTask = {

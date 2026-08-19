@@ -34,6 +34,8 @@ const TYPE_LABELS: Record<string, string> = {
   TASK_DONE: "Task completed",
   TASK_DUE_REMINDER: "Due soon",
   TASK_OVERDUE: "Task is late",
+  ADMIN_SUPPORT_URGENT: "Urgent support ticket",
+  ADMIN_BROADCAST: "Announcement",
   SUBTASK_ASSIGNED: "Subtask assigned",
   SUBTASK_UNASSIGNED: "Subtask unassigned",
   SUBTASK_UPDATED: "Subtask updated",
@@ -155,6 +157,13 @@ export function hrefFromNotification(item: AppNotification) {
   const taskId = metaString(metadata, "taskId");
   const whiteboardId = metaString(metadata, "whiteboardId");
 
+  if (type === "ADMIN_SUPPORT_URGENT") {
+    const ticketId = metaString(metadata, "ticketId");
+    return ticketId ? `/admin/support?ticket=${ticketId}` : "/admin/support";
+  }
+  if (type === "ADMIN_BROADCAST") {
+    return url || null;
+  }
   if (type === "WHITEBOARD_DELETED" || type === "WHITEBOARD_MEMBER_REMOVED") {
     return "/whiteboard";
   }
@@ -185,4 +194,22 @@ export function hrefFromNotification(item: AppNotification) {
     return null;
   }
   return url || null;
+}
+
+export function isActionableNotification(item: AppNotification) {
+  return Boolean(hrefFromNotification(item));
+}
+
+export function notificationActionLabel(item: AppNotification) {
+  if (!hrefFromNotification(item)) return null;
+  const type = item.type;
+  if (type === "ADMIN_SUPPORT_URGENT") return "Open ticket";
+  if (type === "ADMIN_BROADCAST") return "Open";
+  if (type.startsWith("WHITEBOARD_")) return "Open board";
+  if (type.startsWith("PROJECT_SUGGESTION")) return "Open idea";
+  if (type.startsWith("PROJECT_")) return "Open project";
+  if (type.startsWith("TASK_") || type.startsWith("SUBTASK_") || type.startsWith("TASK_COMMENT")) {
+    return "Open task";
+  }
+  return "Open";
 }

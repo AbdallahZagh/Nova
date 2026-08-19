@@ -9,6 +9,7 @@ import {
   LayoutDashboard,
   LogOut,
   PenLine,
+  Shield,
   X,
 } from "lucide-react";
 import { clearSessionCookie } from "@/app/actions/session";
@@ -17,6 +18,7 @@ import { logoutApi } from "@/lib/api/auth";
 import { clearAccessToken } from "@/lib/api/client";
 import { cn } from "@/lib/cn";
 import Image from "next/image";
+import { useUser } from "@/components/providers/UserProvider";
 
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -34,6 +36,7 @@ export function Sidebar({ mobileOpen = false, onClose }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
   const { toast } = useToast();
+  const { profile } = useUser();
   const [loggingOut, setLoggingOut] = useState(false);
 
   async function handleLogout() {
@@ -109,6 +112,21 @@ export function Sidebar({ mobileOpen = false, onClose }: SidebarProps) {
               </Link>
             );
           })}
+          {profile?.accountRole === "SUPER_ADMIN" ? (
+            <Link
+              href="/admin"
+              onClick={onClose}
+              className={cn(
+                "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors",
+                pathname.startsWith("/admin")
+                  ? "bg-glass-button border border-glass-border text-accent"
+                  : "text-primary/70 hover:bg-glass-button hover:text-accent",
+              )}
+            >
+              <Shield className="size-4 shrink-0" />
+              Admin
+            </Link>
+          ) : null}
         </nav>
 
         <div className="mt-auto space-y-4">

@@ -48,6 +48,7 @@ export type ApiWhiteboard = {
   updatedAt: string;
   lastEditedAt?: string | null;
   lastEditedBy?: ApiWhiteboardLastEditor | null;
+  autoSaveSnapshotOnExit?: boolean;
   duplicatedFromId?: string | null;
   myRole?: WhiteboardRole | null;
   members?: ApiWhiteboardMember[];
@@ -93,6 +94,7 @@ function mapWhiteboard(row: ApiWhiteboard): Whiteboard {
     updatedAt: row.updatedAt,
     lastEditedAt: row.lastEditedAt ?? row.updatedAt,
     lastEditedBy: row.lastEditedBy ?? null,
+    autoSaveSnapshotOnExit: Boolean(row.autoSaveSnapshotOnExit),
     duplicatedFromId: row.duplicatedFromId ?? null,
     myRole: row.myRole ?? null,
     members: (row.members ?? []).map(mapMember),
@@ -351,6 +353,17 @@ export async function uploadWhiteboardPageSnapshotApi(
       body: form,
     },
   );
+}
+
+export async function patchWhiteboardApi(
+  id: string,
+  input: { title?: string; autoSaveSnapshotOnExit?: boolean },
+) {
+  const row = await apiFetch<ApiWhiteboard>(`/api/whiteboards/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+  return mapWhiteboard(row);
 }
 
 export async function updateWhiteboardApi(

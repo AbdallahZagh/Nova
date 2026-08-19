@@ -10,6 +10,8 @@ import {
   shouldBypassOffline,
   writeCachedGet,
 } from "@/lib/offline/store";
+import { taskConflictMessage } from "@/lib/offline/conflicts";
+import { showToast } from "@/lib/toast-bridge";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "";
 
@@ -180,11 +182,22 @@ export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): 
     if (method === "GET") writeCachedGet(path, response.data);
     if (!skipOfflineQueue) {
       void flushOfflineQueue(async (item) => {
-        await apiFetch(item.path, {
+        const data = await apiFetch(item.path, {
           method: item.method,
           body: item.body,
           skipOfflineQueue: true,
         });
+        if (item.method.toUpperCase() === "PATCH" && data) {
+          writeCachedGet(item.path, data);
+        }
+        const message = taskConflictMessage(data);
+        if (message) {
+          showToast({
+            variant: "info",
+            title: "Updated while you were offline",
+            message,
+          });
+        }
       });
     }
     return response.data as T;

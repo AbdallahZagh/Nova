@@ -11,6 +11,7 @@ import {
 import { createPortal } from "react-dom";
 import { CheckCircle2, XCircle, AlertTriangle, Info, X } from "lucide-react";
 import { cn } from "@/lib/cn";
+import { setToastHandler } from "@/lib/toast-bridge";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -230,6 +231,11 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     },
     [dismiss],
   );
+
+  useEffect(() => {
+    setToastHandler(toast);
+    return () => setToastHandler(null);
+  }, [toast]);
 
   return (
     <ToastContext.Provider value={{ toast }}>

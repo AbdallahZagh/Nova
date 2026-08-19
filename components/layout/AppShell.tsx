@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Header } from "@/components/ui/Header";
 import { Sidebar } from "@/components/ui/Sidebar";
 import { OfflineBanner } from "@/components/offline/OfflineBanner";
+import { SystemStatusBanner } from "@/components/system/SystemStatusBanner";
 import { DemoTourModal } from "@/components/demo/DemoTourModal";
 
 type AppShellProps = {
@@ -26,6 +27,7 @@ export function AppShell({ children }: AppShellProps) {
         />
         <main className="mt-16 h-[calc(100dvh-4rem)] overflow-y-auto">
           <OfflineBanner />
+          <SystemStatusBanner />
           <div className="p-6 md:p-8">{children}</div>
         </main>
         <DemoTourModal />

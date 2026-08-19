@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, Download, MoreHorizontal, PanelRight } from "lucide-react";
+import { ArrowLeft, Download, MoreHorizontal, PanelRight, Settings } from "lucide-react";
 import { WhiteboardEditorSkeleton } from "@/components/skeletons/WhiteboardEditorSkeleton";
 import { SaveSnapshotModal } from "@/components/whiteboard/SaveSnapshotModal";
 import { WhiteboardCanvas } from "@/components/whiteboard/WhiteboardCanvas";
@@ -11,12 +11,13 @@ import { WhiteboardExportModal } from "@/components/whiteboard/WhiteboardExportM
 import { WhiteboardMembersModal } from "@/components/whiteboard/WhiteboardMembersModal";
 import { WhiteboardPagesBar } from "@/components/whiteboard/WhiteboardPagesBar";
 import { WhiteboardPresenceBar } from "@/components/whiteboard/WhiteboardPresenceBar";
+import { WhiteboardSettingsModal } from "@/components/whiteboard/WhiteboardSettingsModal";
 import { WhiteboardToolbar } from "@/components/whiteboard/WhiteboardToolbar";
 import { WhiteboardToolsDock } from "@/components/whiteboard/WhiteboardToolsDock";
 import { DeleteConfirmModal } from "@/components/ui/DeleteConfirmModal";
 import { useToast } from "@/components/ui/Toast";
 import { useUser } from "@/components/providers/UserProvider";
-import { downloadWhiteboardExportApi } from "@/lib/api/whiteboards";
+import { downloadWhiteboardExportApi, patchWhiteboardApi } from "@/lib/api/whiteboards";
 import { ApiError } from "@/lib/api/client";
 import { useBoardTheme } from "@/lib/whiteboard/useBoardTheme";
 import { useWhiteboardSync } from "@/lib/whiteboard/useWhiteboardSync";
@@ -40,6 +41,8 @@ export default function WhiteboardEditorPage() {
   const [toolsOpen, setToolsOpen] = useState(false);
   const [membersOpen, setMembersOpen] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [savingSetting, setSavingSetting] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -93,16 +96,21 @@ export default function WhiteboardEditorPage() {
   };
 
   const skipLeaveRef = useRef<() => void>(() => {});
+  const saveLeaveRef = useRef<() => void>(() => {});
 
   const guard = useLeaveBoardGuard({
     active: Boolean(sync.board),
     fallbackHref: listHref,
     onLeaveAttempt: () => {
-      if (sync.canSaveImage) {
-        setLeaveOpen(true);
+      if (!sync.canSaveImage) {
+        skipLeaveRef.current();
         return;
       }
-      skipLeaveRef.current();
+      if (sync.board?.autoSaveSnapshotOnExit) {
+        saveLeaveRef.current();
+        return;
+      }
+      setLeaveOpen(true);
     },
   });
 
@@ -135,14 +143,21 @@ export default function WhiteboardEditorPage() {
   skipLeaveRef.current = () => {
     void handleSkipAndLeave();
   };
+  saveLeaveRef.current = () => {
+    void handleSaveAndLeave();
+  };
 
   const requestLeave = (href?: string) => {
     if (href) guard.setDestination(href);
-    if (sync.canSaveImage) {
-      setLeaveOpen(true);
+    if (!sync.canSaveImage) {
+      void handleSkipAndLeave();
       return;
     }
-    void handleSkipAndLeave();
+    if (sync.board?.autoSaveSnapshotOnExit) {
+      void handleSaveAndLeave();
+      return;
+    }
+    setLeaveOpen(true);
   };
 
   if (sync.loading) {
@@ -289,6 +304,18 @@ export default function WhiteboardEditorPage() {
             </button>
             {menuOpen ? (
               <div className="absolute right-0 z-30 mt-2 w-52 overflow-hidden rounded-xl border border-glass bg-sidebar py-1 shadow-lg">
+                {sync.canManage && !profile?.isDemo ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMenuOpen(false);
+                      setSettingsOpen(true);
+                    }}
+                    className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-glass-button"
+                  >
+                    <Settings className="size-4" /> Board settings
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   onClick={() => {
@@ -396,6 +423,29 @@ export default function WhiteboardEditorPage() {
         open={detailsOpen}
         currentUserId={profile?.id}
         onClose={() => setDetailsOpen(false)}
+      />
+      <WhiteboardSettingsModal
+        isOpen={settingsOpen}
+        autoSave={Boolean(sync.board.autoSaveSnapshotOnExit)}
+        saving={savingSetting}
+        onClose={() => setSettingsOpen(false)}
+        onToggleAutoSave={() => {
+          if (savingSetting || !sync.board) return;
+          setSavingSetting(true);
+          void patchWhiteboardApi(sync.board.id, {
+            autoSaveSnapshotOnExit: !sync.board.autoSaveSnapshotOnExit,
+          })
+            .then((next) => sync.setBoard(next))
+            .catch((err) => {
+              toast({
+                variant: "error",
+                title: "Could not update settings",
+                message:
+                  err instanceof ApiError ? err.message : "Please try again.",
+              });
+            })
+            .finally(() => setSavingSetting(false));
+        }}
       />
       <WhiteboardExportModal
         isOpen={exportOpen}
