@@ -178,6 +178,49 @@ export class StorageService {
     await this.client.storage.from(this.bucket).remove([previousPath]);
   }
 
+  async uploadSupportAttachment(
+    ticketId: string,
+    buffer: Buffer,
+    mimeType: string,
+  ): Promise<{ storagePath: string; imageUrl: string }> {
+    if (!this.client) {
+      throw new InternalServerErrorException(
+        'Supabase Storage is not configured.',
+      );
+    }
+    const ext = mimeType === 'image/png' ? 'png' : 'jpg';
+    const storagePath = `support-attachments/${ticketId}/${Date.now()}.${ext}`;
+    const { error } = await this.client.storage
+      .from(this.bucket)
+      .upload(storagePath, buffer, {
+        upsert: false,
+        contentType: mimeType,
+        cacheControl: '3600',
+      });
+    if (error) {
+      throw new InternalServerErrorException(
+        `Failed to upload attachment: ${error.message}`,
+      );
+    }
+    const { data } = this.client.storage
+      .from(this.bucket)
+      .getPublicUrl(storagePath);
+    return { storagePath, imageUrl: data.publicUrl };
+  }
+
+  async estimateStorageBytes() {
+    if (!this.client) return { configured: false, bytes: 0 };
+    let bytes = 0;
+    const { data } = await this.client.storage.from(this.bucket).list('', {
+      limit: 1000,
+    });
+    for (const file of data ?? []) {
+      const size = (file.metadata as { size?: number } | undefined)?.size;
+      if (typeof size === 'number') bytes += size;
+    }
+    return { configured: true, bytes };
+  }
+
   private pathFromPublicUrl(url?: string | null): string | null {
     if (!url) return null;
     const marker = `/object/public/${this.bucket}/`;

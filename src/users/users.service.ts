@@ -24,8 +24,9 @@ const PROFILE_USER_SELECT = {
   username: true,
   fullName: true,
   isActive: true,
-  isArchived: true,
-  isDemo: true,
+    isArchived: true,
+    isDemo: true,
+    role: true,
   roleTitle: true,
   bio: true,
   avatarUrl: true,
@@ -80,6 +81,7 @@ export class UsersService {
 
     return {
       ...user,
+      accountRole: user.role,
       projectsCount,
       tasksCount,
       activity,

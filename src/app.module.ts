@@ -3,6 +3,7 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { HttpLoggerMiddleware } from './common/http-logger.middleware';
+import { AdminModule } from './admin/admin.module';
 import { AiModule } from './ai/ai.module';
 import { AuthModule } from './auth/auth.module';
 import { DashboardModule } from './dashboard/dashboard.module';
@@ -13,6 +14,8 @@ import { ProjectsModule } from './projects/projects.module';
 import { ProjectSuggestionsModule } from './project-suggestions/project-suggestions.module';
 import { SearchModule } from './search/search.module';
 import { SubtasksModule } from './subtasks/subtasks.module';
+import { SupportModule } from './support/support.module';
+import { SystemModule } from './system/system.module';
 import { TaskCommentsModule } from './task-comments/task-comments.module';
 import { TasksModule } from './tasks/tasks.module';
 import { TimelineModule } from './timeline/timeline.module';
@@ -24,6 +27,7 @@ import { MailModule } from './mail/mail.module';
 @Module({
   imports: [
     PrismaModule,
+    SystemModule,
     DemoModule,
     MailModule,
     ScheduleModule.forRoot(),
@@ -41,9 +45,11 @@ import { MailModule } from './mail/mail.module';
     TimelineModule,
     DashboardModule,
     WhiteboardsModule,
+    SupportModule,
+    AdminModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [AppService, HttpLoggerMiddleware],
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {

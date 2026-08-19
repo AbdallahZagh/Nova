@@ -2,6 +2,7 @@ import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { cert, getApps, initializeApp } from 'firebase-admin/app';
 import { getMessaging } from 'firebase-admin/messaging';
 import { PrismaService } from '../prisma/prisma.service';
+import { SystemSettingsService } from '../system/system-settings.service';
 import { SaveDeviceTokenDto } from './dto/save-device-token.dto';
 
 const INVALID_FCM_TOKEN_CODES = new Set([
@@ -14,7 +15,10 @@ export class NotificationsService implements OnModuleInit {
   private readonly logger = new Logger(NotificationsService.name);
   private firebaseReady = false;
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly settings: SystemSettingsService,
+  ) {}
 
   onModuleInit() {
     this.initializeFirebase();
@@ -78,7 +82,7 @@ export class NotificationsService implements OnModuleInit {
     if (notificationId) {
       const notification = await (this.prisma as any).notification.updateMany({
         where: { id: notificationId, userId },
-        data: { isRead: true },
+        data: { isRead: true, openedAt: new Date() },
       });
 
       return {
@@ -107,6 +111,8 @@ export class NotificationsService implements OnModuleInit {
     title: string,
     body: string,
     metadata?: any,
+    broadcastId?: string,
+    skipPush = false,
   ) {
     const notification = await (this.prisma as any).notification.create({
       data: {
@@ -115,15 +121,18 @@ export class NotificationsService implements OnModuleInit {
         title,
         message: body,
         metadata,
+        ...(broadcastId ? { broadcastId } : {}),
       },
     });
 
     try {
-      await this.pushToUserDevices(userId, title, body, {
-        ...(metadata ?? {}),
-        type,
-        notificationId: notification.id,
-      });
+      if (!skipPush && this.settings.getCached().fcmEnabled) {
+        await this.pushToUserDevices(userId, title, body, {
+          ...(metadata ?? {}),
+          type,
+          notificationId: notification.id,
+        });
+      }
     } catch (error) {
       this.logger.error(
         `FCM push failed for user ${userId}: ${

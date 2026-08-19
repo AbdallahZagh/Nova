@@ -14,6 +14,8 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { AuthUser } from '../auth/strategies/jwt.strategy';
 import { DEMO_BLOCK_KEY } from '../demo/deny-demo.decorator';
 import { DenyDemoGuard } from '../demo/deny-demo.guard';
 import { AiService } from './ai.service';
@@ -45,8 +47,15 @@ export class AiController {
     type: AiProjectDescriptionDto,
   })
   @ApiResponse({ status: 401, description: 'Missing or invalid Bearer token' })
-  generateProjectDescription(@Body() dto: GenerateProjectDescriptionDto) {
-    return this.aiService.generateProjectDescription(dto.title);
+  generateProjectDescription(
+    @CurrentUser() user: AuthUser,
+    @Body() dto: GenerateProjectDescriptionDto,
+  ) {
+    return this.aiService.generateProjectDescription(
+      dto.title,
+      user.id,
+      user.isDemo,
+    );
   }
 
   @Post('api/tasks/ai-suggest')
@@ -62,7 +71,10 @@ export class AiController {
   })
   @ApiResponse({ status: 401, description: 'Missing or invalid Bearer token' })
   @UsePipes(new ValidationPipe({ transform: true }))
-  generateTaskSuggestion(@Body() dto: AiSuggestDto) {
-    return this.aiService.generateTaskSuggestion(dto.title);
+  generateTaskSuggestion(
+    @CurrentUser() user: AuthUser,
+    @Body() dto: AiSuggestDto,
+  ) {
+    return this.aiService.generateTaskSuggestion(dto.title, user.id, user.isDemo);
   }
 }

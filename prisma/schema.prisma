@@ -22,22 +22,69 @@ enum TaskCommentStatus {
   CLOSED
 }
 
+enum UserRole {
+  USER
+  SUPER_ADMIN
+}
+
+enum SupportTicketStatus {
+  OPEN
+  IN_PROGRESS
+  AWAITING_USER
+  RESOLVED
+  CLOSED
+}
+
+enum SupportTicketPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+enum SupportTicketCategory {
+  BUG
+  FEATURE_REQUEST
+  ACCOUNT
+  OTHER
+}
+
+enum SupportReplyChannel {
+  EMAIL
+  INTERNAL
+}
+
+enum AdminBroadcastScope {
+  USER
+  PROJECT
+  ALL
+}
+
+enum AiFeature {
+  PROJECT_DESCRIPTION
+  TASK_SUGGEST
+}
+
 // ─────────────────────────────────────────────
 // User
 // ─────────────────────────────────────────────
 
 model User {
-  id           String  @id @default(uuid())
-  email        String  @unique
-  username     String  @unique
-  passwordHash String
-  fullName     String
-  isActive     Boolean @default(false)
-  isArchived   Boolean @default(false)
-  isDemo       Boolean @default(false)
-  roleTitle    String?
-  bio          String?
-  avatarUrl    String?
+  id               String    @id @default(uuid())
+  email            String    @unique
+  username         String    @unique
+  passwordHash     String
+  fullName         String
+  isActive         Boolean   @default(false)
+  isArchived       Boolean   @default(false)
+  isDemo           Boolean   @default(false)
+  role             UserRole  @default(USER)
+  roleTitle        String?
+  bio              String?
+  avatarUrl        String?
+  lastActiveAt     DateTime?
+  tokensValidAfter DateTime?
+  createdAt        DateTime  @default(now())
 
   ownedProjects      Project[]
   memberOfProjects   ProjectMember[]
@@ -59,7 +106,17 @@ model User {
   whiteboardComments     WhiteboardComment[]
   whiteboardInvitesCreated WhiteboardInvite[]  @relation("WhiteboardInviteCreator")
   whiteboardInvitesUsed    WhiteboardInvite[]  @relation("WhiteboardInviteUser")
+  auditLogs                AuditLog[]
+  supportTickets           SupportTicket[]
+  supportReplies           SupportReply[]
+  demoSessions             DemoSession[]
+  demoEvents               DemoEvent[]
+  aiUsage                  AiUsage[]
+  aiQuota                  AiUserQuota?
+  broadcastsCreated        AdminBroadcast[]
 
+  @@index([role, isActive, isArchived])
+  @@index([lastActiveAt])
   @@map("users")
 }
 
@@ -256,19 +313,23 @@ model TaskActivity {
 // ─────────────────────────────────────────────
 
 model Notification {
-  id        String   @id @default(uuid())
-  title     String
-  message   String
-  type      String   @default("INFO")
-  metadata  Json?
-  isRead    Boolean  @default(false)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id          String    @id @default(uuid())
+  title       String
+  message     String
+  type        String    @default("INFO")
+  metadata    Json?
+  isRead      Boolean   @default(false)
+  openedAt    DateTime?
+  broadcastId String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  broadcast AdminBroadcast? @relation(fields: [broadcastId], references: [id], onDelete: SetNull)
 
   @@index([userId, isRead])
+  @@index([broadcastId])
   @@map("notification")
 }
 
@@ -441,3 +502,228 @@ model WhiteboardMember {
   @@id([userId, whiteboardId])
   @@map("whiteboard_members")
 }
+
+model SystemSettings {
+  id                         String   @id @default("default")
+  maintenanceMode            Boolean  @default(false)
+  broadcastBanner            String?
+  aiEnabled                  Boolean  @default(true)
+  defaultAiDailyQuota        Int      @default(20)
+  registrationsEnabled       Boolean  @default(true)
+  fcmEnabled                 Boolean  @default(true)
+  whiteboardRealtimeEnabled  Boolean  @default(true)
+  updatedAt                  DateTime @updatedAt
+
+  @@map("system_settings")
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  action     String
+  targetType String
+  targetId   String?
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  actorId String?
+  actor   User?   @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+  @@index([actorId, createdAt])
+  @@index([action, createdAt])
+  @@map("audit_logs")
+}
+
+model SupportTicket {
+  id         String                 @id @default(uuid())
+  title      String
+  body       String
+  status     SupportTicketStatus    @default(OPEN)
+  priority   SupportTicketPriority  @default(NORMAL)
+  category   SupportTicketCategory  @default(OTHER)
+  route      String?
+  appVersion String?
+  platform   String?
+  userAgent  String?
+  createdAt  DateTime               @default(now())
+  updatedAt  DateTime               @updatedAt
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  attachments SupportAttachment[]
+  replies     SupportReply[]
+
+  @@index([status, priority, createdAt])
+  @@index([userId, createdAt])
+  @@map("support_tickets")
+}
+
+model SupportAttachment {
+  id          String   @id @default(uuid())
+  storagePath String
+  imageUrl    String
+  createdAt   DateTime @default(now())
+
+  ticketId String
+  ticket   SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId])
+  @@map("support_attachments")
+}
+
+model SupportReply {
+  id        String              @id @default(uuid())
+  channel   SupportReplyChannel
+  body      String
+  createdAt DateTime            @default(now())
+
+  ticketId String
+  ticket   SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  authorId String?
+  author   User?   @relation(fields: [authorId], references: [id], onDelete: SetNull)
+
+  @@index([ticketId, createdAt])
+  @@map("support_replies")
+}
+
+model DemoSession {
+  id             String    @id @default(uuid())
+  startedAt      DateTime  @default(now())
+  endedAt        DateTime?
+  platform       String?
+  appVersion     String?
+  visitorHash    String?
+  requestCount   Int       @default(0)
+  mutationCount  Int       @default(0)
+  blockedCount   Int       @default(0)
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  events DemoEvent[]
+
+  @@index([userId, startedAt])
+  @@index([startedAt])
+  @@map("demo_sessions")
+}
+
+model DemoEvent {
+  id         String   @id @default(uuid())
+  action     String
+  ok         Boolean  @default(true)
+  route      String?
+  entityType String?
+  entityId   String?
+  createdAt  DateTime @default(now())
+
+  sessionId String
+  session   DemoSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId, createdAt])
+  @@index([userId, createdAt])
+  @@map("demo_events")
+}
+
+model DemoDaySummary {
+  id              String   @id @default(uuid())
+  day             DateTime
+  sessionCount    Int      @default(0)
+  uniqueVisitors  Int      @default(0)
+  mutationCount   Int      @default(0)
+  blockedCount    Int      @default(0)
+  topActions      Json?
+  topBlocks       Json?
+  seedDiff        Json?
+  createdAt       DateTime @default(now())
+
+  @@unique([day])
+  @@map("demo_day_summaries")
+}
+
+model AiUsage {
+  id           String    @id @default(uuid())
+  feature      AiFeature
+  inputTokens  Int       @default(0)
+  outputTokens Int       @default(0)
+  latencyMs    Int       @default(0)
+  ok           Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([createdAt])
+  @@map("ai_usage")
+}
+
+model AiUserQuota {
+  userId      String @id
+  user        User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  dailyLimit  Int
+  updatedAt   DateTime @updatedAt
+
+  @@map("ai_user_quotas")
+}
+
+model AdminBroadcast {
+  id              String              @id @default(uuid())
+  scope           AdminBroadcastScope
+  targetUserId    String?
+  targetProjectId String?
+  title           String
+  body            String
+  actionUrl       String?
+  inApp           Boolean             @default(true)
+  fcm             Boolean             @default(false)
+  email           Boolean             @default(false)
+  sentCount       Int                 @default(0)
+  failedCount     Int                 @default(0)
+  createdAt       DateTime            @default(now())
+
+  createdById String
+  createdBy   User           @relation(fields: [createdById], references: [id], onDelete: Cascade)
+  deliveries  AdminBroadcastDelivery[]
+  notifications Notification[]
+
+  @@index([createdAt])
+  @@map("admin_broadcasts")
+}
+
+model AdminBroadcastDelivery {
+  id        String   @id @default(uuid())
+  channel   String
+  ok        Boolean
+  error     String?
+  createdAt DateTime @default(now())
+
+  broadcastId String
+  broadcast   AdminBroadcast @relation(fields: [broadcastId], references: [id], onDelete: Cascade)
+  userId      String
+
+  @@index([broadcastId])
+  @@map("admin_broadcast_deliveries")
+}
+
+model HttpMetricRollup {
+  minuteStart DateTime @id
+  count       Int      @default(0)
+  errorCount  Int      @default(0)
+  latencySum  Int      @default(0)
+
+  @@map("http_metric_rollups")
+}
+
+model CronJobRun {
+  name           String    @id
+  lastStartedAt  DateTime?
+  lastFinishedAt DateTime?
+  lastStatus     String?
+  lastError      String?
+
+  @@map("cron_job_runs")
+}
+

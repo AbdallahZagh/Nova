@@ -64,6 +64,10 @@ export class EmailService {
     await this.sendOtp(email, code);
   }
 
+  async sendHtml(email: string, subject: string, htmlBody: string): Promise<void> {
+    await this.sendUniversalEmail(email, subject, this.wrapLayout(htmlBody));
+  }
+
   async sendTestEmail(email: string): Promise<void> {
     await this.sendUniversalEmail(
       email,

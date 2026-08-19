@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
   UnauthorizedException,
@@ -11,6 +12,7 @@ import { normalizeUsername } from '../common/utils/username.util';
 import { EmailService } from '../mail/email.service';
 import { DemoService } from '../demo/demo.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { SystemSettingsService } from '../system/system-settings.service';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
@@ -27,9 +29,13 @@ export class AuthService {
     private readonly jwtService: JwtService,
     private readonly emailService: EmailService,
     private readonly demoService: DemoService,
+    private readonly settings: SystemSettingsService,
   ) {}
 
   async register(dto: RegisterDto) {
+    if (!this.settings.getCached().registrationsEnabled) {
+      throw new ForbiddenException('New registrations are currently closed.');
+    }
     const email = this.normalizeEmail(dto.email);
     const username = normalizeUsername(dto.username);
 
@@ -127,6 +133,10 @@ export class AuthService {
       throw new UnauthorizedException('Please verify your email before logging in. A new OTP was sent.');
     }
 
+    if (user.isDemo) {
+      void this.demoService.openSession({ userId: user.id, platform: 'unknown' });
+    }
+
     return this.authResponse(user, 'Login successful');
   }
 
@@ -157,9 +167,9 @@ export class AuthService {
     await this.consumeOtp(user.id, dto.code, 'FORGOT_PASSWORD');
 
     const passwordHash = await bcrypt.hash(dto.newPassword, 10);
-    await (this.prisma as any).user.update({
+    await this.prisma.user.update({
       where: { id: user.id },
-      data: { passwordHash, isActive: true, isArchived: false },
+      data: { passwordHash, isActive: true, isArchived: false, tokensValidAfter: new Date() },
     });
 
     return { message: 'Password reset successfully' };
@@ -191,7 +201,11 @@ export class AuthService {
     );
     await (this.prisma as any).user.update({
       where: { id: userId },
-      data: { isActive: false, isArchived: true },
+      data: {
+        isActive: false,
+        isArchived: true,
+        tokensValidAfter: new Date(),
+      },
     });
 
     return {
@@ -277,7 +291,10 @@ export class AuthService {
     return {
       message,
       accessToken,
-      user: safeUser,
+      user: {
+        ...safeUser,
+        accountRole: user.role,
+      },
     };
   }
 
