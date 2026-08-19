@@ -35,6 +35,8 @@ const TYPE_LABELS: Record<string, string> = {
   TASK_DONE: "Task completed",
   TASK_DUE_REMINDER: "Due soon",
   TASK_OVERDUE: "Task is late",
+  ADMIN_SUPPORT_URGENT: "Urgent support ticket",
+  ADMIN_BROADCAST: "Announcement",
   SUBTASK_ASSIGNED: "Subtask assigned",
   SUBTASK_UNASSIGNED: "Subtask unassigned",
   SUBTASK_UPDATED: "Subtask updated",
@@ -163,6 +165,18 @@ export function hrefFromNotificationData(
   const taskId = metaString(metadata, "taskId");
   const whiteboardId = metaString(metadata, "whiteboardId");
 
+  if (notificationType === "ADMIN_BROADCAST") {
+    const url = metaString(metadata, "url");
+    if (url.startsWith("/projects/")) {
+      const projectId = url.split("/")[2]?.split("?")[0];
+      if (projectId) return `/(main)/project/${projectId}` as Href;
+    }
+    if (url.startsWith("/whiteboard/")) {
+      const whiteboardId = url.split("/")[2]?.split("?")[0];
+      if (whiteboardId) return `/(main)/whiteboard/${whiteboardId}` as Href;
+    }
+    return null;
+  }
   if (
     notificationType === "WHITEBOARD_DELETED" ||
     notificationType === "WHITEBOARD_MEMBER_REMOVED"
@@ -210,4 +224,28 @@ export function hrefFromNotificationData(
     if (projectId) return `/(main)/project/${projectId}` as Href;
   }
   return null;
+}
+
+export function isActionableNotification(
+  item: Pick<AppNotification, "type" | "metadata">,
+) {
+  return Boolean(hrefFromNotification(item));
+}
+
+export function notificationActionLabel(
+  item: Pick<AppNotification, "type" | "metadata">,
+) {
+  if (!hrefFromNotification(item)) return null;
+  const type = String(item.type ?? "");
+  if (type.startsWith("WHITEBOARD_")) return "Open board";
+  if (type.startsWith("PROJECT_SUGGESTION")) return "Open idea";
+  if (type.startsWith("PROJECT_")) return "Open project";
+  if (
+    type.startsWith("TASK_") ||
+    type.startsWith("SUBTASK_") ||
+    type.startsWith("TASK_COMMENT")
+  ) {
+    return "Open task";
+  }
+  return "Open";
 }

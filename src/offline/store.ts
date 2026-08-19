@@ -1,5 +1,6 @@
 import * as FileSystem from "expo-file-system/legacy";
 import { create } from "zustand";
+import { attachTaskBase, stripTaskBase } from "@/offline/conflicts";
 
 export type OfflineMutation = {
   id: string;
@@ -122,12 +123,20 @@ export async function enqueueMutation(input: {
   path: string;
   body?: unknown;
 }) {
+  const path = normalizePath(input.path);
+  let body = input.body;
+  if (input.method.toUpperCase() === "PATCH") {
+    const parsed =
+      body && typeof body === "object" ? (body as Record<string, unknown>) : null;
+    const cached = await readCachedGet<Record<string, unknown>>(path);
+    body = attachTaskBase(path, parsed, cached) ?? body;
+  }
   const rows = await readQueue();
   const item: OfflineMutation = {
     id: `offline-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     method: input.method.toUpperCase(),
-    path: normalizePath(input.path),
-    body: input.body,
+    path,
+    body,
     createdAt: Date.now(),
     attempts: 0,
   };
@@ -171,7 +180,8 @@ export async function optimisticMutationResponse(
   if (method === "PATCH" && normalized.startsWith("/api/tasks/") && parsed) {
     const cached =
       (await readCachedGet<Record<string, unknown>>(normalized)) ?? {};
-    const row = { ...cached, ...parsed, updatedAt: now };
+    const fields = stripTaskBase(parsed) ?? parsed;
+    const row = { ...cached, ...fields, updatedAt: now };
     await writeCachedGet(normalized, row);
     return row;
   }

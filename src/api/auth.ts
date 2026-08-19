@@ -113,7 +113,6 @@ export async function updateMeApi(payload: UpdateProfilePayload) {
     name: payload.name?.trim() ?? payload.fullName?.trim(),
     username: payload.username?.trim().replace(/^@/, ""),
     roleTitle: payload.roleTitle?.trim() ?? payload.role?.trim(),
-    role: payload.role?.trim() ?? payload.roleTitle?.trim(),
     bio: payload.bio?.trim() ?? "",
   };
   const { data } = await apiClient.patch<ApiUser>("/api/users/me", body);

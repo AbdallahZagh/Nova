@@ -14,6 +14,7 @@ import { useColorScheme } from "nativewind";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { DynamicLogo } from "@/components/UI/DynamicLogo";
 import { OfflineBanner } from "@/components/OfflineBanner";
+import { SystemStatusBanner } from "@/components/SystemStatusBanner";
 import { DemoTourModal } from "@/components/DemoTourModal";
 import { useNotificationSync } from "@/hooks/useNotificationSync";
 import { useAuthStore } from "@/store/useAuthStore";
@@ -133,6 +134,7 @@ export function AppFrame({ children }: PropsWithChildren) {
         </View>
       </View>
       <OfflineBanner />
+      <SystemStatusBanner />
       <DemoTourModal />
 
       <KeyboardAvoidingView

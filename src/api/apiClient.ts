@@ -13,6 +13,7 @@ import {
 import { expoFetchAdapter } from "@/api/expoFetchAdapter";
 import { useAuthStore } from "@/store/useAuthStore";
 import { useSnackbarStore } from "@/store/useSnackbarStore";
+import { taskConflictMessage } from "@/offline/conflicts";
 
 export const API_BASE_URL = (
   process.env.EXPO_PUBLIC_API_URL || "https://nova-l5df.onrender.com"
@@ -107,12 +108,23 @@ function recordNetworkFailure() {
 
 export async function syncOfflineQueue() {
   await flushOfflineQueue(async (item) => {
-    await apiClient.request({
+    const response = await apiClient.request({
       method: item.method,
       url: item.path,
       data: item.body,
       skipOfflineQueue: true,
     } as OfflineConfig);
+    if (item.method.toUpperCase() === "PATCH" && response.data) {
+      await writeCachedGet(item.path, response.data);
+    }
+    const message = taskConflictMessage(response.data);
+    if (message) {
+      useSnackbarStore.getState().showSnackbar({
+        variant: "info",
+        title: "Updated while you were offline",
+        message,
+      });
+    }
   });
 }
 

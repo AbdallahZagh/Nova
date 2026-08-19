@@ -17,12 +17,14 @@ import {
 } from "@/api/notifications";
 import { getApiErrorMessage } from "@/api/apiClient";
 import { NOTIFICATION_PAGE_SIZE } from "@/config/notifications";
+import { BottomDrawer } from "@/components/BottomDrawer";
 import { PageSkeleton } from "@/components/Skeleton";
 import {
   formatNotificationTime,
   formatNotificationType,
   groupNotificationsByDay,
   hrefFromNotification,
+  notificationActionLabel,
   notificationKind,
   notificationTone,
   type NotificationKind,
@@ -57,11 +59,27 @@ function toneColor(
   return palette.accent;
 }
 
+function formatFullDate(raw?: string) {
+  if (!raw) return "";
+  const date = new Date(raw);
+  if (Number.isNaN(date.getTime())) return raw;
+  return date.toLocaleString("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
 function NotificationCard({
   notification,
+  selected,
   onPress,
 }: {
   notification: AppNotification;
+  selected: boolean;
   onPress: () => void;
 }) {
   const { colorScheme } = useColorScheme();
@@ -76,11 +94,13 @@ function NotificationCard({
       accessibilityRole="button"
       onPress={onPress}
       className={`rounded-nova-xl border p-4 active:opacity-75 ${
-        unreadWarning
-          ? "border-warning/50 bg-warning/10 dark:border-dark-warning/50 dark:bg-dark-warning/10"
-          : notification.isRead
-            ? "border-glass bg-glass-card dark:border-dark-glass dark:bg-dark-glass-card"
-            : "border-accent/40 bg-accent/5 dark:border-dark-accent/40 dark:bg-dark-accent/10"
+        selected
+          ? "border-accent/60 bg-accent/10 dark:border-dark-accent/60 dark:bg-dark-accent/15"
+          : unreadWarning
+            ? "border-warning/50 bg-warning/10 dark:border-dark-warning/50 dark:bg-dark-warning/10"
+            : notification.isRead
+              ? "border-glass bg-glass-card dark:border-dark-glass dark:bg-dark-glass-card"
+              : "border-accent/40 bg-accent/5 dark:border-dark-accent/40 dark:bg-dark-accent/10"
       }`}
     >
       <View className="flex-row items-start gap-3">
@@ -143,12 +163,17 @@ export default function NotificationsScreen() {
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const visible = useMemo(
     () => (filter === "unread" ? items.filter((item) => !item.isRead) : items),
     [filter, items],
   );
   const groups = useMemo(() => groupNotificationsByDay(visible), [visible]);
+  const selected = useMemo(
+    () => items.find((item) => item.id === selectedId) ?? null,
+    [items, selectedId],
+  );
 
   const loadPage = useCallback(
     async (nextPage: number, replace = false) => {
@@ -223,27 +248,32 @@ export default function NotificationsScreen() {
 
   const openNotification = useCallback(
     async (notification: AppNotification) => {
-      if (!notification.isRead) {
-        setItems((current) =>
-          current.map((item) =>
-            item.id === notification.id ? { ...item, isRead: true } : item,
-          ),
-        );
-        markReadInStore(notification.id);
-        await markNotificationReadApi(notification.id).catch((error) => {
-          showSnackbar({
-            variant: "error",
-            title: "Could not mark as read",
-            message: getApiErrorMessage(error, "Please try again."),
-          });
-        });
-      }
+      setSelectedId(notification.id);
+      if (notification.isRead) return;
 
-      const href = hrefFromNotification(notification);
-      if (href) router.push(href);
+      setItems((current) =>
+        current.map((item) =>
+          item.id === notification.id ? { ...item, isRead: true } : item,
+        ),
+      );
+      markReadInStore(notification.id);
+      await markNotificationReadApi(notification.id).catch((error) => {
+        showSnackbar({
+          variant: "error",
+          title: "Could not mark as read",
+          message: getApiErrorMessage(error, "Please try again."),
+        });
+      });
     },
     [markReadInStore, showSnackbar],
   );
+
+  const openSelectedTarget = useCallback(() => {
+    if (!selected) return;
+    const href = hrefFromNotification(selected);
+    setSelectedId(null);
+    if (href) router.push(href);
+  }, [selected]);
 
   const markAll = useCallback(async () => {
     if (unreadCount === 0) return;
@@ -371,6 +401,7 @@ export default function NotificationsScreen() {
                 <NotificationCard
                   key={notification.id}
                   notification={notification}
+                  selected={selectedId === notification.id}
                   onPress={() => void openNotification(notification)}
                 />
               ))}
@@ -380,6 +411,50 @@ export default function NotificationsScreen() {
 
         {loadingMore ? <ActivityIndicator color={palette.accent} /> : null}
       </ScrollView>
+
+      <BottomDrawer
+        visible={Boolean(selected)}
+        title="Notification"
+        subtitle={
+          selected
+            ? `${formatNotificationType(selected.type)} · ${formatNotificationTime(selected.createdAt)}`
+            : undefined
+        }
+        minHeight="42%"
+        maxHeight="78%"
+        onClose={() => setSelectedId(null)}
+        footer={
+          selected && notificationActionLabel(selected) ? (
+            <Pressable
+              accessibilityRole="button"
+              onPress={openSelectedTarget}
+              className="min-h-[48px] items-center justify-center rounded-nova bg-accent dark:bg-dark-accent"
+            >
+              <Text className="text-sm font-black text-white">
+                {notificationActionLabel(selected)}
+              </Text>
+            </Pressable>
+          ) : (
+            <Text className="text-center text-sm font-bold text-muted dark:text-dark-muted">
+              No further action needed.
+            </Text>
+          )
+        }
+      >
+        {selected ? (
+          <View className="gap-4">
+            <Text className="text-[22px] font-black leading-7 text-primary dark:text-dark-primary">
+              {selected.title}
+            </Text>
+            <Text className="text-[15px] leading-6 text-muted dark:text-dark-muted">
+              {selected.message}
+            </Text>
+            <Text className="text-xs font-bold text-muted dark:text-dark-muted">
+              {formatFullDate(selected.createdAt)}
+            </Text>
+          </View>
+        ) : null}
+      </BottomDrawer>
     </View>
   );
 }

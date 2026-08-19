@@ -15,9 +15,10 @@ import { WhiteboardMembersDrawer } from "@/components/whiteboard/WhiteboardMembe
 import { WhiteboardPresenceStack } from "@/components/whiteboard/WhiteboardPresenceStack";
 import { WhiteboardToolbar } from "@/components/whiteboard/WhiteboardToolbar";
 import { WhiteboardToolsDock } from "@/components/whiteboard/WhiteboardToolsDock";
+import { WhiteboardSettingsSheet } from "@/components/whiteboard/WhiteboardSettingsSheet";
 import { ActionSheet } from "@/components/ActionSheet";
 import { WhiteboardEditorSkeleton } from "@/components/Skeleton";
-import { canViewBoardActivity } from "@/api/whiteboards";
+import { canViewBoardActivity, patchWhiteboardApi } from "@/api/whiteboards";
 import { useWhiteboardSync } from "@/hooks/useWhiteboardSync";
 import { useAuthStore } from "@/store/useAuthStore";
 import { useSnackbarStore } from "@/store/useSnackbarStore";
@@ -53,6 +54,8 @@ export default function WhiteboardEditorScreen() {
   const [exportOpen, setExportOpen] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [savingPng, setSavingPng] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [savingSetting, setSavingSetting] = useState(false);
   const paper = palette.main;
   const surround = palette.sidebar;
   const ink = palette.primary;
@@ -161,11 +164,15 @@ export default function WhiteboardEditorScreen() {
 
   const requestLeave = (href?: string) => {
     pendingRef.current = href ?? pendingRef.current ?? WHITEBOARD_LEAVE_BACK;
-    if (sync.canSaveImage) {
-      setLeaveOpen(true);
+    if (!sync.canSaveImage) {
+      void handleSkipAndLeave();
       return;
     }
-    void handleSkipAndLeave();
+    if (sync.board?.autoSaveSnapshotOnExit) {
+      void handleSaveAndLeave();
+      return;
+    }
+    setLeaveOpen(true);
   };
   requestLeaveRef.current = requestLeave;
 
@@ -424,6 +431,19 @@ export default function WhiteboardEditorScreen() {
         title="Board"
         onClose={() => setMoreOpen(false)}
         actions={[
+          ...(sync.canManage && !isDemo
+            ? [
+                {
+                  key: "settings",
+                  icon: "settings-outline" as const,
+                  label: "Board settings",
+                  onPress: () => {
+                    setMoreOpen(false);
+                    setSettingsOpen(true);
+                  },
+                },
+              ]
+            : []),
           ...(canViewBoardActivity(sync.myRole)
             ? [
                 {
@@ -460,6 +480,28 @@ export default function WhiteboardEditorScreen() {
               ]
             : []),
         ]}
+      />
+      <WhiteboardSettingsSheet
+        visible={settingsOpen}
+        autoSave={Boolean(sync.board.autoSaveSnapshotOnExit)}
+        saving={savingSetting}
+        onClose={() => setSettingsOpen(false)}
+        onToggleAutoSave={() => {
+          if (savingSetting || !sync.board) return;
+          setSavingSetting(true);
+          void patchWhiteboardApi(sync.board.id, {
+            autoSaveSnapshotOnExit: !sync.board.autoSaveSnapshotOnExit,
+          })
+            .then((next) => sync.setBoard(next))
+            .catch(() => {
+              showSnackbar({
+                variant: "error",
+                title: "Could not update settings",
+                message: "Please try again.",
+              });
+            })
+            .finally(() => setSavingSetting(false));
+        }}
       />
       <WhiteboardExportDrawer
         visible={exportOpen}

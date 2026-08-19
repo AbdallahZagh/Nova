@@ -33,6 +33,7 @@ import { ConfirmationPopup } from "@/components/ConfirmationPopup";
 import { FormField } from "@/components/FormField";
 import { OtpInput } from "@/components/OtpInput";
 import { PrimaryButton } from "@/components/PrimaryButton";
+import { ReportProblemModal } from "@/components/ReportProblemModal";
 import { PageSkeleton } from "@/components/Skeleton";
 import { UserAvatar } from "@/components/UserAvatar";
 import { useAuthStore } from "@/store/useAuthStore";
@@ -399,6 +400,7 @@ export default function ProfileScreen() {
   const [deactivating, setDeactivating] = useState(false);
   const [showDeactivatePopup, setShowDeactivatePopup] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [showReportModal, setShowReportModal] = useState(false);
   const [showAvatarSheet, setShowAvatarSheet] = useState(false);
   const [showAvatarSourceSheet, setShowAvatarSourceSheet] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
@@ -466,7 +468,6 @@ export default function ProfileScreen() {
         name: form.fullName,
         username: form.username,
         roleTitle: form.roleTitle,
-        role: form.roleTitle,
         bio: form.bio,
       });
       setProfile(next);
@@ -906,6 +907,24 @@ export default function ProfileScreen() {
             </View>
           </View>
 
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Report a problem"
+            onPress={() => setShowReportModal(true)}
+            className="min-h-[58px] flex-row items-center gap-3 rounded-nova border border-glass bg-glass-card px-4 active:opacity-75 dark:border-dark-glass dark:bg-dark-glass-card"
+          >
+            <Ionicons name="flag-outline" size={20} color={palette.accent} />
+            <View className="flex-1">
+              <Text className="font-extrabold text-primary dark:text-dark-primary">
+                Report a problem
+              </Text>
+              <Text className="mt-0.5 text-xs text-muted dark:text-dark-muted">
+                Send a screenshot and details to Super Admins.
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={palette.muted} />
+          </Pressable>
+
           {isDemo ? null : (
           <Pressable
             accessibilityRole="button"
@@ -980,6 +999,10 @@ export default function ProfileScreen() {
         visible={showPasswordModal}
         email={profile?.email ?? ""}
         onClose={() => setShowPasswordModal(false)}
+      />
+      <ReportProblemModal
+        visible={showReportModal}
+        onClose={() => setShowReportModal(false)}
       />
 
       <ActionSheet

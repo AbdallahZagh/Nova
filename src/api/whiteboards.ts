@@ -75,6 +75,7 @@ export type Whiteboard = {
     avatarUrl: string | null;
     username?: string | null;
   } | null;
+  autoSaveSnapshotOnExit?: boolean;
   myRole: WhiteboardRole | null;
   members: WhiteboardMember[];
   pages: WhiteboardPage[];
@@ -405,6 +406,7 @@ type ApiWhiteboard = {
     avatarUrl: string | null;
     username?: string | null;
   } | null;
+  autoSaveSnapshotOnExit?: boolean;
   myRole?: WhiteboardRole | null;
   members?: ApiWhiteboardMember[];
   pages?: ApiWhiteboardPage[];
@@ -449,6 +451,7 @@ function mapWhiteboard(row: ApiWhiteboard): Whiteboard {
     updatedAt: row.updatedAt,
     lastEditedAt: row.lastEditedAt ?? row.updatedAt,
     lastEditedBy: row.lastEditedBy ?? null,
+    autoSaveSnapshotOnExit: Boolean(row.autoSaveSnapshotOnExit),
     myRole: row.myRole ?? null,
     members: (row.members ?? []).map(mapMember),
     pages,
@@ -600,6 +603,17 @@ export async function downloadWhiteboardExportApi(
     buffer: response.data,
     filename: match?.[1] ?? `whiteboard.${format}`,
   };
+}
+
+export async function patchWhiteboardApi(
+  id: string,
+  input: { title?: string; autoSaveSnapshotOnExit?: boolean },
+) {
+  const response = await apiClient.patch<ApiWhiteboard>(
+    `/api/whiteboards/${id}`,
+    input,
+  );
+  return mapWhiteboard(response.data);
 }
 
 export async function applyWhiteboardOpsApi(id: string, ops: WhiteboardOps) {
