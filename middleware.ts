@@ -15,7 +15,8 @@ export function middleware(request: NextRequest) {
     isLoginPage ||
     pathname === "/forgot-password" ||
     pathname === "/register" ||
-    pathname === "/reactivate";
+    pathname === "/reactivate" ||
+    pathname === "/connect";
 
   if (isPublicPage) {
     return NextResponse.next();

@@ -23,7 +23,13 @@ function isInactiveAccountError(err: unknown) {
   );
 }
 
-function LoginFormContent() {
+function LoginFormContent({
+  returnTo,
+  onAuthenticated,
+}: {
+  returnTo?: string;
+  onAuthenticated?: () => void;
+}) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { toast } = useToast();
@@ -88,7 +94,11 @@ function LoginFormContent() {
       await establishSession();
 
       toast({ variant: "success", title: "Welcome back" });
-      router.push(searchParams.get("from") ?? "/dashboard");
+      if (onAuthenticated) {
+        onAuthenticated();
+        return;
+      }
+      router.push(returnTo ?? searchParams.get("from") ?? "/dashboard");
       router.refresh();
     } catch (err) {
       if (isInactiveAccountError(err)) {
@@ -151,7 +161,11 @@ function LoginFormContent() {
         title: "Demo workspace",
         message: "A short tour will explain what you can try.",
       });
-      router.push("/dashboard");
+      if (onAuthenticated) {
+        onAuthenticated();
+        return;
+      }
+      router.push(returnTo ?? "/dashboard");
       router.refresh();
     } catch (err) {
       const message =
@@ -243,10 +257,16 @@ function LoginFormContent() {
   );
 }
 
-export function LoginForm() {
+export function LoginForm({
+  returnTo,
+  onAuthenticated,
+}: {
+  returnTo?: string;
+  onAuthenticated?: () => void;
+}) {
   return (
     <Suspense>
-      <LoginFormContent />
+      <LoginFormContent returnTo={returnTo} onAuthenticated={onAuthenticated} />
     </Suspense>
   );
 }
