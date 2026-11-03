@@ -727,3 +727,60 @@ model CronJobRun {
   @@map("cron_job_runs")
 }
 
+model OAuthClient {
+  clientId                String   @id
+  clientSecret            String?
+  clientSecretExpiresAt   Int?
+  clientIdIssuedAt        Int
+  redirectUris            Json
+  tokenEndpointAuthMethod String?
+  grantTypes              Json?
+  responseTypes           Json?
+  clientName              String?
+  clientUri               String?
+  logoUri                 String?
+  scope                   String?
+  createdAt               DateTime @default(now())
+  grants                  OAuthGrant[]
+  refreshTokens           OAuthRefreshToken[]
+
+  @@map("oauth_clients")
+}
+
+model OAuthGrant {
+  id            String    @id @default(uuid())
+  kind          String
+  secretHash    String?   @unique
+  clientId      String
+  client        OAuthClient @relation(fields: [clientId], references: [clientId], onDelete: Cascade)
+  userId        String?
+  redirectUri   String
+  codeChallenge String
+  state         String?
+  resource      String?
+  scope         String    @default("nova")
+  expiresAt     DateTime
+  usedAt        DateTime?
+  createdAt     DateTime  @default(now())
+
+  @@index([clientId])
+  @@index([expiresAt])
+  @@map("oauth_grants")
+}
+
+model OAuthRefreshToken {
+  id         String    @id @default(uuid())
+  tokenHash  String    @unique
+  clientId   String
+  client     OAuthClient @relation(fields: [clientId], references: [clientId], onDelete: Cascade)
+  userId     String
+  scope      String
+  resource   String?
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([clientId])
+  @@map("oauth_refresh_tokens")
+}
+

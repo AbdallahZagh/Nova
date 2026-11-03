@@ -8,5 +8,6 @@ import { TaskCommentsService } from './task-comments.service';
   imports: [NotificationsModule],
   controllers: [TaskCommentsController],
   providers: [TaskCommentsService, ProjectRoleGuard],
+  exports: [TaskCommentsService],
 })
 export class TaskCommentsModule {}

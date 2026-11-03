@@ -9,5 +9,6 @@ import { ProjectsService } from './projects.service';
   imports: [MailModule, NotificationsModule],
   controllers: [ProjectsController],
   providers: [ProjectsService, ProjectRoleGuard],
+  exports: [ProjectsService],
 })
 export class ProjectsModule {}

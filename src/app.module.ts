@@ -23,6 +23,8 @@ import { UsersModule } from './users/users.module';
 import { WhiteboardsModule } from './whiteboards/whiteboards.module';
 import { StorageModule } from './storage/storage.module';
 import { MailModule } from './mail/mail.module';
+import { McpModule } from './mcp/mcp.module';
+import { OAuthModule } from './oauth/oauth.module';
 
 @Module({
   imports: [
@@ -47,6 +49,8 @@ import { MailModule } from './mail/mail.module';
     WhiteboardsModule,
     SupportModule,
     AdminModule,
+    OAuthModule,
+    McpModule,
   ],
   controllers: [AppController],
   providers: [AppService, HttpLoggerMiddleware],

@@ -2,10 +2,23 @@ import 'dotenv/config';
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { mcpAuthRouter } from '@modelcontextprotocol/sdk/server/auth/router.js';
 import { AppModule } from './app.module';
+import { NovaOAuthProvider } from './oauth/oauth.provider';
+import { mcpIssuerUrl, mcpResourceUrl } from './oauth/oauth.urls';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  const issuer = mcpIssuerUrl();
+  app.use(
+    mcpAuthRouter({
+      provider: app.get(NovaOAuthProvider),
+      issuerUrl: issuer,
+      resourceServerUrl: mcpResourceUrl(),
+      resourceName: 'Nova',
+      scopesSupported: ['nova'],
+    }),
+  );
 
   app.enableCors({
     origin: true,

@@ -8,5 +8,6 @@ import { SubtasksService } from './subtasks.service';
   imports: [NotificationsModule],
   controllers: [SubtasksController],
   providers: [SubtasksService, ProjectRoleGuard],
+  exports: [SubtasksService],
 })
 export class SubtasksModule {}
