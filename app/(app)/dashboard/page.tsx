@@ -2,10 +2,12 @@
 
 import { useEffect, useMemo, useState, useCallback } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { CalendarDays, FolderKanban, PenLine } from "lucide-react";
 import { ActivityHeatmap } from "@/components/dashboard/ActivityHeatmap";
 import {
   ActivityHeatmapSkeleton,
+  ComingUpSkeleton,
   ContinueStripSkeleton,
   MetricsCardsSkeleton,
   UrgentTasksTableSkeleton,
@@ -27,6 +29,18 @@ import {
 import { getTaskApi } from "@/lib/api/tasks";
 import { ApiError } from "@/lib/api/client";
 import { cn } from "@/lib/cn";
+import {
+  chargeTimingLabel,
+  EMPTY_DASHBOARD_SUBSCRIPTIONS,
+  formatChargeDate,
+  formatMoney,
+  formatMoneyList,
+  normalizeDashboardSubscriptions,
+  subscriptionAlertLabel,
+  subscriptionHref,
+  type DashboardSubscriptionAlert,
+  type DashboardSubscriptions,
+} from "@/lib/subscriptions";
 import type { Task } from "@/lib/tasks";
 
 type OpenTaskHandler = (taskId: string, projectId: string) => void;
@@ -46,12 +60,16 @@ const PRIORITY_DOT: Record<string, string> = {
 
 function UrgentTasksTable({
   tasks,
+  alerts,
   onOpenTask,
+  onOpenSubscription,
 }: {
   tasks: UrgentTask[];
+  alerts: DashboardSubscriptionAlert[];
   onOpenTask: OpenTaskHandler;
+  onOpenSubscription: (subscriptionId: string) => void;
 }) {
-  if (tasks.length === 0) {
+  if (tasks.length === 0 && alerts.length === 0) {
     return (
       <p className="py-6 text-center text-sm text-primary/40">
         No open tasks with due dates.
@@ -135,6 +153,41 @@ function UrgentTasksTable({
                   >
                     {task.dueLabel}
                   </span>
+                </td>
+              </tr>
+            );
+          })}
+          {alerts.map((alert) => {
+            const dueLabel = subscriptionAlertLabel(alert);
+            return (
+              <tr
+                key={`subscription-${alert.id}`}
+                role="button"
+                tabIndex={0}
+                onClick={() => onOpenSubscription(alert.id)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    onOpenSubscription(alert.id);
+                  }
+                }}
+                className="group cursor-pointer border-b border-glass/40 last:border-0 hover:bg-white/3"
+              >
+                <td className="py-3 pr-4">
+                  <div className="flex items-center gap-2.5 pl-2">
+                    <span className="mt-px size-2 shrink-0 rounded-full bg-warning" />
+                    <span className="line-clamp-1 font-medium text-primary group-hover:text-accent">
+                      {alert.service}
+                    </span>
+                  </div>
+                </td>
+                <td className="py-3 pr-4">
+                  <span className="rounded-md border border-glass bg-glass-button px-2 py-0.5 text-xs text-primary/65">
+                    Subscription
+                  </span>
+                </td>
+                <td className="py-3 pr-2 text-right">
+                  <span className="text-xs font-semibold text-warning">{dueLabel}</span>
                 </td>
               </tr>
             );
@@ -267,7 +320,7 @@ function ContinueStrip({
               href="/timeline?filter=today"
               className="mt-2 inline-block text-[11px] font-medium text-accent/80 hover:text-accent"
             >
-              Today's timeline
+              {"Today's timeline"}
             </Link>
           </div>
         </div>
@@ -299,12 +352,16 @@ const EMPTY_CONTINUE: DashboardContinue = {
 
 export default function DashboardPage() {
   const { toast } = useToast();
+  const router = useRouter();
   const { updateTask, deleteTask } = useAppData();
 
   const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
   const [activity, setActivity] = useState<ActivityMap>({});
   const [urgentTasks, setUrgentTasks] = useState<UrgentTask[]>([]);
   const [continueData, setContinueData] = useState<DashboardContinue | null>(null);
+  const [subscriptions, setSubscriptions] = useState<DashboardSubscriptions>(
+    EMPTY_DASHBOARD_SUBSCRIPTIONS,
+  );
   const [loading, setLoading] = useState(true);
 
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
@@ -327,6 +384,7 @@ export default function DashboardPage() {
       setActivity(data.activity);
       setUrgentTasks(data.urgentTasks);
       setContinueData(data.continue);
+      setSubscriptions(normalizeDashboardSubscriptions(data.subscriptions));
     } catch (err) {
       showApiError(toast, "dashboard", err);
       setContinueData((current) => current ?? EMPTY_CONTINUE);
@@ -336,7 +394,14 @@ export default function DashboardPage() {
   }, [toast]);
 
   useEffect(() => {
-    void refreshDashboard();
+    let cancelled = false;
+    void (async () => {
+      await Promise.resolve();
+      if (!cancelled) await refreshDashboard();
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [refreshDashboard]);
 
   const openTask = useCallback(
@@ -361,6 +426,13 @@ export default function DashboardPage() {
       }
     },
     [toast],
+  );
+
+  const openSubscription = useCallback(
+    (subscriptionId: string) => {
+      router.push(subscriptionHref(subscriptionId));
+    },
+    [router],
   );
 
   const handleSaveTask = async (updated: Task) => {
@@ -405,9 +477,16 @@ export default function DashboardPage() {
     setDrawerTask(null);
   };
 
-  const metricCards = useMemo(() => {
+  const metricCards = useMemo((): Array<{
+    label: string;
+    value: string;
+    href: string;
+    hint?: string;
+    detail?: string;
+  }> => {
     if (!metrics) return [];
     const meta = metrics._meta;
+    const dueMoney = formatMoneyList(subscriptions.dueIn30Days);
     return [
       {
         label: "Tasks Due Today",
@@ -431,8 +510,20 @@ export default function DashboardPage() {
             : undefined,
         href: "/projects",
       },
+      {
+        label: "Due in 30 days",
+        value: dueMoney.value,
+        detail: dueMoney.rest ?? undefined,
+        hint: subscriptions.next
+          ? chargeTimingLabel(
+              subscriptions.next.service,
+              subscriptions.next.daysUntilCharge,
+            )
+          : "Nothing due",
+        href: "/subscriptions",
+      },
     ];
-  }, [metrics]);
+  }, [metrics, subscriptions]);
 
   const dateStr = new Date().toLocaleDateString("en-US", {
     weekday: "long",
@@ -461,10 +552,14 @@ export default function DashboardPage() {
       )}
 
       {loading ? (
-        <MetricsCardsSkeleton />
+        <>
+          <MetricsCardsSkeleton />
+          <ComingUpSkeleton />
+        </>
       ) : metrics ? (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-          {metricCards.map(({ label, value, hint, href }) => (
+        <>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          {metricCards.map(({ label, value, hint, detail, href }) => (
             <Link
               key={label}
               href={href}
@@ -473,6 +568,9 @@ export default function DashboardPage() {
               <GlassCard className="h-full border-glass transition hover:border-accent/40">
                 <p className="text-sm text-primary/60">{label}</p>
                 <p className="mt-2 text-3xl font-semibold text-accent">{value}</p>
+                {detail ? (
+                  <p className="mt-1 text-[11px] text-primary/45">{detail}</p>
+                ) : null}
                 {hint ? (
                   <p className="mt-1 text-[11px] text-primary/45">{hint}</p>
                 ) : null}
@@ -480,6 +578,56 @@ export default function DashboardPage() {
             </Link>
           ))}
         </div>
+        <GlassCard title="Coming up">
+          {subscriptions.upcoming.length === 0 ? (
+            <p className="py-6 text-center text-sm text-primary/40">
+              No subscriptions yet.{" "}
+              <Link
+                href="/subscriptions"
+                className="font-medium text-accent hover:text-accent/80"
+              >
+                Add one
+              </Link>
+            </p>
+          ) : (
+            <ul>
+              {subscriptions.upcoming.slice(0, 3).map((item) => (
+                <li key={item.id} className="border-b border-glass/40 last:border-0">
+                  <Link
+                    href={subscriptionHref(item.id)}
+                    className="flex items-center justify-between gap-4 rounded-lg px-1 py-3 outline-none hover:bg-white/3 focus-visible:ring-2 focus-visible:ring-accent/50"
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium text-primary">
+                        {item.service}
+                      </p>
+                      {item.plan ? (
+                        <p className="truncate text-xs text-primary/45">{item.plan}</p>
+                      ) : null}
+                      <p
+                        className={cn(
+                          "text-xs",
+                          item.inWarningWindow ? "text-warning" : "text-primary/55",
+                        )}
+                      >
+                        {formatChargeDate(item.nextChargeAt)}
+                      </p>
+                    </div>
+                    <p
+                      className={cn(
+                        "shrink-0 text-sm font-semibold",
+                        item.inWarningWindow ? "text-warning" : "text-primary",
+                      )}
+                    >
+                      {formatMoney(item.amount, item.currency)}
+                    </p>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </GlassCard>
+      </>
       ) : null}
 
       <GlassCard title="Recent Activity">
@@ -494,7 +642,12 @@ export default function DashboardPage() {
         {loading ? (
           <UrgentTasksTableSkeleton />
         ) : (
-          <UrgentTasksTable tasks={urgentTasks} onOpenTask={openTask} />
+          <UrgentTasksTable
+            tasks={urgentTasks}
+            alerts={subscriptions.alerts}
+            onOpenTask={openTask}
+            onOpenSubscription={openSubscription}
+          />
         )}
       </GlassCard>
 

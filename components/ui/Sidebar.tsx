@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
 import {
+  CreditCard,
   FolderKanban,
   GanttChart,
   LayoutDashboard,
@@ -25,6 +26,7 @@ const navItems = [
   { href: "/projects", label: "Projects", icon: FolderKanban },
   { href: "/whiteboard", label: "Whiteboard", icon: PenLine },
   { href: "/timeline", label: "Timeline", icon: GanttChart },
+  { href: "/subscriptions", label: "Subscriptions", icon: CreditCard },
 ] as const;
 
 type SidebarProps = {

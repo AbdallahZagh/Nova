@@ -33,6 +33,7 @@ const TYPE_LABELS: Record<string, string> = {
   TASK_UPDATED: "Task updated",
   TASK_DONE: "Task completed",
   TASK_DUE_REMINDER: "Due soon",
+  SUBSCRIPTION_CHARGE_SOON: "Renews soon",
   TASK_OVERDUE: "Task is late",
   ADMIN_SUPPORT_URGENT: "Urgent support ticket",
   ADMIN_BROADCAST: "Announcement",
@@ -58,7 +59,9 @@ function titleCaseType(type: string) {
 
 export function notificationKind(type: string): NotificationKind {
   if (type === "TASK_OVERDUE") return "overdue";
-  if (type.includes("DUE_REMINDER")) return "due";
+  if (type === "SUBSCRIPTION_CHARGE_SOON" || type.includes("DUE_REMINDER")) {
+    return "due";
+  }
   if (type.includes("MENTION")) return "mention";
   if (
     type.includes("UNASSIGNED") ||
@@ -157,6 +160,9 @@ export function hrefFromNotification(item: AppNotification) {
   const taskId = metaString(metadata, "taskId");
   const whiteboardId = metaString(metadata, "whiteboardId");
 
+  if (type === "SUBSCRIPTION_CHARGE_SOON") {
+    return url || null;
+  }
   if (type === "ADMIN_SUPPORT_URGENT") {
     const ticketId = metaString(metadata, "ticketId");
     return ticketId ? `/admin/support?ticket=${ticketId}` : "/admin/support";
@@ -203,6 +209,7 @@ export function isActionableNotification(item: AppNotification) {
 export function notificationActionLabel(item: AppNotification) {
   if (!hrefFromNotification(item)) return null;
   const type = item.type;
+  if (type === "SUBSCRIPTION_CHARGE_SOON") return "Open subscription";
   if (type === "ADMIN_SUPPORT_URGENT") return "Open ticket";
   if (type === "ADMIN_BROADCAST") return "Open";
   if (type.startsWith("WHITEBOARD_")) return "Open board";

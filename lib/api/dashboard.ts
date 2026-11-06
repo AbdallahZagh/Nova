@@ -1,4 +1,5 @@
 import { apiFetch } from "@/lib/api/client";
+import type { DashboardSubscriptions } from "@/lib/subscriptions";
 
 export type DashboardMetrics = {
   tasksDueToday: number;
@@ -69,5 +70,6 @@ export function getDashboardSummaryApi() {
     activity: ActivityMap;
     urgentTasks: UrgentTask[];
     continue: DashboardContinue;
+    subscriptions?: DashboardSubscriptions | null;
   }>("/api/dashboard");
 }

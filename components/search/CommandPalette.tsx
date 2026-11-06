@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   CheckSquare,
+  CreditCard,
   FolderKanban,
   Loader2,
   PenLine,
@@ -13,6 +14,7 @@ import {
 import {
   searchApi,
   type SearchProject,
+  type SearchSubscription,
   type SearchTask,
   type SearchUser,
   type SearchWhiteboard,
@@ -56,6 +58,14 @@ type ResultItem =
       subtitle?: string;
       href: string;
       item: SearchWhiteboard;
+    }
+  | {
+      id: string;
+      type: "subscription";
+      label: string;
+      subtitle?: string;
+      href: string;
+      item: SearchSubscription;
     };
 
 function useDebouncedValue<T>(value: T, delay = 300) {
@@ -86,8 +96,17 @@ function flattenResults(
   whiteboards: SearchWhiteboard[],
   tasks: SearchTask[],
   users: SearchUser[],
+  subscriptions: SearchSubscription[],
 ): ResultItem[] {
   return [
+    ...subscriptions.map((subscription) => ({
+      id: `subscription-${subscription.id}`,
+      type: "subscription" as const,
+      label: subscription.service,
+      subtitle: subscription.plan ?? subscription.status ?? "Subscription",
+      href: `/subscriptions?id=${subscription.id}`,
+      item: subscription,
+    })),
     ...projects.map((project) => ({
       id: `project-${project.id}`,
       type: "project" as const,
@@ -132,9 +151,11 @@ function ResultIcon({ type }: { type: ResultItem["type"] }) {
       ? FolderKanban
       : type === "whiteboard"
         ? PenLine
-        : type === "task"
+        :     type === "task"
           ? CheckSquare
-          : UserRound;
+          : type === "subscription"
+            ? CreditCard
+            : UserRound;
 
   return (
     <span className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-glass bg-glass-button text-accent">
@@ -153,12 +174,13 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
   const [whiteboards, setWhiteboards] = useState<SearchWhiteboard[]>([]);
   const [tasks, setTasks] = useState<SearchTask[]>([]);
   const [users, setUsers] = useState<SearchUser[]>([]);
+  const [subscriptions, setSubscriptions] = useState<SearchSubscription[]>([]);
   const [loading, setLoading] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
 
   const items = useMemo(
-    () => flattenResults(projects, whiteboards, tasks, users),
-    [projects, whiteboards, tasks, users],
+    () => flattenResults(projects, whiteboards, tasks, users, subscriptions),
+    [projects, whiteboards, tasks, users, subscriptions],
   );
   const hasQuery = debouncedQuery.trim().length > 0;
   const hasResults = items.length > 0;
@@ -203,6 +225,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
         setWhiteboards(results.whiteboards);
         setTasks(results.tasks);
         setUsers(results.users);
+        setSubscriptions(results.subscriptions);
         setActiveIndex(0);
       })
       .catch((error) => {
@@ -211,6 +234,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
         setWhiteboards([]);
         setTasks([]);
         setUsers([]);
+        setSubscriptions([]);
         setActiveIndex(0);
       })
       .finally(() => {
@@ -356,7 +380,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
             aria-expanded={open && hasResults}
             aria-controls="command-palette-results"
             aria-activedescendant={activeItem?.id}
-            placeholder="Search tasks, projects, whiteboards, users..."
+            placeholder="Search tasks, projects, subscriptions, users..."
             className="h-full w-full bg-transparent pl-10 pr-16 text-primary outline-none placeholder:text-primary/40"
           />
         ) : (
@@ -365,7 +389,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
             onClick={() => onOpenChange(true)}
             className="flex h-full w-full items-center pl-10 pr-16 text-left text-primary/45"
           >
-            <span className="truncate">Search tasks, projects, whiteboards, users...</span>
+            <span className="truncate">Search tasks, projects, subscriptions, users...</span>
           </button>
         )}
         {loading ? (
