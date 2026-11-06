@@ -35,6 +35,7 @@ const TYPE_LABELS: Record<string, string> = {
   TASK_DONE: "Task completed",
   TASK_DUE_REMINDER: "Due soon",
   TASK_OVERDUE: "Task is late",
+  SUBSCRIPTION_CHARGE_SOON: "Renews soon",
   ADMIN_SUPPORT_URGENT: "Urgent support ticket",
   ADMIN_BROADCAST: "Announcement",
   SUBTASK_ASSIGNED: "Subtask assigned",
@@ -59,6 +60,9 @@ function titleCaseType(type: string) {
 
 export function notificationKind(type: string): NotificationKind {
   if (type === "TASK_OVERDUE") return "overdue";
+  if (type === "SUBSCRIPTION_CHARGE_SOON" || type.startsWith("SUBSCRIPTION_")) {
+    return "due";
+  }
   if (type.includes("DUE_REMINDER")) return "due";
   if (type.includes("MENTION")) return "mention";
   if (
@@ -143,6 +147,25 @@ function startOfLocalDay(date: Date) {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
 }
 
+function subscriptionHref(
+  metadata?: Record<string, unknown> | null,
+): Href {
+  const directId = metaString(metadata, "subscriptionId");
+  if (directId) {
+    return `/(main)/subscriptions?id=${encodeURIComponent(directId)}` as Href;
+  }
+  const url = metaString(metadata, "url");
+  const query = url.split("?")[1] ?? "";
+  const id = query
+    .split("&")
+    .map((part) => part.split("="))
+    .find((pair) => pair[0] === "id")?.[1];
+  if (id) {
+    return `/(main)/subscriptions?id=${encodeURIComponent(decodeURIComponent(id))}` as Href;
+  }
+  return "/(main)/subscriptions" as Href;
+}
+
 function metaString(metadata: Record<string, unknown> | null | undefined, key: string) {
   const value = metadata?.[key];
   if (typeof value === "string" && value) return value;
@@ -175,7 +198,14 @@ export function hrefFromNotificationData(
       const whiteboardId = url.split("/")[2]?.split("?")[0];
       if (whiteboardId) return `/(main)/whiteboard/${whiteboardId}` as Href;
     }
+    if (url.startsWith("/subscriptions")) return subscriptionHref(metadata);
     return null;
+  }
+  if (
+    notificationType === "SUBSCRIPTION_CHARGE_SOON" ||
+    notificationType.startsWith("SUBSCRIPTION_")
+  ) {
+    return subscriptionHref(metadata);
   }
   if (
     notificationType === "WHITEBOARD_DELETED" ||
@@ -237,6 +267,7 @@ export function notificationActionLabel(
 ) {
   if (!hrefFromNotification(item)) return null;
   const type = String(item.type ?? "");
+  if (type.startsWith("SUBSCRIPTION_")) return "Open subscription";
   if (type.startsWith("WHITEBOARD_")) return "Open board";
   if (type.startsWith("PROJECT_SUGGESTION")) return "Open idea";
   if (type.startsWith("PROJECT_")) return "Open project";

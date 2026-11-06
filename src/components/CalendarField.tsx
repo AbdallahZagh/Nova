@@ -11,6 +11,8 @@ type CalendarFieldProps = {
   placeholder?: string;
   disabled?: boolean;
   minimumDate?: string;
+  drawerTitle?: string;
+  drawerSubtitle?: string;
 };
 
 const weekDays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -66,6 +68,8 @@ export function CalendarField({
   placeholder = "Select date",
   disabled = false,
   minimumDate,
+  drawerTitle = "Select Date",
+  drawerSubtitle = "Pick a due date for this task.",
 }: CalendarFieldProps) {
   const { colorScheme } = useColorScheme();
   const palette = getPalette(colorScheme);
@@ -143,8 +147,8 @@ export function CalendarField({
 
       <BottomDrawer
         visible={open}
-        title="Select Date"
-        subtitle="Pick a due date for this task."
+        title={drawerTitle}
+        subtitle={drawerSubtitle}
         onClose={() => setOpen(false)}
       >
         <View className="gap-4">

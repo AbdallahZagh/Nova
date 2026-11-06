@@ -35,11 +35,21 @@ export type SearchWhiteboard = {
   } | null;
 };
 
+export type SearchSubscription = {
+  id: string;
+  service: string;
+  plan?: string | null;
+  amount?: string;
+  currency?: string;
+  status?: string;
+};
+
 export type SearchResults = {
   projects: SearchProject[];
   tasks: SearchTask[];
   users: SearchUser[];
   whiteboards: SearchWhiteboard[];
+  subscriptions: SearchSubscription[];
 };
 
 const EMPTY_SEARCH_RESULTS: SearchResults = {
@@ -47,6 +57,7 @@ const EMPTY_SEARCH_RESULTS: SearchResults = {
   tasks: [],
   users: [],
   whiteboards: [],
+  subscriptions: [],
 };
 
 export async function searchApi(query: string) {
@@ -62,5 +73,6 @@ export async function searchApi(query: string) {
     tasks: data.tasks ?? [],
     users: data.users ?? [],
     whiteboards: data.whiteboards ?? [],
+    subscriptions: data.subscriptions ?? [],
   };
 }

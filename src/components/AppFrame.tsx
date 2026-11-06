@@ -27,6 +27,7 @@ const tabs = [
   { href: "/(main)/projects", label: "Projects", icon: "folder-open-outline" },
   { href: "/(main)/whiteboard", label: "Board", icon: "easel-outline" },
   { href: "/(main)/timeline", label: "Timeline", icon: "git-compare-outline" },
+  { href: "/(main)/subscriptions", label: "Subscriptions", icon: "card-outline" },
 ] as const;
 
 function getInitials(name?: string | null) {
@@ -175,6 +176,8 @@ export function AppFrame({ children }: PropsWithChildren) {
                 />
                 <Text
                   numberOfLines={1}
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.7}
                   className={`text-[10px] font-extrabold ${
                     active ? "text-accent dark:text-dark-accent" : "text-muted dark:text-dark-muted"
                   }`}

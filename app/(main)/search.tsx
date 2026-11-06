@@ -13,6 +13,7 @@ import { getApiErrorMessage } from "@/api/apiClient";
 import {
   searchApi,
   type SearchProject,
+  type SearchSubscription,
   type SearchTask,
   type SearchUser,
   type SearchWhiteboard,
@@ -23,7 +24,7 @@ import { useAppPalette } from "@/theme/useAppPalette";
 
 type ResultItem = {
   id: string;
-  type: "project" | "whiteboard" | "task" | "user";
+  type: "project" | "whiteboard" | "task" | "user" | "subscription";
   label: string;
   subtitle?: string;
   href: Href | null;
@@ -34,6 +35,7 @@ const ICONS: Record<ResultItem["type"], keyof typeof Ionicons.glyphMap> = {
   whiteboard: "easel-outline",
   task: "checkbox-outline",
   user: "person-outline",
+  subscription: "card-outline",
 };
 
 function userName(user: SearchUser) {
@@ -45,6 +47,7 @@ function groupResults(
   whiteboards: SearchWhiteboard[],
   tasks: SearchTask[],
   users: SearchUser[],
+  subscriptions: SearchSubscription[],
   currentUserId?: string,
 ): { title: string; data: ResultItem[] }[] {
   const sections: { title: string; data: ResultItem[] }[] = [];
@@ -91,6 +94,18 @@ function groupResults(
           } as Href,
         };
       }),
+    });
+  }
+  if (subscriptions.length) {
+    sections.push({
+      title: "Subscriptions",
+      data: subscriptions.map((subscription) => ({
+        id: `subscription-${subscription.id}`,
+        type: "subscription" as const,
+        label: subscription.service,
+        subtitle: subscription.plan ?? subscription.status ?? "Subscription",
+        href: `/(main)/subscriptions?id=${subscription.id}` as Href,
+      })),
     });
   }
   if (users.length) {
@@ -178,6 +193,7 @@ export default function SearchScreen() {
   const [whiteboards, setWhiteboards] = useState<SearchWhiteboard[]>([]);
   const [tasks, setTasks] = useState<SearchTask[]>([]);
   const [users, setUsers] = useState<SearchUser[]>([]);
+  const [subscriptions, setSubscriptions] = useState<SearchSubscription[]>([]);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -194,6 +210,7 @@ export default function SearchScreen() {
         setWhiteboards([]);
         setTasks([]);
         setUsers([]);
+        setSubscriptions([]);
         setLoading(false);
         return;
       }
@@ -206,12 +223,14 @@ export default function SearchScreen() {
         setWhiteboards(results.whiteboards);
         setTasks(results.tasks);
         setUsers(results.users);
+        setSubscriptions(results.subscriptions);
       } catch (error) {
         if (cancelled) return;
         setProjects([]);
         setWhiteboards([]);
         setTasks([]);
         setUsers([]);
+        setSubscriptions([]);
         showSnackbar({
           variant: "error",
           title: "Search failed",
@@ -229,8 +248,8 @@ export default function SearchScreen() {
   }, [debouncedQuery, showSnackbar]);
 
   const sections = useMemo(
-    () => groupResults(projects, whiteboards, tasks, users, currentUserId),
-    [currentUserId, projects, tasks, users, whiteboards],
+    () => groupResults(projects, whiteboards, tasks, users, subscriptions, currentUserId),
+    [currentUserId, projects, subscriptions, tasks, users, whiteboards],
   );
   const hasResults = sections.length > 0;
 

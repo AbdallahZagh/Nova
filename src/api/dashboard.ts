@@ -1,4 +1,5 @@
 import { apiClient } from "@/api/apiClient";
+import type { DashboardSubscriptions } from "@/api/subscriptions";
 import type { Href } from "expo-router";
 
 export type DashboardMetrics = {
@@ -77,12 +78,15 @@ export function taskHref(
   return `/(main)/task/${taskId}` as Href;
 }
 
+export type { DashboardSubscriptions };
+
 export async function getDashboardSummaryApi() {
   const response = await apiClient.get<{
     metrics: DashboardMetrics;
     activity: ActivityMap;
     urgentTasks: UrgentTask[];
     continue: DashboardContinue;
+    subscriptions?: DashboardSubscriptions | null;
   }>("/api/dashboard");
   return response.data;
 }

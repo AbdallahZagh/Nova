@@ -23,12 +23,20 @@ import {
   type ActivityTaskEntry,
   type DashboardContinue,
   type DashboardMetrics,
+  type DashboardSubscriptions,
   type UrgentTask,
 } from "@/api/dashboard";
 import { PageSkeleton } from "@/components/Skeleton";
 import { ActivityHeatmap } from "@/components/ActivityHeatmap";
 import { useAuthStore } from "@/store/useAuthStore";
 import { useSnackbarStore } from "@/store/useSnackbarStore";
+import {
+  chargeTimingLabel,
+  daysLabel,
+  formatMoney,
+  formatMoneyList,
+  formatSubscriptionDate,
+} from "@/subscriptions";
 import { getPalette } from "@/theme/colors";
 
 function formatDate(value?: string | null) {
@@ -326,6 +334,122 @@ function ContinueStrip({ data }: { data: DashboardContinue }) {
   );
 }
 
+function nextChargeHint(next: DashboardSubscriptions["next"] | undefined) {
+  if (!next) return "";
+  const timing =
+    chargeTimingLabel(next.status, next.daysUntilCharge) ||
+    daysLabel(next.daysUntilCharge);
+  return [next.service, timing].filter(Boolean).join(" · ");
+}
+
+function DueIn30DaysCard({ data }: { data: DashboardSubscriptions }) {
+  const { colorScheme } = useColorScheme();
+  const palette = getPalette(colorScheme);
+  const value = formatMoneyList(data.dueIn30Days) || "Nothing due";
+  const hint = nextChargeHint(data.next) || "No upcoming charge";
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel="Due in 30 days"
+      onPress={() => router.push("/(main)/subscriptions" as Href)}
+      className="flex-row items-center gap-4 rounded-nova border border-glass bg-glass-card p-4 dark:border-dark-glass dark:bg-dark-glass-card"
+    >
+      <View className="h-11 w-11 items-center justify-center rounded-nova bg-accent/15 dark:bg-dark-accent/15">
+        <Ionicons name="card-outline" size={20} color={palette.accent} />
+      </View>
+      <View className="flex-1">
+        <Text className="text-xs font-extrabold uppercase tracking-[1.4px] text-subtle dark:text-dark-subtle">
+          Due in 30 days
+        </Text>
+        <Text
+          numberOfLines={2}
+          className="mt-1 text-[28px] font-black text-accent dark:text-dark-accent"
+        >
+          {value}
+        </Text>
+        <Text className="text-xs text-muted dark:text-dark-muted">{hint}</Text>
+      </View>
+      <Ionicons name="chevron-forward" size={16} color={palette.subtle} />
+    </Pressable>
+  );
+}
+
+function upcomingDate(item: DashboardSubscriptions["upcoming"][number]) {
+  const value =
+    item.status === "TRIAL" && item.trialEndsAt ? item.trialEndsAt : item.nextChargeAt;
+  return formatSubscriptionDate(value) || "No date";
+}
+
+function ComingUp({
+  items,
+}: {
+  items: DashboardSubscriptions["upcoming"] | null | undefined;
+}) {
+  const rows = Array.isArray(items) ? items.slice(0, 3) : [];
+  if (!rows.length) {
+    return (
+      <Text className="text-sm text-muted dark:text-dark-muted">Nothing coming up.</Text>
+    );
+  }
+
+  return (
+    <View className="gap-3">
+      {rows.map((item) => {
+        const warning = Boolean(item.inWarningWindow);
+        return (
+          <Pressable
+            key={item.id}
+            accessibilityRole="button"
+            accessibilityLabel={`Open ${item.service}`}
+            onPress={() =>
+              router.push(
+                `/(main)/subscriptions?id=${encodeURIComponent(item.id)}` as Href,
+              )
+            }
+            className={`rounded-nova border bg-glass-card p-4 dark:bg-dark-glass-card ${
+              warning
+                ? "border-warning/60 dark:border-dark-warning/60"
+                : "border-glass dark:border-dark-glass"
+            }`}
+          >
+            <View className="flex-row items-start justify-between gap-3">
+              <View className="flex-1">
+                <Text className="text-[15px] font-black text-primary dark:text-dark-primary">
+                  {item.service}
+                </Text>
+                {item.plan ? (
+                  <Text className="mt-1 text-xs text-muted dark:text-dark-muted">
+                    {item.plan}
+                  </Text>
+                ) : null}
+                <Text
+                  className={`mt-2 text-xs font-black ${
+                    warning
+                      ? "text-warning dark:text-dark-warning"
+                      : "text-muted dark:text-dark-muted"
+                  }`}
+                >
+                  {upcomingDate(item)}
+                </Text>
+              </View>
+              <Text
+                className={`text-[15px] font-black ${
+                  warning
+                    ? "text-warning dark:text-dark-warning"
+                    : "text-primary dark:text-dark-primary"
+                }`}
+              >
+                {formatMoney(item.amount, item.currency)}
+              </Text>
+            </View>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
 function recentActivityItems(activity: ActivityMap) {
   const items: (ActivityTaskEntry & { activityDate: string })[] = [];
   const dates = Object.keys(activity).sort((a, b) => b.localeCompare(a));
@@ -400,6 +524,9 @@ export default function DashboardScreen() {
     lastWhiteboard: null,
     dueToday: [],
   });
+  const [subscriptions, setSubscriptions] = useState<DashboardSubscriptions | null>(
+    null,
+  );
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -410,6 +537,7 @@ export default function DashboardScreen() {
       setActivity(data.activity);
       setUrgentTasks(data.urgentTasks);
       setContinueData(data.continue);
+      setSubscriptions(data.subscriptions ?? null);
     } catch (error) {
       showSnackbar({
         variant: "error",
@@ -466,8 +594,17 @@ export default function DashboardScreen() {
       <ContinueStrip data={continueData} />
 
       <SectionCard icon="stats-chart-outline" title="Overview">
-        {metrics ? <MetricCards metrics={metrics} /> : null}
+        <View className="gap-3">
+          {metrics ? <MetricCards metrics={metrics} /> : null}
+          {subscriptions ? <DueIn30DaysCard data={subscriptions} /> : null}
+        </View>
       </SectionCard>
+
+      {subscriptions ? (
+        <SectionCard icon="calendar-outline" title="Coming up">
+          <ComingUp items={subscriptions.upcoming} />
+        </SectionCard>
+      ) : null}
 
       <SectionCard icon="pulse-outline" title="Recent Activity">
         <ActivityHeatmap
