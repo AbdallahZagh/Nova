@@ -7,6 +7,7 @@ const EMPTY_SEARCH_RESULTS = {
   tasks: [],
   users: [],
   whiteboards: [],
+  subscriptions: [],
 };
 
 @Injectable()
@@ -19,7 +20,7 @@ export class SearchService {
 
     const accessibleProjectWhere = myProjectsWhere(userId);
 
-    const [projects, tasks, users, whiteboards] = await Promise.all([
+    const [projects, tasks, users, whiteboards, subscriptions] = await Promise.all([
       (this.prisma as any).project.findMany({
         where: {
           ...accessibleProjectWhere,
@@ -93,6 +94,25 @@ export class SearchService {
         },
         take: 5,
       }),
+      (this.prisma as any).subscription.findMany({
+        where: {
+          userId,
+          OR: [
+            { service: { contains: q, mode: 'insensitive' } },
+            { plan: { contains: q, mode: 'insensitive' } },
+            { reason: { contains: q, mode: 'insensitive' } },
+          ],
+        },
+        select: {
+          id: true,
+          service: true,
+          plan: true,
+          amount: true,
+          currency: true,
+          status: true,
+        },
+        take: 5,
+      }),
     ]);
 
     return {
@@ -111,6 +131,14 @@ export class SearchService {
         project: board.project
           ? { id: board.project.id, name: board.project.name }
           : null,
+      })),
+      subscriptions: subscriptions.map((item: any) => ({
+        id: item.id,
+        service: item.service,
+        plan: item.plan,
+        amount: item.amount?.toString?.() ?? String(item.amount),
+        currency: item.currency,
+        status: item.status,
       })),
     };
   }

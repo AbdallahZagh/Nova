@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { myProjectsWhere, myTasksWhere } from '../common/task-access';
 import { PrismaService } from '../prisma/prisma.service';
+import { SubscriptionsService } from '../subscriptions/subscriptions.service';
 
 const PRIORITY_WEIGHT: Record<string, number> = {
   Critical: 4,
@@ -21,21 +22,27 @@ type ActivityEntry = {
 
 @Injectable()
 export class DashboardService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly subscriptions: SubscriptionsService,
+  ) {}
 
   async getSummary(userId: string) {
-    const [metrics, activity, urgentTasks, continueData] = await Promise.all([
-      this.getMetrics(userId),
-      this.getActivity(userId),
-      this.getUrgentTasks(userId),
-      this.getContinue(userId),
-    ]);
+    const [metrics, activity, urgentTasks, continueData, subscriptions] =
+      await Promise.all([
+        this.getMetrics(userId),
+        this.getActivity(userId),
+        this.getUrgentTasks(userId),
+        this.getContinue(userId),
+        this.subscriptions.dashboard(userId),
+      ]);
 
     return {
       metrics,
       activity,
       urgentTasks,
       continue: continueData,
+      subscriptions,
     };
   }
 

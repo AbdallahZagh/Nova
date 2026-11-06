@@ -13,6 +13,7 @@ import { PrismaModule } from './prisma/prisma.module';
 import { ProjectsModule } from './projects/projects.module';
 import { ProjectSuggestionsModule } from './project-suggestions/project-suggestions.module';
 import { SearchModule } from './search/search.module';
+import { SubscriptionsModule } from './subscriptions/subscriptions.module';
 import { SubtasksModule } from './subtasks/subtasks.module';
 import { SupportModule } from './support/support.module';
 import { SystemModule } from './system/system.module';
@@ -46,6 +47,7 @@ import { OAuthModule } from './oauth/oauth.module';
     SearchModule,
     TimelineModule,
     DashboardModule,
+    SubscriptionsModule,
     WhiteboardsModule,
     SupportModule,
     AdminModule,

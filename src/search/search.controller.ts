@@ -23,9 +23,9 @@ export class SearchController {
 
   @Get()
   @ApiOperation({
-    summary: 'Search projects, tasks, whiteboards, and users',
+    summary: 'Search projects, tasks, whiteboards, subscriptions, and users',
     description:
-      'Runs a secure global omnisearch across projects, tasks, whiteboards, and users for the authenticated user.',
+      'Runs a secure global omnisearch across projects, tasks, whiteboards, the signed-in user subscriptions, and users.',
   })
   @ApiQuery({ name: 'q', required: false, description: 'Search term' })
   @ApiResponse({
@@ -56,6 +56,16 @@ export class SearchController {
             title: 'Sprint planning',
             projectId: 'project-id',
             project: { id: 'project-id', name: 'Nova' },
+          },
+        ],
+        subscriptions: [
+          {
+            id: 'subscription-id',
+            service: 'Cursor',
+            plan: 'Pro',
+            amount: '20.00',
+            currency: 'USD',
+            status: 'ACTIVE',
           },
         ],
       },

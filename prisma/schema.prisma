@@ -65,6 +65,13 @@ enum AiFeature {
   TASK_SUGGEST
 }
 
+enum SubscriptionIntervalUnit {
+  DAY
+  WEEK
+  MONTH
+  YEAR
+}
+
 // ─────────────────────────────────────────────
 // User
 // ─────────────────────────────────────────────
@@ -114,6 +121,7 @@ model User {
   aiUsage                  AiUsage[]
   aiQuota                  AiUserQuota?
   broadcastsCreated        AdminBroadcast[]
+  subscriptions            Subscription[]
 
   @@index([role, isActive, isArchived])
   @@index([lastActiveAt])
@@ -782,5 +790,46 @@ model OAuthRefreshToken {
 
   @@index([clientId])
   @@map("oauth_refresh_tokens")
+}
+
+// ─────────────────────────────────────────────
+// Personal subscriptions (not Nova billing)
+// ─────────────────────────────────────────────
+
+model Subscription {
+  id            String                   @id @default(uuid())
+  userId        String
+  user          User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  service       String
+  plan          String?
+  amount        Decimal                  @db.Decimal(12, 2)
+  currency      String                   @db.VarChar(3)
+  intervalUnit  SubscriptionIntervalUnit
+  intervalCount Int                      @default(1)
+  nextChargeAt  DateTime
+  trialEndsAt   DateTime?
+  status        String                   @default("ACTIVE")
+  reason        String?
+  cancelUrl     String?
+  reminderDays  Int                      @default(3)
+  paymentLabel  String?
+  createdAt     DateTime                 @default(now())
+  updatedAt     DateTime                 @updatedAt
+  prices        SubscriptionPrice[]
+
+  @@index([userId, nextChargeAt])
+  @@map("subscriptions")
+}
+
+model SubscriptionPrice {
+  id             String       @id @default(uuid())
+  subscriptionId String
+  subscription   Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  amount         Decimal      @db.Decimal(12, 2)
+  currency       String       @db.VarChar(3)
+  changedAt      DateTime     @default(now())
+
+  @@index([subscriptionId, changedAt])
+  @@map("subscription_prices")
 }
 

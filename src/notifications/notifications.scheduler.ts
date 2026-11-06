@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service';
+import { SubscriptionsService } from '../subscriptions/subscriptions.service';
 import { NotificationsService } from './notifications.service';
 
 function startOfDay(date: Date) {
@@ -29,6 +30,7 @@ export class NotificationsScheduler {
   constructor(
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationsService,
+    private readonly subscriptions: SubscriptionsService,
   ) {}
 
   @Cron('0 6 * * *')
@@ -154,6 +156,20 @@ export class NotificationsScheduler {
           dueDate: task.dueDate,
           url: `/projects/${task.projectId}?task=${task.id}`,
         },
+      );
+    }
+  }
+
+  @Cron('30 6 * * *')
+  async sendSubscriptionReminders() {
+    const pending = await this.subscriptions.remindDue();
+    for (const reminder of pending) {
+      await this.notifications.notifyUsers(
+        [reminder.userId],
+        'SUBSCRIPTION_CHARGE_SOON',
+        reminder.title,
+        reminder.body,
+        reminder.metadata,
       );
     }
   }

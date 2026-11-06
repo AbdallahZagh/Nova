@@ -20,7 +20,7 @@ export class DashboardController {
   @ApiOperation({
     summary: 'Fetch the full dashboard in one request',
     description:
-      'Runs metrics, activity, urgent tasks, and the continue strip in parallel and returns them together.',
+      'Runs metrics, activity, urgent tasks, the continue strip, and upcoming subscriptions in parallel.',
   })
   @ApiResponse({
     status: 200,
@@ -75,6 +75,36 @@ export class DashboardController {
             lastEditedAt: '2026-08-14T17:30:00.000Z',
           },
           dueToday: [],
+        },
+        subscriptions: {
+          dueIn30Days: [{ currency: 'USD', amount: '20.00' }],
+          next: {
+            id: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
+            service: 'Figma',
+            plan: 'Professional',
+            amount: '20.00',
+            currency: 'USD',
+            nextChargeAt: '2026-11-20T12:00:00.000Z',
+            trialEndsAt: null,
+            daysUntilCharge: 14,
+            inWarningWindow: false,
+            status: 'ACTIVE',
+          },
+          upcoming: [
+            {
+              id: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
+              service: 'Figma',
+              plan: 'Professional',
+              amount: '20.00',
+              currency: 'USD',
+              nextChargeAt: '2026-11-20T12:00:00.000Z',
+              trialEndsAt: null,
+              daysUntilCharge: 14,
+              inWarningWindow: false,
+              status: 'ACTIVE',
+            },
+          ],
+          alerts: [],
         },
       },
     },
