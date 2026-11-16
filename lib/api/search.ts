@@ -36,6 +36,16 @@ export type SearchWhiteboard = {
   } | null;
 };
 
+export type SearchNote = {
+  id: string;
+  title: string;
+  preview?: string;
+  color?: string;
+  pinned?: boolean;
+  projectId?: string | null;
+  project?: { id: string; name: string } | null;
+};
+
 export type SearchSubscription = {
   id: string;
   service: string;
@@ -43,6 +53,7 @@ export type SearchSubscription = {
   amount?: string;
   currency?: string;
   status?: string;
+  nextChargeAt?: string | null;
 };
 
 export type SearchResults = {
@@ -51,6 +62,7 @@ export type SearchResults = {
   users: SearchUser[];
   whiteboards: SearchWhiteboard[];
   subscriptions: SearchSubscription[];
+  notes: SearchNote[];
 };
 
 const EMPTY_SEARCH_RESULTS: SearchResults = {
@@ -59,6 +71,7 @@ const EMPTY_SEARCH_RESULTS: SearchResults = {
   users: [],
   whiteboards: [],
   subscriptions: [],
+  notes: [],
 };
 
 export async function searchApi(query: string, signal?: AbortSignal) {
@@ -77,5 +90,6 @@ export async function searchApi(query: string, signal?: AbortSignal) {
     users: data.users ?? [],
     whiteboards: data.whiteboards ?? [],
     subscriptions: data.subscriptions ?? [],
+    notes: data.notes ?? [],
   };
 }

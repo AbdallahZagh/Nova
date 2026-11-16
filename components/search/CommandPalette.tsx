@@ -9,10 +9,12 @@ import {
   Loader2,
   PenLine,
   Search,
+  StickyNote,
   UserRound,
 } from "lucide-react";
 import {
   searchApi,
+  type SearchNote,
   type SearchProject,
   type SearchSubscription,
   type SearchTask,
@@ -20,6 +22,7 @@ import {
   type SearchWhiteboard,
 } from "@/lib/api/search";
 import { cn } from "@/lib/cn";
+import { formatChargeDate, formatMoney, statusLabel } from "@/lib/subscriptions";
 
 type CommandPaletteProps = {
   open: boolean;
@@ -66,6 +69,14 @@ type ResultItem =
       subtitle?: string;
       href: string;
       item: SearchSubscription;
+    }
+  | {
+      id: string;
+      type: "note";
+      label: string;
+      subtitle?: string;
+      href: string;
+      item: SearchNote;
     };
 
 function useDebouncedValue<T>(value: T, delay = 300) {
@@ -91,19 +102,35 @@ function taskProjectId(task: SearchTask) {
   return task.projectId ?? task.project?.id ?? "";
 }
 
+function subscriptionSubtitle(subscription: SearchSubscription) {
+  const parts: string[] = [];
+  if (subscription.plan?.trim()) parts.push(subscription.plan.trim());
+  if (subscription.amount && subscription.currency) {
+    parts.push(formatMoney(subscription.amount, subscription.currency));
+  }
+  if (subscription.status === "PAUSED" || subscription.status === "CANCELED") {
+    parts.push(statusLabel(subscription.status));
+  } else if (subscription.nextChargeAt) {
+    const when = formatChargeDate(subscription.nextChargeAt);
+    if (when) parts.push(`${subscription.status === "TRIAL" ? "Trial ends" : "Charges"} ${when}`);
+  }
+  return parts.length > 0 ? parts.join(" · ") : "Subscription";
+}
+
 function flattenResults(
   projects: SearchProject[],
   whiteboards: SearchWhiteboard[],
   tasks: SearchTask[],
   users: SearchUser[],
   subscriptions: SearchSubscription[],
+  notes: SearchNote[],
 ): ResultItem[] {
   return [
     ...subscriptions.map((subscription) => ({
       id: `subscription-${subscription.id}`,
       type: "subscription" as const,
       label: subscription.service,
-      subtitle: subscription.plan ?? subscription.status ?? "Subscription",
+      subtitle: subscriptionSubtitle(subscription),
       href: `/subscriptions?id=${subscription.id}`,
       item: subscription,
     })),
@@ -142,6 +169,14 @@ function flattenResults(
       href: `/users/${user.id}`,
       item: user,
     })),
+    ...notes.map((note) => ({
+      id: `note-${note.id}`,
+      type: "note" as const,
+      label: note.title,
+      subtitle: note.project?.name ?? "Personal note",
+      href: `/notes/${note.id}`,
+      item: note,
+    })),
   ];
 }
 
@@ -155,6 +190,8 @@ function ResultIcon({ type }: { type: ResultItem["type"] }) {
           ? CheckSquare
           : type === "subscription"
             ? CreditCard
+            : type === "note"
+              ? StickyNote
             : UserRound;
 
   return (
@@ -175,12 +212,13 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
   const [tasks, setTasks] = useState<SearchTask[]>([]);
   const [users, setUsers] = useState<SearchUser[]>([]);
   const [subscriptions, setSubscriptions] = useState<SearchSubscription[]>([]);
+  const [notes, setNotes] = useState<SearchNote[]>([]);
   const [loading, setLoading] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
 
   const items = useMemo(
-    () => flattenResults(projects, whiteboards, tasks, users, subscriptions),
-    [projects, whiteboards, tasks, users, subscriptions],
+    () => flattenResults(projects, whiteboards, tasks, users, subscriptions, notes),
+    [projects, whiteboards, tasks, users, subscriptions, notes],
   );
   const hasQuery = debouncedQuery.trim().length > 0;
   const hasResults = items.length > 0;
@@ -226,6 +264,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
         setTasks(results.tasks);
         setUsers(results.users);
         setSubscriptions(results.subscriptions);
+        setNotes(results.notes);
         setActiveIndex(0);
       })
       .catch((error) => {
@@ -235,6 +274,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
         setTasks([]);
         setUsers([]);
         setSubscriptions([]);
+        setNotes([]);
         setActiveIndex(0);
       })
       .finally(() => {
@@ -249,6 +289,8 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
     setWhiteboards([]);
     setTasks([]);
     setUsers([]);
+    setSubscriptions([]);
+    setNotes([]);
     setActiveIndex(0);
     setLoading(false);
   };

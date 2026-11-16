@@ -5,11 +5,15 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { CalendarDays, GanttChart } from "lucide-react";
-import { TimelineSkeleton } from "@/components/skeletons/TimelineSkeleton";
+import {
+  TimelineBoardSkeleton,
+  TimelineSkeleton,
+} from "@/components/skeletons/TimelineSkeleton";
 import { CalendarBoard } from "@/components/timeline/CalendarBoard";
 import { GanttBoard } from "@/components/timeline/GanttBoard";
 import { DeleteConfirmModal } from "@/components/ui/DeleteConfirmModal";
@@ -21,6 +25,7 @@ import { useAppData } from "@/components/providers/AppDataProvider";
 import {
   getTimelineApi,
   type TimelineFilter,
+  type TimelineSubscription,
   type TimelineTask,
 } from "@/lib/api/timeline";
 import { getTaskApi } from "@/lib/api/tasks";
@@ -38,6 +43,7 @@ import { useTaskDrawerContext } from "@/lib/useTaskDrawerContext";
 
 function TimelinePage() {
   const { toast } = useToast();
+  const router = useRouter();
   const searchParams = useSearchParams();
   const { projects, projectsLoading, updateTask, deleteTask } = useAppData();
 
@@ -48,8 +54,12 @@ function TimelinePage() {
     () => parseTimelineFilter(searchParams.get("filter")) ?? "monthly",
   );
   const [filterProjectId, setFilterProjectId] = useState("all");
+  const [source, setSource] = useState<"all" | "tasks" | "subscriptions">("all");
   const [timelineItems, setTimelineItems] = useState<TimelineTask[]>([]);
+  const [charges, setCharges] = useState<TimelineSubscription[]>([]);
   const [timelineLoading, setTimelineLoading] = useState(true);
+  const [ready, setReady] = useState(false);
+  const requestId = useRef(0);
 
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [selectedTaskProjectId, setSelectedTaskProjectId] = useState<
@@ -65,22 +75,29 @@ function TimelinePage() {
   } | null>(null);
 
   const loadTimeline = useCallback(async () => {
+    const id = ++requestId.current;
     setTimelineLoading(true);
     try {
-      const items = await getTimelineApi({
+      const data = await getTimelineApi({
         filter: timeFilter,
         ...(filterProjectId !== "all" ? { projectId: filterProjectId } : {}),
       });
-      setTimelineItems(items);
+      if (id !== requestId.current) return;
+      setTimelineItems(data.items);
+      setCharges(data.subscriptions);
     } catch (err) {
+      if (id !== requestId.current) return;
       setTimelineItems([]);
+      setCharges([]);
       toast({
         variant: "error",
         title: "Could not load timeline",
         message: err instanceof ApiError ? err.message : "Please try again.",
       });
     } finally {
+      if (id !== requestId.current) return;
       setTimelineLoading(false);
+      setReady(true);
     }
   }, [timeFilter, filterProjectId, toast]);
 
@@ -97,10 +114,24 @@ function TimelinePage() {
   );
 
   const { start: rangeStart, end: rangeEnd } = calendarWindow(timeFilter);
-  const windowLabel =
-    timelineItems[0]?.windowLabel ??
-    TIME_FILTER_OPTIONS.find((o) => o.value === timeFilter)?.label ??
+  const selectedWindow =
+    TIME_FILTER_OPTIONS.find((option) => option.value === timeFilter)?.label ??
     "Timeline";
+  const windowLabel = timelineLoading
+    ? selectedWindow
+    : (timelineItems[0]?.windowLabel ?? selectedWindow);
+
+  function selectTimeFilter(value: TimelineFilter) {
+    if (value === timeFilter) return;
+    setTimelineLoading(true);
+    setTimeFilter(value);
+  }
+
+  function selectProject(value: string) {
+    if (value === filterProjectId) return;
+    setTimelineLoading(true);
+    setFilterProjectId(value);
+  }
 
   const openTask = useCallback(
     async (item: TimelineTask) => {
@@ -162,8 +193,9 @@ function TimelinePage() {
     }
   };
 
-  const loading = projectsLoading || timelineLoading;
-  if (loading && timelineItems.length === 0) return <TimelineSkeleton />;
+  const visibleTasks = source === "subscriptions" ? [] : timelineItems;
+  const visibleCharges = source === "tasks" ? [] : charges;
+  if (!ready && (projectsLoading || timelineLoading)) return <TimelineSkeleton />;
 
   const rangeCaption = `${rangeStart.toLocaleDateString("en-US", {
     month: "short",
@@ -175,15 +207,16 @@ function TimelinePage() {
   })}`;
 
   return (
-    <div className="flex h-full flex-col gap-4">
+    <div className="-m-6 flex h-[calc(100dvh-4rem)] flex-col gap-4 p-6 md:-m-8 md:p-8">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-primary sm:text-3xl">
             Timeline
           </h1>
           <p className="mt-1 text-sm text-primary/55">
-            {windowLabel} · {rangeCaption} · {timelineItems.length} task
-            {timelineItems.length !== 1 ? "s" : ""}
+            {timelineLoading
+              ? `Loading ${selectedWindow.toLowerCase()}…`
+              : `${windowLabel} · ${rangeCaption} · ${timelineItems.length} task${timelineItems.length === 1 ? "" : "s"}${charges.length > 0 ? ` · ${charges.length} charge${charges.length === 1 ? "" : "s"}` : ""}`}
           </p>
         </div>
         <div className="flex items-center gap-1 rounded-xl border border-glass bg-glass-button/50 p-1">
@@ -223,7 +256,7 @@ function TimelinePage() {
               <button
                 key={option.value}
                 type="button"
-                onClick={() => setTimeFilter(option.value)}
+                onClick={() => selectTimeFilter(option.value)}
                 className={cn(
                   "shrink-0 rounded-lg px-3 py-1.5 text-xs font-semibold transition",
                   timeFilter === option.value
@@ -238,7 +271,7 @@ function TimelinePage() {
           <div className="w-full sm:w-48">
             <Select
               value={filterProjectId}
-              onChange={setFilterProjectId}
+              onChange={selectProject}
               options={projectOptions}
               variant="glass"
               aria-label="Filter by project"
@@ -247,6 +280,29 @@ function TimelinePage() {
         </div>
 
         <div className="flex shrink-0 flex-wrap items-center gap-3 border-b border-glass px-4 py-2">
+          <div className="flex gap-1 rounded-xl border border-glass bg-glass-button/50 p-1">
+            {(
+              [
+                { value: "all", label: "All" },
+                { value: "tasks", label: "Tasks" },
+                { value: "subscriptions", label: "Subscriptions" },
+              ] as const
+            ).map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => setSource(option.value)}
+                className={cn(
+                  "rounded-lg px-3 py-1 text-xs font-semibold transition",
+                  source === option.value
+                    ? "bg-accent text-white"
+                    : "text-primary/60 hover:text-primary",
+                )}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
           {(["To Do", "In Progress", "In Review", "Completed"] as TaskStatus[]).map(
             (s) => (
               <div
@@ -257,7 +313,11 @@ function TimelinePage() {
                 {s}
               </div>
             ),
-          )}
+            )}
+          <div className="flex items-center gap-1.5 text-[11px] text-sky-300 light:text-sky-700">
+            <span className="size-2 rotate-45 bg-sky-400 light:bg-sky-600" />
+            Subscription
+          </div>
           <p className="w-full text-[11px] text-primary/40 sm:ml-auto sm:w-auto">
             {view === "calendar"
               ? "Hover a day to preview. Click one task to open it, or click a busy day to pick from the list."
@@ -265,23 +325,29 @@ function TimelinePage() {
           </p>
         </div>
 
-        {view === "calendar" ? (
+        {timelineLoading ? (
+          <TimelineBoardSkeleton />
+        ) : view === "calendar" ? (
           <CalendarBoard
-            items={timelineItems}
+            items={visibleTasks}
+            charges={visibleCharges}
             filter={timeFilter}
             rangeStart={rangeStart}
             rangeEnd={rangeEnd}
             onOpen={openTask}
+            onOpenCharge={(charge) => router.push(`/subscriptions?id=${charge.id}`)}
           />
         ) : (
           <GanttBoard
-            items={timelineItems}
+            items={visibleTasks}
+            charges={visibleCharges}
             filter={timeFilter}
             rangeStart={rangeStart}
             rangeEnd={rangeEnd}
             projects={projects}
             filterProjectId={filterProjectId}
             onOpen={openTask}
+            onOpenCharge={(id) => router.push(`/subscriptions?id=${id}`)}
           />
         )}
       </div>

@@ -32,6 +32,8 @@ export type Subscription = {
   monthlyEquivalent: string;
   yearlyCost: string;
   daysUntilCharge: number;
+  /** The saved charge date has passed; it stays as saved until the user marks it renewed. */
+  overdue: boolean;
   inWarningWindow: boolean;
   previousPrice: SubscriptionPriceChange | null;
   createdAt: string;
@@ -39,6 +41,8 @@ export type Subscription = {
 };
 
 export type SubscriptionTotals = {
+  overdueCount: number;
+  monthly: MoneyTotal[];
   dueIn30Days: MoneyTotal[];
   yearly: MoneyTotal[];
   activeCount: number;
@@ -74,6 +78,7 @@ export type DashboardUpcomingSubscription = {
   nextChargeAt: string;
   trialEndsAt: string | null;
   daysUntilCharge: number;
+  overdue?: boolean;
   inWarningWindow: boolean;
   status: SubscriptionStatus;
 };
@@ -93,12 +98,17 @@ export type DashboardSubscriptionAlert = {
 
 export type DashboardSubscriptions = {
   dueIn30Days: MoneyTotal[];
+  monthly: MoneyTotal[];
+  activeCount: number;
+  overdueCount: number;
   next: DashboardSubscriptionNext | null;
   upcoming: DashboardUpcomingSubscription[];
   alerts: DashboardSubscriptionAlert[];
 };
 
 export const EMPTY_SUBSCRIPTION_TOTALS: SubscriptionTotals = {
+  overdueCount: 0,
+  monthly: [],
   dueIn30Days: [],
   yearly: [],
   activeCount: 0,
@@ -106,6 +116,9 @@ export const EMPTY_SUBSCRIPTION_TOTALS: SubscriptionTotals = {
 
 export const EMPTY_DASHBOARD_SUBSCRIPTIONS: DashboardSubscriptions = {
   dueIn30Days: [],
+  monthly: [],
+  activeCount: 0,
+  overdueCount: 0,
   next: null,
   upcoming: [],
   alerts: [],
@@ -167,6 +180,15 @@ export function daysLabel(days: number): string {
   return `in ${count} days`;
 }
 
+/** How long ago a passed charge date was, for the "Overdue" chip. */
+export function overdueLabel(days: number): string {
+  const count = Math.max(
+    1,
+    Math.floor(Math.abs(Number.isFinite(days) ? days : 1)),
+  );
+  return count === 1 ? "1 day overdue" : `${count} days overdue`;
+}
+
 export function chargeTimingLabel(service: string, days: number): string {
   const name = service.trim();
   const timing = daysLabel(days);
@@ -197,6 +219,14 @@ export function formatChargeDate(value: string | null | undefined): string {
     day: "numeric",
     year: "numeric",
   });
+}
+
+/** "Nov 9", for tight spaces. */
+export function formatShortDate(value: string | null | undefined): string {
+  if (!value) return "";
+  const date = parseChargeDate(value);
+  if (!date) return value;
+  return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
 export function toDateInputValue(value: string | null | undefined): string {
@@ -231,19 +261,210 @@ export function subscriptionHref(id: string): string {
   return `/subscriptions?id=${encodeURIComponent(id)}`;
 }
 
+export type SubscriptionTone = "danger" | "warning" | "accent" | "muted";
+
+export const COMMON_CURRENCIES = [
+  "USD",
+  "EUR",
+  "GBP",
+  "CAD",
+  "AUD",
+  "JPY",
+  "CHF",
+  "INR",
+  "EGP",
+  "AED",
+  "SAR",
+] as const;
+
+export function isLiveSubscription(item: Pick<Subscription, "status">): boolean {
+  return item.status === "ACTIVE" || item.status === "TRIAL";
+}
+
+export function isStoppedSubscription(item: Pick<Subscription, "status">): boolean {
+  return item.status === "PAUSED" || item.status === "CANCELED";
+}
+
+export function statusLabel(status: SubscriptionStatus): string {
+  switch (status) {
+    case "ACTIVE":
+      return "Active";
+    case "TRIAL":
+      return "Trial";
+    case "PAUSED":
+      return "Paused";
+    case "CANCELED":
+      return "Canceled";
+    default:
+      return status;
+  }
+}
+
+export function statusTone(status: SubscriptionStatus): SubscriptionTone {
+  if (status === "ACTIVE") return "accent";
+  if (status === "TRIAL") return "warning";
+  return "muted";
+}
+
+const UNIT_NOUN: Record<SubscriptionIntervalUnit, string> = {
+  DAY: "day",
+  WEEK: "week",
+  MONTH: "month",
+  YEAR: "year",
+};
+
+export function unitNoun(unit: SubscriptionIntervalUnit, count = 1): string {
+  const noun = UNIT_NOUN[unit] ?? "month";
+  return count === 1 ? noun : `${noun}s`;
+}
+
+/** "per month" or "every 3 months". */
+export function cadencePhrase(
+  unit: SubscriptionIntervalUnit,
+  count: number,
+): string {
+  const every = count > 0 ? Math.trunc(count) : 1;
+  if (every === 1) return `per ${unitNoun(unit)}`;
+  return `every ${every} ${unitNoun(unit, every)}`;
+}
+
+/** The one-line timing for a card: "3 days overdue", "Renews in 4 days", "Trial ends today". */
+export function timingPhrase(item: Subscription): string {
+  if (item.status === "PAUSED") return "Paused";
+  if (item.status === "CANCELED") return "Canceled";
+  if (item.overdue) return overdueLabel(item.daysUntilCharge);
+  const when = daysLabel(item.daysUntilCharge);
+  if (item.status === "TRIAL") {
+    return when === "today" ? "Trial ends today" : `Trial ends ${when}`;
+  }
+  return when === "today" ? "Renews today" : `Renews ${when}`;
+}
+
+export function timingTone(item: Subscription): SubscriptionTone {
+  if (isStoppedSubscription(item)) return "muted";
+  if (item.overdue) return "danger";
+  if (item.inWarningWindow || item.daysUntilCharge <= 3) return "warning";
+  return "muted";
+}
+
+/** A charge that has passed, or lands today, can be marked as renewed. */
+export function canMarkRenewed(item: Subscription): boolean {
+  return isLiveSubscription(item) && (item.overdue || item.daysUntilCharge <= 0);
+}
+
+export function dateFromKey(value: string): Date | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+  const [year, month, day] = value.split("-").map(Number);
+  return new Date(year, month - 1, day);
+}
+
+export function keyFromDate(date: Date | null): string {
+  if (!date) return "";
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${date.getFullYear()}-${month}-${day}`;
+}
+
+export function isBeforeToday(value: string): boolean {
+  const chosen = dateFromKey(value);
+  if (!chosen) return false;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return chosen.getTime() < today.getTime();
+}
+
+function dayStart(date: Date): Date {
+  const copy = new Date(date);
+  copy.setHours(0, 0, 0, 0);
+  return copy;
+}
+
+function addCycle(
+  date: Date,
+  unit: SubscriptionIntervalUnit,
+  count: number,
+): Date {
+  const next = new Date(date);
+  const every = count > 0 ? Math.trunc(count) : 1;
+  if (unit === "DAY") next.setDate(next.getDate() + every);
+  else if (unit === "WEEK") next.setDate(next.getDate() + 7 * every);
+  else {
+    const day = next.getDate();
+    next.setDate(1);
+    if (unit === "MONTH") next.setMonth(next.getMonth() + every);
+    else next.setFullYear(next.getFullYear() + every);
+    const last = new Date(next.getFullYear(), next.getMonth() + 1, 0).getDate();
+    next.setDate(Math.min(day, last));
+  }
+  return next;
+}
+
+export type SubscriptionQuickAction = "renew" | "pause" | "resume" | "reactivate";
+
+/**
+ * What a row looks like right after an action, so the screen can update at once.
+ * The server answer replaces it a moment later.
+ */
+export function applyQuickAction(
+  item: Subscription,
+  action: SubscriptionQuickAction,
+  now = new Date(),
+): Subscription {
+  if (action === "pause") {
+    return { ...item, status: "PAUSED", overdue: false, inWarningWindow: false };
+  }
+  if (action === "resume" || action === "reactivate") {
+    return {
+      ...item,
+      status: "ACTIVE",
+      overdue: item.daysUntilCharge < 0,
+    };
+  }
+
+  const today = dayStart(now);
+  const current = new Date(item.nextChargeAt);
+  if (Number.isNaN(current.getTime())) return item;
+  let next = new Date(current);
+  if (dayStart(next).getTime() === today.getTime()) {
+    next = addCycle(next, item.intervalUnit, item.intervalCount);
+  }
+  let guard = 0;
+  while (dayStart(next).getTime() < today.getTime() && guard < 1000) {
+    next = addCycle(next, item.intervalUnit, item.intervalCount);
+    guard += 1;
+  }
+  const days = Math.round(
+    (dayStart(next).getTime() - today.getTime()) / 86_400_000,
+  );
+  const shift = next.getTime() - current.getTime();
+  const lastCancelBy = item.lastCancelBy
+    ? new Date(new Date(item.lastCancelBy).getTime() + shift).toISOString()
+    : item.lastCancelBy;
+  const trialOver =
+    item.status === "TRIAL" &&
+    (!item.trialEndsAt || dayStart(new Date(item.trialEndsAt)) <= today);
+  return {
+    ...item,
+    status: trialOver ? "ACTIVE" : item.status,
+    nextChargeAt: next.toISOString(),
+    daysUntilCharge: days,
+    overdue: false,
+    inWarningWindow: days <= item.reminderDays,
+    lastCancelBy,
+  };
+}
+
 export function normalizeSubscriptionList(
   data: Partial<SubscriptionListResponse> | null | undefined,
 ): SubscriptionListResponse {
   return {
     items: Array.isArray(data?.items) ? data.items : [],
     totals: {
+      overdueCount: asCount(data?.totals?.overdueCount),
+      monthly: asMoneyTotals(data?.totals?.monthly),
       dueIn30Days: asMoneyTotals(data?.totals?.dueIn30Days),
       yearly: asMoneyTotals(data?.totals?.yearly),
-      activeCount:
-        typeof data?.totals?.activeCount === "number" &&
-        Number.isFinite(data.totals.activeCount)
-          ? data.totals.activeCount
-          : 0,
+      activeCount: asCount(data?.totals?.activeCount),
     },
   };
 }
@@ -255,12 +476,15 @@ export function normalizeDashboardSubscriptions(
 
   const next = asDashboardNext(value.next);
   const upcoming = Array.isArray(value.upcoming)
-    ? value.upcoming.filter(isUpcoming).slice(0, 3)
+    ? value.upcoming.filter(isUpcoming).slice(0, 4)
     : [];
   const alerts = Array.isArray(value.alerts) ? value.alerts.filter(isAlert) : [];
 
   return {
     dueIn30Days: asMoneyTotals(value.dueIn30Days),
+    monthly: asMoneyTotals(value.monthly),
+    activeCount: asCount(value.activeCount),
+    overdueCount: asCount(value.overdueCount),
     next,
     upcoming,
     alerts,
@@ -280,6 +504,12 @@ function parseChargeDate(value: string): Date | null {
 
   const parsed = new Date(value);
   return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function asCount(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) && value > 0
+    ? Math.floor(value)
+    : 0;
 }
 
 function asMoneyTotals(value: MoneyTotal[] | null | undefined): MoneyTotal[] {

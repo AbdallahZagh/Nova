@@ -11,6 +11,7 @@ import {
   LogOut,
   PenLine,
   Shield,
+  StickyNote,
   X,
 } from "lucide-react";
 import { clearSessionCookie } from "@/app/actions/session";
@@ -27,6 +28,7 @@ const navItems = [
   { href: "/whiteboard", label: "Whiteboard", icon: PenLine },
   { href: "/timeline", label: "Timeline", icon: GanttChart },
   { href: "/subscriptions", label: "Subscriptions", icon: CreditCard },
+  { href: "/notes", label: "Notes", icon: StickyNote },
 ] as const;
 
 type SidebarProps = {

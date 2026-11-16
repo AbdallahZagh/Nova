@@ -12,6 +12,7 @@ import {
   MetricsCardsSkeleton,
   UrgentTasksTableSkeleton,
 } from "@/components/skeletons/DashboardSkeleton";
+import { StatusPill } from "@/components/subscriptions/shared";
 import { DeleteConfirmModal } from "@/components/ui/DeleteConfirmModal";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { SideDrawer } from "@/components/ui/SideDrawer";
@@ -483,6 +484,7 @@ export default function DashboardPage() {
     href: string;
     hint?: string;
     detail?: string;
+    alert?: boolean;
   }> => {
     if (!metrics) return [];
     const meta = metrics._meta;
@@ -514,13 +516,20 @@ export default function DashboardPage() {
         label: "Due in 30 days",
         value: dueMoney.value,
         detail: dueMoney.rest ?? undefined,
-        hint: subscriptions.next
-          ? chargeTimingLabel(
-              subscriptions.next.service,
-              subscriptions.next.daysUntilCharge,
-            )
-          : "Nothing due",
-        href: "/subscriptions",
+        hint:
+          subscriptions.overdueCount > 0
+            ? `${subscriptions.overdueCount} overdue to review`
+            : subscriptions.next
+              ? chargeTimingLabel(
+                  subscriptions.next.service,
+                  subscriptions.next.daysUntilCharge,
+                )
+              : "Nothing due",
+        alert: subscriptions.overdueCount > 0,
+        href:
+          subscriptions.overdueCount > 0
+            ? "/subscriptions?filter=overdue"
+            : "/subscriptions",
       },
     ];
   }, [metrics, subscriptions]);
@@ -559,7 +568,7 @@ export default function DashboardPage() {
       ) : metrics ? (
         <>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          {metricCards.map(({ label, value, hint, detail, href }) => (
+          {metricCards.map(({ label, value, hint, detail, href, alert }) => (
             <Link
               key={label}
               href={href}
@@ -572,38 +581,88 @@ export default function DashboardPage() {
                   <p className="mt-1 text-[11px] text-primary/45">{detail}</p>
                 ) : null}
                 {hint ? (
-                  <p className="mt-1 text-[11px] text-primary/45">{hint}</p>
+                  <p
+                    className={cn(
+                      "mt-1 text-[11px]",
+                      alert ? "font-semibold text-danger" : "text-primary/45",
+                    )}
+                  >
+                    {hint}
+                  </p>
                 ) : null}
               </GlassCard>
             </Link>
           ))}
         </div>
-        <GlassCard title="Coming up">
+        <GlassCard>
+          <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+            <div className="flex items-baseline gap-3">
+              <h2 className="text-sm font-medium tracking-wide text-primary/70">
+                Coming up
+              </h2>
+              {subscriptions.activeCount > 0 ? (
+                <span className="text-xs text-primary/45">
+                  {formatMoneyList(subscriptions.monthly).value} a month
+                </span>
+              ) : null}
+            </div>
+            <Link
+              href="/subscriptions"
+              className="text-xs font-semibold text-accent outline-none hover:text-accent/80 focus-visible:ring-2 focus-visible:ring-accent/50"
+            >
+              View all subscriptions
+            </Link>
+          </div>
+          {subscriptions.overdueCount > 0 ? (
+            <Link
+              href="/subscriptions?filter=overdue"
+              className="mb-2 flex items-center justify-between gap-3 rounded-xl border border-danger/30 bg-danger/10 px-3 py-2 text-xs outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+            >
+              <span className="font-medium text-primary">
+                {subscriptions.overdueCount === 1
+                  ? "1 subscription passed its saved charge date"
+                  : `${subscriptions.overdueCount} subscriptions passed their saved charge date`}
+              </span>
+              <span className="shrink-0 font-semibold text-danger">Review and renew</span>
+            </Link>
+          ) : null}
           {subscriptions.upcoming.length === 0 ? (
             <p className="py-6 text-center text-sm text-primary/40">
-              No subscriptions yet.{" "}
-              <Link
-                href="/subscriptions"
-                className="font-medium text-accent hover:text-accent/80"
-              >
-                Add one
-              </Link>
+              {subscriptions.activeCount > 0 ? (
+                "Nothing else is charging soon."
+              ) : (
+                <>
+                  No subscriptions yet.{" "}
+                  <Link
+                    href="/subscriptions"
+                    className="font-medium text-accent hover:text-accent/80"
+                  >
+                    Add one
+                  </Link>
+                </>
+              )}
             </p>
           ) : (
             <ul>
-              {subscriptions.upcoming.slice(0, 3).map((item) => (
+              {subscriptions.upcoming.slice(0, 4).map((item) => (
                 <li key={item.id} className="border-b border-glass/40 last:border-0">
                   <Link
                     href={subscriptionHref(item.id)}
-                    className="flex items-center justify-between gap-4 rounded-lg px-1 py-3 outline-none hover:bg-white/3 focus-visible:ring-2 focus-visible:ring-accent/50"
+                    className="flex items-center gap-3 rounded-lg px-1 py-3 outline-none hover:bg-white/3 focus-visible:ring-2 focus-visible:ring-accent/50"
                   >
-                    <div className="min-w-0">
+                    <span
+                      aria-hidden
+                      className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-accent/15 text-sm font-semibold text-accent"
+                    >
+                      {item.service.trim().charAt(0).toUpperCase() || "?"}
+                    </span>
+                    <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-medium text-primary">
                         {item.service}
+                        {item.plan ? (
+                          <span className="font-normal text-primary/45"> · {item.plan}</span>
+                        ) : null}
                       </p>
-                      {item.plan ? (
-                        <p className="truncate text-xs text-primary/45">{item.plan}</p>
-                      ) : null}
                       <p
                         className={cn(
                           "text-xs",
@@ -611,11 +670,18 @@ export default function DashboardPage() {
                         )}
                       >
                         {formatChargeDate(item.nextChargeAt)}
+                        {" · "}
+                        {item.daysUntilCharge < 1
+                          ? "today"
+                          : item.daysUntilCharge === 1
+                            ? "tomorrow"
+                            : `in ${item.daysUntilCharge} days`}
                       </p>
                     </div>
+                    <StatusPill status={item.status} className="hidden sm:inline-flex" />
                     <p
                       className={cn(
-                        "shrink-0 text-sm font-semibold",
+                        "w-20 shrink-0 text-right text-sm font-semibold",
                         item.inWarningWindow ? "text-warning" : "text-primary",
                       )}
                     >

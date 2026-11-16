@@ -36,12 +36,33 @@ export type TimelineTask = {
   windowLabel?: string;
 };
 
+export type TimelineSubscription = {
+  id: string;
+  /** Unique per charge date; a weekly subscription shares one `id` across many dates. */
+  occurrenceKey?: string;
+  service: string;
+  plan?: string | null;
+  amount: string;
+  currency: string;
+  status: string;
+  occursAt: string;
+  kind: "trial" | "renewal";
+  overdue?: boolean;
+};
+
+export type TimelineResponse = {
+  items: TimelineTask[];
+  subscriptions: TimelineSubscription[];
+};
+
 export type TimelineQuery = {
   projectId?: string;
   filter?: TimelineFilter;
 };
 
-export async function getTimelineApi(query: TimelineQuery = {}) {
+export async function getTimelineApi(
+  query: TimelineQuery = {},
+): Promise<TimelineResponse> {
   const params = new URLSearchParams();
   if (query.projectId) params.set("projectId", query.projectId);
   if (query.filter) params.set("filter", query.filter);
@@ -49,9 +70,12 @@ export async function getTimelineApi(query: TimelineQuery = {}) {
   const qs = params.toString();
   const path = qs ? `/api/timeline?${qs}` : "/api/timeline";
 
-  const data = await apiFetch<TimelineTask[] | { items?: TimelineTask[] }>(
-    path,
-  );
-  if (Array.isArray(data)) return data;
-  return data.items ?? [];
+  const data = await apiFetch<
+    TimelineTask[] | { items?: TimelineTask[]; subscriptions?: TimelineSubscription[] }
+  >(path);
+  if (Array.isArray(data)) return { items: data, subscriptions: [] };
+  return {
+    items: data.items ?? [],
+    subscriptions: data.subscriptions ?? [],
+  };
 }

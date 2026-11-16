@@ -2,7 +2,12 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@/lib/cn";
-import type { TimelineFilter, TimelineTask } from "@/lib/api/timeline";
+import type {
+  TimelineFilter,
+  TimelineSubscription,
+  TimelineTask,
+} from "@/lib/api/timeline";
+import { formatMoney } from "@/lib/subscriptions";
 import {
   ROW_H,
   GROUP_H,
@@ -110,18 +115,25 @@ function GanttBar({
   onOpen: (task: TimelineTask) => void;
 }) {
   const status = normStatus(task.status);
-  const overdue = Boolean(task.overdue) && status !== "Completed";
+  const charge = task.project?.id === "subscriptions";
+  const overdue = Boolean(task.overdue) && status !== "Completed" && !charge;
   const innerW = Math.max(task.widthPx - 4, 12);
   const short = innerW < 64;
   const height = short ? 16 : 30;
-  const color = overdue
-    ? "border-danger/25 bg-danger/10 text-primary"
-    : STATUS_BAR[status];
+  const color = charge
+    ? "border-dashed border-sky-400/80 bg-sky-400/15 text-sky-100"
+    : overdue
+      ? "border-danger/25 bg-danger/10 text-primary"
+      : STATUS_BAR[status];
 
   return (
     <button
       type="button"
-      title={`${task.title} · ${formatDue(task.startDay)} – ${formatDue(task.dueDay)} · ${status}`}
+      title={
+        charge
+          ? `${task.title} · Subscription · ${formatDue(task.dueDay)}`
+          : `${task.title} · ${formatDue(task.startDay)} – ${formatDue(task.dueDay)} · ${status}`
+      }
       onClick={() => onOpen(task)}
       className={cn(
         "absolute z-8 flex items-center overflow-hidden border transition",
@@ -139,8 +151,9 @@ function GanttBar({
       {short ? (
         <span
           className={cn(
-            "mx-auto size-1.5 shrink-0 rounded-full",
-            overdue ? "bg-danger/70" : STATUS_DOT[status],
+            "mx-auto size-1.5 shrink-0",
+            charge ? "rotate-45 bg-sky-400" : "rounded-full",
+            !charge && (overdue ? "bg-danger/70" : STATUS_DOT[status]),
           )}
         />
       ) : (
@@ -148,7 +161,7 @@ function GanttBar({
           <span
             className={cn(
               "h-full w-1 shrink-0",
-              overdue ? "bg-danger/60" : STATUS_RAIL[status],
+              charge ? "bg-sky-400" : overdue ? "bg-danger/60" : STATUS_RAIL[status],
             )}
           />
           <span className="min-w-0 flex-1 truncate px-2 text-left text-[11px] font-medium leading-none text-primary/80">
@@ -162,20 +175,24 @@ function GanttBar({
 
 export function GanttBoard({
   items,
+  charges = [],
   filter,
   rangeStart,
   rangeEnd,
   projects,
   filterProjectId,
   onOpen,
+  onOpenCharge,
 }: {
   items: TimelineTask[];
+  charges?: TimelineSubscription[];
   filter: TimelineFilter;
   rangeStart: Date;
   rangeEnd: Date;
   projects: { id: string; title: string }[];
   filterProjectId: string;
   onOpen: (task: TimelineTask) => void;
+  onOpenCharge?: (chargeId: string) => void;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const boardRef = useRef<HTMLDivElement>(null);
@@ -220,7 +237,21 @@ export function GanttBoard({
           ? (ticks.find((t) => t.isToday)?.width ?? dayPx)
           : dayPx;
 
-      const spans = items
+      const chargeItems: TimelineTask[] = charges.map((charge) => ({
+        id: charge.id,
+        title: charge.service,
+        description:
+          charge.kind === "trial"
+            ? `Trial ends · ${formatMoney(charge.amount, charge.currency)}`
+            : `Renews · ${formatMoney(charge.amount, charge.currency)}`,
+        status: "To Do",
+        priority: "Medium",
+        startDate: charge.occursAt,
+        dueDate: charge.occursAt,
+        overdue: charge.overdue,
+        project: { id: "subscriptions", name: "Subscriptions" },
+      }));
+      const spans = [...chargeItems, ...items]
         .map((item) => makeGanttSpan(item, rangeStart, rangeEnd, dayPx))
         .filter((t): t is SpanTask => t !== null);
 
@@ -256,7 +287,7 @@ export function GanttBoard({
           0,
         ),
       };
-    }, [items, rangeStart, rangeEnd, dayPx, filter, filterProjectId, projects]);
+    }, [items, charges, rangeStart, rangeEnd, dayPx, filter, filterProjectId, projects]);
 
   useEffect(() => {
     hasScrolledRef.current = false;
@@ -274,6 +305,11 @@ export function GanttBoard({
     }
     hasScrolledRef.current = true;
   }, [chartWidth, todayLeft, filter, groups.length]);
+
+  const openItem = (task: TimelineTask) => {
+    if (task.project?.id === "subscriptions") onOpenCharge?.(task.id);
+    else onOpen(task);
+  };
 
   if (groups.length === 0) {
     return (
@@ -386,14 +422,16 @@ export function GanttBoard({
                       {task ? (
                         <button
                           type="button"
-                          onClick={() => onOpen(task)}
+                          onClick={() => openItem(task)}
                           className="min-w-0 w-full text-left"
                         >
                           <p className="truncate text-[13px] font-semibold text-primary">
                             {task.title}
                           </p>
                           <p className="mt-0.5 truncate text-[10px] text-primary/40">
-                            {formatDue(task.startDay)} – {formatDue(task.dueDay)}
+                            {task.project.id === "subscriptions"
+                              ? task.description
+                              : `${formatDue(task.startDay)} – ${formatDue(task.dueDay)}`}
                           </p>
                         </button>
                       ) : (
@@ -422,7 +460,7 @@ export function GanttBoard({
                           style={{ left: todayLeft, width: todayWidth }}
                         />
                       )}
-                      {task ? <GanttBar task={task} onOpen={onOpen} /> : null}
+                      {task ? <GanttBar task={task} onOpen={openItem} /> : null}
                     </div>
                   </div>
                 ),

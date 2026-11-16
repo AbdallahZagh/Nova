@@ -1,15 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { Bell, Menu } from "lucide-react";
+import { Bell, Menu, StickyNote } from "lucide-react";
 import { useState } from "react";
+import { requestNewSticky } from "@/components/notes/notes-sync";
 import { CommandPalette } from "@/components/search/CommandPalette";
 import { useNotifications } from "@/components/providers/notification-context";
 import { NotificationDrawer } from "@/components/notifications/NotificationDrawer";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { useUser } from "@/components/providers/UserProvider";
-
 type HeaderProps = {
   onMenuClick?: () => void;
   searchOpen: boolean;
@@ -45,6 +45,17 @@ export function Header({
       <CommandPalette open={searchOpen} onOpenChange={onSearchOpenChange} />
 
       <div className="ml-auto flex items-center gap-3">
+        <button
+          type="button"
+          onClick={requestNewSticky}
+          aria-label="New sticky note"
+          title="New sticky note. Drag it anywhere; it is saved in Notes."
+          className="flex h-10 items-center justify-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 text-sm font-semibold text-amber-500 transition hover:bg-amber-500/20 light:text-amber-700"
+        >
+          <StickyNote className="size-4" />
+          <span className="hidden lg:inline">New sticky</span>
+        </button>
+
         <button
           type="button"
           onClick={openNotifications}

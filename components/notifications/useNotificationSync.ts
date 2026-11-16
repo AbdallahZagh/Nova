@@ -184,7 +184,10 @@ export function useNotificationSync(user: NotificationUser) {
       });
     }
 
-    void setupMessaging();
+    // Push is optional (some browsers have no push service), so a failure must not surface as a crash.
+    setupMessaging().catch((error) => {
+      console.warn("[notifications] Push notifications are unavailable here.", error);
+    });
 
     return () => {
       cancelled = true;

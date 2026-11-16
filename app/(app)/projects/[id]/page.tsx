@@ -24,6 +24,7 @@ import { useAppData } from "@/components/providers/AppDataProvider";
 import { useUser } from "@/components/providers/UserProvider";
 import { ManageTeamModal } from "@/components/projects/ManageTeamModal";
 import { ProjectActivityStrip } from "@/components/projects/ProjectActivityStrip";
+import { ProjectNotesDrawer } from "@/components/projects/ProjectNotesDrawer";
 import { ProjectSuggestionsDrawer } from "@/components/projects/ProjectSuggestionsDrawer";
 import { TaskCard } from "@/components/tasks/TaskCard";
 import { NewTaskModal } from "@/components/tasks/NewTaskModal";
@@ -144,6 +145,7 @@ export default function ProjectWorkspacePage() {
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [deleteTaskId, setDeleteTaskId] = useState<string | null>(null);
   const [dragOverColumn, setDragOverColumn] = useState<TaskStatus | null>(null);
+  const [isNotesOpen, setIsNotesOpen] = useState(false);
   const [isSuggestionsOpen, setIsSuggestionsOpen] = useState(false);
   const [isActivityOpen, setIsActivityOpen] = useState(false);
   const [isTeamOpen, setIsTeamOpen] = useState(false);
@@ -623,6 +625,18 @@ export default function ProjectWorkspacePage() {
               role="menuitem"
               onClick={() => {
                 setActionsOpen(false);
+                setIsNotesOpen(true);
+              }}
+              className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-sm text-primary transition hover:bg-accent/10 hover:text-accent"
+            >
+              <PenLine className="size-3.5 shrink-0" />
+              My notes
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setActionsOpen(false);
                 setIsSuggestionsOpen(true);
               }}
               className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-sm text-primary transition hover:bg-accent/10 hover:text-accent"
@@ -854,6 +868,16 @@ export default function ProjectWorkspacePage() {
             setIsActivityOpen(false);
           }}
         />
+      </SideDrawer>
+
+      <SideDrawer
+        isOpen={isNotesOpen}
+        onClose={() => setIsNotesOpen(false)}
+        title="My notes"
+        panelClassName="max-w-xl"
+        bodyClassName="flex min-h-0 flex-1 flex-col overflow-hidden p-0"
+      >
+        <ProjectNotesDrawer projectId={projectId} projectName={project.title} />
       </SideDrawer>
 
       <SideDrawer
