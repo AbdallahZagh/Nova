@@ -444,14 +444,14 @@ export type ProjectActivityItem = {
 
 export async function listProjectActivityApi(projectId: string, limit = 12) {
   const response = await apiClient.get<
-    Array<{
+    {
       id: string;
       type?: string;
       content?: string;
       createdAt?: string;
       author?: { id?: string; name?: string; fullName?: string } | null;
       task?: { id?: string; title?: string } | null;
-    }>
+    }[]
   >(`/api/projects/${projectId}/activity`, { params: { limit } });
   return (Array.isArray(response.data) ? response.data : []).map((item) => ({
     id: item.id,

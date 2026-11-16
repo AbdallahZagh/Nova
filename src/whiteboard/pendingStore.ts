@@ -59,6 +59,17 @@ export function emptyWhiteboardSession(): WhiteboardSession {
   return { pending: {}, undo: {}, redo: {} };
 }
 
+function isWhiteboardSession(value: unknown): value is WhiteboardSession {
+  if (!value || typeof value !== "object") return false;
+  const record = value as Record<string, unknown>;
+  return (
+    record.pending != null &&
+    typeof record.pending === "object" &&
+    "undo" in record &&
+    "redo" in record
+  );
+}
+
 export async function readWhiteboardSession(
   whiteboardId: string,
 ): Promise<WhiteboardSession> {
@@ -68,18 +79,12 @@ export async function readWhiteboardSession(
     const info = await FileSystem.getInfoAsync(path);
     if (!info.exists) return emptyWhiteboardSession();
     const raw = await FileSystem.readAsStringAsync(path);
-    const parsed = JSON.parse(raw) as WhiteboardSession | PendingByPage;
-    if (
-      parsed &&
-      typeof parsed === "object" &&
-      "pending" in parsed &&
-      parsed.pending &&
-      typeof parsed.pending === "object"
-    ) {
+    const parsed: unknown = JSON.parse(raw);
+    if (isWhiteboardSession(parsed)) {
       return {
         pending: parsed.pending,
-        undo: parseHistory((parsed as WhiteboardSession).undo),
-        redo: parseHistory((parsed as WhiteboardSession).redo),
+        undo: parseHistory(parsed.undo),
+        redo: parseHistory(parsed.redo),
       };
     }
     if (parsed && typeof parsed === "object") {

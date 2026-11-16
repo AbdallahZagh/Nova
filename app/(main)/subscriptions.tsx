@@ -15,7 +15,10 @@ import {
   createSubscriptionApi,
   deleteSubscriptionApi,
   DEMO_SUBSCRIPTION_MESSAGE,
+  getSubscriptionApi,
   listSubscriptionsApi,
+  renewAllSubscriptionsApi,
+  renewSubscriptionApi,
   updateSubscriptionApi,
   type Subscription,
   type SubscriptionIntervalUnit,
@@ -35,15 +38,23 @@ import { TextLink } from "@/components/TextLink";
 import { useAuthStore } from "@/store/useAuthStore";
 import { useSnackbarStore } from "@/store/useSnackbarStore";
 import {
-  chargeTimingLabel,
+  applyQuickAction,
+  canMarkRenewed,
   dateKeyFromIso,
   dateKeyToIso,
+  EMPTY_SUBSCRIPTION_TOTALS,
   formatMoney,
   formatMoneyList,
   formatSubscriptionDate,
   intervalLabel,
   isHttpUrl,
+  isLiveSubscription,
+  isOverdueSubscription,
+  isStoppedSubscription,
   parseSubscriptionAmount,
+  statusLabel,
+  subscriptionTimingLabel,
+  type SubscriptionQuickAction,
 } from "@/subscriptions";
 import { getPalette } from "@/theme/colors";
 
@@ -67,18 +78,40 @@ type FormState = {
 
 type FormErrors = Partial<Record<keyof FormState, string>>;
 
-const EMPTY_TOTALS: SubscriptionTotals = {
-  dueIn30Days: [],
-  yearly: [],
-  activeCount: 0,
-};
+type ListFilter = "all" | "renewing" | "trials" | "overdue" | "stopped";
 
-const INTERVAL_OPTIONS = [
-  { value: "DAY", label: "Daily" },
-  { value: "WEEK", label: "Weekly" },
-  { value: "MONTH", label: "Monthly" },
-  { value: "YEAR", label: "Yearly" },
+const FILTER_IDS: ListFilter[] = ["all", "renewing", "trials", "overdue", "stopped"];
+
+const COMMON_CURRENCIES = [
+  "USD",
+  "EUR",
+  "GBP",
+  "CAD",
+  "AUD",
+  "JPY",
+  "CHF",
+  "INR",
+  "EGP",
+  "AED",
+  "SAR",
 ];
+
+const OTHER_CURRENCY = "OTHER";
+
+const CURRENCY_OPTIONS = [
+  ...COMMON_CURRENCIES.map((code) => ({ value: code, label: code })),
+  { value: OTHER_CURRENCY, label: "Other…" },
+];
+
+function periodOptions(count: number) {
+  const plural = count === 1 ? "" : "s";
+  return [
+    { value: "DAY", label: `day${plural}` },
+    { value: "WEEK", label: `week${plural}` },
+    { value: "MONTH", label: `month${plural}` },
+    { value: "YEAR", label: `year${plural}` },
+  ];
+}
 
 const STATUS_OPTIONS = [
   { value: "ACTIVE", label: "Active" },
@@ -87,19 +120,12 @@ const STATUS_OPTIONS = [
   { value: "CANCELED", label: "Canceled" },
 ];
 
-const STATUS_LABEL: Record<SubscriptionStatus, string> = {
-  ACTIVE: "Active",
-  TRIAL: "Trial",
-  PAUSED: "Paused",
-  CANCELED: "Canceled",
-};
-
 function emptyForm(): FormState {
   return {
     service: "",
     plan: "",
     amount: "",
-    currency: "",
+    currency: "USD",
     intervalUnit: "MONTH",
     intervalCount: "1",
     nextChargeAt: "",
@@ -157,7 +183,7 @@ function isBeforeToday(value: string) {
   return chosen.getTime() < today.getTime();
 }
 
-function validateForm(form: FormState) {
+function validateForm(form: FormState, savedDate = "") {
   const errors: FormErrors = {};
   if (!form.service.trim()) errors.service = "Service is required.";
   if (!parseSubscriptionAmount(form.amount)) {
@@ -167,7 +193,7 @@ function validateForm(form: FormState) {
     errors.currency = "Use a 3-letter code, like USD.";
   }
   if (!form.nextChargeAt) errors.nextChargeAt = "Choose the next charge date.";
-  else if (isBeforeToday(form.nextChargeAt)) {
+  else if (form.nextChargeAt !== savedDate && isBeforeToday(form.nextChargeAt)) {
     errors.nextChargeAt =
       "Next charge date cannot be in the past. Choose today or a later date.";
   }
@@ -179,7 +205,12 @@ function validateForm(form: FormState) {
   }
   if (form.reminderDays.trim()) {
     const days = wholeNumber(form.reminderDays);
-    if (days == null) errors.reminderDays = "Use a whole number of days, or leave it blank.";
+    if (days == null || days > 90) {
+      errors.reminderDays = "Use a whole number of days between 0 and 90.";
+    }
+  }
+  if (form.status === "TRIAL" && !form.trialEndsAt) {
+    errors.trialEndsAt = "Choose the date the trial ends.";
   }
   if (form.cancelUrl.trim() && !isHttpUrl(form.cancelUrl)) {
     errors.cancelUrl = "Enter a link that starts with http:// or https://.";
@@ -272,120 +303,160 @@ function SummaryLine({ label, value }: { label: string; value: string }) {
   );
 }
 
-function SubscriptionRow({
-  item,
-  quiet,
-  onEdit,
-  onDelete,
+function StatusPill({ status }: { status: SubscriptionStatus }) {
+  const tone =
+    status === "ACTIVE"
+      ? "border-accent/40 bg-accent/10 text-accent dark:border-dark-accent/40 dark:bg-dark-accent/10 dark:text-dark-accent"
+      : status === "TRIAL"
+        ? "border-warning/40 bg-warning/10 text-warning dark:border-dark-warning/40 dark:bg-dark-warning/10 dark:text-dark-warning"
+        : "border-glass bg-glass-button text-muted dark:border-dark-glass dark:bg-dark-glass-button dark:text-dark-muted";
+  return (
+    <Text className={`overflow-hidden rounded-full border px-2.5 py-1 text-[10px] font-black ${tone}`}>
+      {statusLabel(status)}
+    </Text>
+  );
+}
+
+function RowAction({
+  label,
+  icon,
+  primary,
+  onPress,
 }: {
-  item: Subscription;
-  quiet?: boolean;
-  onEdit: (item: Subscription) => void;
-  onDelete: (item: Subscription) => void;
+  label: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  primary?: boolean;
+  onPress: () => void;
 }) {
   const { colorScheme } = useColorScheme();
   const palette = getPalette(colorScheme);
-  const timing = chargeTimingLabel(item.status, item.daysUntilCharge);
-  const planLine = [item.plan, intervalLabel(item.intervalUnit, item.intervalCount)]
-    .filter(Boolean)
-    .join(" · ");
-  const warning =
-    item.inWarningWindow && (item.status === "ACTIVE" || item.status === "TRIAL");
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      onPress={onPress}
+      className={`min-h-[40px] flex-row items-center justify-center gap-1.5 rounded-nova border px-3 active:opacity-75 ${
+        primary
+          ? "border-accent bg-accent dark:border-dark-accent dark:bg-dark-accent"
+          : "border-glass bg-glass-button dark:border-dark-glass dark:bg-dark-glass-button"
+      }`}
+    >
+      <Ionicons name={icon} size={16} color={primary ? palette.white : palette.muted} />
+      <Text
+        className={`text-xs font-black ${
+          primary ? "text-white" : "text-muted dark:text-dark-muted"
+        }`}
+      >
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
+function SubscriptionRow({
+  item,
+  quiet,
+  onOpen,
+  onAction,
+}: {
+  item: Subscription;
+  quiet?: boolean;
+  onOpen: (item: Subscription) => void;
+  onAction: (item: Subscription, action: SubscriptionQuickAction) => void;
+}) {
+  const cadence = intervalLabel(item.intervalUnit, item.intervalCount);
+  const timing = subscriptionTimingLabel(item);
+  const overdue = isOverdueSubscription(item);
+  const warning = !overdue && isLiveSubscription(item) && item.inWarningWindow;
+  const timingTone = overdue
+    ? "text-danger dark:text-dark-danger"
+    : warning
+      ? "text-warning dark:text-dark-warning"
+      : "text-primary dark:text-dark-primary";
 
   return (
-    <View
-      className={`rounded-nova-xl border bg-sidebar p-5 dark:bg-dark-sidebar ${
-        warning
-          ? "border-warning/60 dark:border-dark-warning/60"
-          : "border-glass dark:border-dark-glass"
-      } ${quiet ? "opacity-80" : ""}`}
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`Open ${item.service}`}
+      onPress={() => onOpen(item)}
+      className={`rounded-nova-xl border bg-sidebar p-5 active:opacity-80 dark:bg-dark-sidebar ${
+        overdue
+          ? "border-danger/50 dark:border-dark-danger/50"
+          : warning
+            ? "border-warning/50 dark:border-dark-warning/50"
+            : "border-glass dark:border-dark-glass"
+      } ${quiet ? "opacity-75" : ""}`}
     >
       <View className="flex-row items-start justify-between gap-3">
         <View className="flex-1">
           <Text className="text-[18px] font-black text-primary dark:text-dark-primary">
             {item.service}
           </Text>
-          {planLine ? (
-            <Text className="mt-1 text-sm text-muted dark:text-dark-muted">{planLine}</Text>
-          ) : null}
+          <Text className="mt-1 text-sm text-muted dark:text-dark-muted">
+            {item.plan?.trim() || cadence || "Subscription"}
+          </Text>
         </View>
-        <Text className="text-[18px] font-black text-accent dark:text-dark-accent">
-          {formatMoney(item.amount, item.currency)}
-        </Text>
+        <StatusPill status={item.status} />
       </View>
 
-      <Text className="mt-3 text-sm text-muted dark:text-dark-muted">
+      <Text className="mt-5 text-[28px] font-black text-accent dark:text-dark-accent">
+        {formatMoney(item.amount, item.currency)}
+      </Text>
+      {cadence ? (
+        <Text className="mt-1 text-sm text-muted dark:text-dark-muted">{cadence}</Text>
+      ) : null}
+
+      <Text className={`mt-5 text-sm font-extrabold ${timingTone}`}>
+        {timing || "No date"}
+      </Text>
+      <Text className="mt-1 text-xs text-subtle dark:text-dark-subtle">
         {formatSubscriptionDate(item.nextChargeAt) || "No date"}
-        {item.lastCancelBy
+        {isLiveSubscription(item) && item.lastCancelBy
           ? ` · Cancel by ${formatSubscriptionDate(item.lastCancelBy)}`
           : ""}
-        {timing ? ` · ${timing}` : ""}
       </Text>
 
-      <View className="mt-3 flex-row flex-wrap items-center gap-2">
-        {item.status !== "ACTIVE" ? (
-          <Text className="rounded-full border border-glass px-2 py-1 text-[10px] font-black text-muted dark:border-dark-glass dark:text-dark-muted">
-            {STATUS_LABEL[item.status] ?? item.status}
-          </Text>
-        ) : null}
-        {warning ? (
-          <Text className="rounded-full border border-warning/40 bg-warning/10 px-2 py-1 text-[10px] font-black text-warning dark:border-dark-warning/40 dark:bg-dark-warning/10 dark:text-dark-warning">
-            {item.status === "TRIAL" ? "Trial ending" : "Due soon"}
-          </Text>
-        ) : null}
-      </View>
-
-      {item.previousPrice ? (
-        <Text className="mt-3 text-xs text-subtle dark:text-dark-subtle">
-          Was {formatMoney(item.previousPrice.amount, item.previousPrice.currency)}
-        </Text>
-      ) : null}
-      {item.reason ? (
-        <Text
-          numberOfLines={1}
-          className="mt-2 text-sm text-muted dark:text-dark-muted"
-        >
-          {item.reason}
-        </Text>
-      ) : null}
-      {item.paymentLabel ? (
-        <Text className="mt-1 text-xs text-subtle dark:text-dark-subtle">
-          {item.paymentLabel}
-        </Text>
-      ) : null}
-      {isHttpUrl(item.cancelUrl) ? (
-        <View className="mt-3">
-          <TextLink
-            label="Cancel page"
-            onPress={() => {
-              const url = item.cancelUrl?.trim();
-              if (url) void Linking.openURL(url);
-            }}
-          />
+      {canMarkRenewed(item) || item.status === "PAUSED" || item.status === "CANCELED" ? (
+        <View className="mt-4 flex-row gap-2">
+          {canMarkRenewed(item) ? (
+            <RowAction
+              label="Mark renewed"
+              icon="refresh-outline"
+              primary={overdue}
+              onPress={() => onAction(item, "renew")}
+            />
+          ) : null}
+          {item.status === "PAUSED" ? (
+            <RowAction
+              label="Resume"
+              icon="play-outline"
+              primary
+              onPress={() => onAction(item, "resume")}
+            />
+          ) : null}
+          {item.status === "CANCELED" ? (
+            <RowAction
+              label="Reactivate"
+              icon="arrow-undo-outline"
+              onPress={() => onAction(item, "reactivate")}
+            />
+          ) : null}
         </View>
       ) : null}
+    </Pressable>
+  );
+}
 
-      <View className="mt-5 flex-row gap-3">
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={`Edit ${item.service}`}
-          onPress={() => onEdit(item)}
-          className="min-h-[44px] flex-1 flex-row items-center justify-center gap-2 rounded-nova border border-glass bg-glass-button active:opacity-75 dark:border-dark-glass dark:bg-dark-glass-button"
-        >
-          <Ionicons name="create-outline" size={17} color={palette.accent} />
-          <Text className="text-sm font-extrabold text-muted dark:text-dark-muted">
-            Edit
-          </Text>
-        </Pressable>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={`Delete ${item.service}`}
-          onPress={() => onDelete(item)}
-          className="min-h-[44px] w-[52px] items-center justify-center rounded-nova border border-danger/40 bg-danger/10 active:opacity-75 dark:border-dark-danger/40 dark:bg-dark-danger/10"
-        >
-          <Ionicons name="trash-outline" size={18} color={palette.danger} />
-        </Pressable>
-      </View>
+function DetailLine({ label, value }: { label: string; value?: string | null }) {
+  if (!value) return null;
+  return (
+    <View className="flex-row items-start justify-between gap-4 border-b border-glass py-3 dark:border-dark-glass">
+      <Text className="text-[11px] font-black uppercase tracking-[1.2px] text-subtle dark:text-dark-subtle">
+        {label}
+      </Text>
+      <Text className="flex-1 text-right text-sm font-semibold text-primary dark:text-dark-primary">
+        {value}
+      </Text>
     </View>
   );
 }
@@ -410,12 +481,25 @@ function SubscriptionDrawer({
   const isEdit = mode === "edit";
   const [form, setForm] = useState<FormState>(emptyForm);
   const [errors, setErrors] = useState<FormErrors>({});
+  const [showMore, setShowMore] = useState(false);
+  const [customCurrency, setCustomCurrency] = useState(false);
 
   useEffect(() => {
     if (!visible) return;
-    setForm(subscription ? formFromSubscription(subscription) : emptyForm());
+    const next = subscription ? formFromSubscription(subscription) : emptyForm();
+    setForm(next);
     setErrors({});
+    setCustomCurrency(!COMMON_CURRENCIES.includes(next.currency.trim().toUpperCase()));
+    setShowMore(
+      Boolean(next.reason.trim() || next.cancelUrl.trim() || next.paymentLabel.trim()),
+    );
   }, [subscription, visible]);
+
+  const intervalCount = Math.max(1, Number(form.intervalCount) || 1);
+  const currencyChoice =
+    customCurrency || !COMMON_CURRENCIES.includes(form.currency.trim().toUpperCase())
+      ? OTHER_CURRENCY
+      : form.currency.trim().toUpperCase();
 
   const setField = <K extends keyof FormState>(key: K, value: FormState[K]) => {
     setForm((current) => ({ ...current, [key]: value }));
@@ -423,7 +507,10 @@ function SubscriptionDrawer({
 
   const submit = async () => {
     if (submitting) return;
-    const nextErrors = validateForm(form);
+    const nextErrors = validateForm(
+      form,
+      subscription ? dateKeyFromIso(subscription.nextChargeAt) : "",
+    );
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) return;
     await onSubmit(formToPayload(form, mode));
@@ -467,53 +554,61 @@ function SubscriptionDrawer({
             error={errors.amount}
           />
         </View>
-        <View className="w-[108px]">
-          <FormField
+        <View className="w-[116px]">
+          <SelectField
             label="Currency"
-            value={form.currency}
-            onChangeText={(value) => setField("currency", value.toUpperCase())}
-            placeholder="USD"
-            autoCapitalize="characters"
-            autoCorrect={false}
-            maxLength={3}
-            error={errors.currency}
+            value={currencyChoice}
+            options={CURRENCY_OPTIONS}
+            searchable
+            searchPlaceholder="Search currency"
+            title="Currency"
+            subtitle="Pick one, or choose Other for a different code."
+            onChange={(value) => {
+              if (value === OTHER_CURRENCY) {
+                setCustomCurrency(true);
+                setField("currency", "");
+              } else {
+                setCustomCurrency(false);
+                setField("currency", value);
+              }
+            }}
           />
         </View>
       </View>
+      {currencyChoice === OTHER_CURRENCY ? (
+        <FormField
+          label="Currency code"
+          value={form.currency}
+          onChangeText={(value) =>
+            setField("currency", value.replace(/[^a-zA-Z]/g, "").slice(0, 3).toUpperCase())
+          }
+          placeholder="SEK"
+          autoCapitalize="characters"
+          autoCorrect={false}
+          maxLength={3}
+          hint="Three letters, like SEK or BRL."
+          error={errors.currency}
+        />
+      ) : null}
 
-      <SelectField
-        label="Billing cycle"
-        value={form.intervalUnit}
-        options={INTERVAL_OPTIONS}
-        onChange={(value) => setField("intervalUnit", value as SubscriptionIntervalUnit)}
-        title="Billing cycle"
-        subtitle="How often this charge repeats."
-      />
-
-      <View className="flex-row gap-3">
-        <View className="flex-1">
+      <View className="flex-row items-end gap-3">
+        <View className="w-[96px]">
           <FormField
-            label="Every"
+            label="Repeats every"
             value={form.intervalCount}
             onChangeText={(value) => setField("intervalCount", value.replace(/[^\d]/g, ""))}
             placeholder="1"
             keyboardType="number-pad"
-            hint={intervalLabel(
-              form.intervalUnit,
-              form.intervalCount.trim() ? Number(form.intervalCount) : 1,
-            )}
             error={errors.intervalCount}
           />
         </View>
         <View className="flex-1">
-          <FormField
-            label="Remind me"
-            value={form.reminderDays}
-            onChangeText={(value) => setField("reminderDays", value.replace(/[^\d]/g, ""))}
-            placeholder="3"
-            keyboardType="number-pad"
-            hint="Days before the charge."
-            error={errors.reminderDays}
+          <SelectField
+            value={form.intervalUnit}
+            options={periodOptions(intervalCount)}
+            onChange={(value) => setField("intervalUnit", value as SubscriptionIntervalUnit)}
+            title="Billing period"
+            subtitle="How often this charge repeats."
           />
         </View>
       </View>
@@ -532,19 +627,6 @@ function SubscriptionDrawer({
         <FieldError message={errors.nextChargeAt} />
       </View>
 
-      <View className="gap-[7px]">
-        <Text className="text-[13px] font-bold text-muted dark:text-dark-muted">
-          Trial ends
-        </Text>
-        <CalendarField
-          value={form.trialEndsAt}
-          onChange={(value) => setField("trialEndsAt", value)}
-          placeholder="No trial"
-          drawerTitle="Trial ends"
-          drawerSubtitle="Leave empty if there is no trial."
-        />
-      </View>
-
       <SelectField
         label="Status"
         value={form.status}
@@ -553,6 +635,63 @@ function SubscriptionDrawer({
         title="Status"
         subtitle="Active, trial, paused, or canceled."
       />
+
+      {form.status === "TRIAL" ? (
+        <View className="gap-[7px]">
+          <Text className="text-[13px] font-bold text-muted dark:text-dark-muted">
+            Trial ends
+          </Text>
+          <CalendarField
+            value={form.trialEndsAt}
+            onChange={(value) => setField("trialEndsAt", value)}
+            placeholder="Select date"
+            drawerTitle="Trial ends"
+            drawerSubtitle="Nova reminds you before it turns into a paid plan."
+          />
+          <FieldError message={errors.trialEndsAt} />
+        </View>
+      ) : null}
+
+      <FormField
+        label="Remind me (days before)"
+        value={form.reminderDays}
+        onChangeText={(value) => setField("reminderDays", value.replace(/[^\d]/g, ""))}
+        placeholder="3"
+        keyboardType="number-pad"
+        hint={
+          form.reminderDays.trim() === "0"
+            ? "No reminder before this charges."
+            : "Nova notifies you this many days before the charge so you can cancel in time. Use 0 to turn it off."
+        }
+        error={errors.reminderDays}
+      />
+
+      <Pressable
+        accessibilityRole="button"
+        onPress={() => setShowMore((open) => !open)}
+        className="min-h-[44px] items-center justify-center rounded-nova border border-glass bg-glass-button active:opacity-75 dark:border-dark-glass dark:bg-dark-glass-button"
+      >
+        <Text className="text-sm font-extrabold text-muted dark:text-dark-muted">
+          {showMore ? "Hide extra details" : "More details"}
+        </Text>
+      </Pressable>
+
+      {showMore ? (
+        <View className="gap-5">
+      {form.status !== "TRIAL" ? (
+        <View className="gap-[7px]">
+          <Text className="text-[13px] font-bold text-muted dark:text-dark-muted">
+            Trial ends
+          </Text>
+          <CalendarField
+            value={form.trialEndsAt}
+            onChange={(value) => setField("trialEndsAt", value)}
+            placeholder="No trial"
+            drawerTitle="Trial ends"
+            drawerSubtitle="Leave empty if there is no trial."
+          />
+        </View>
+      ) : null}
 
       <FormField
         label="Why you keep it"
@@ -578,6 +717,8 @@ function SubscriptionDrawer({
         onChangeText={(value) => setField("paymentLabel", value)}
         placeholder="Card ending 4242"
       />
+        </View>
+      ) : null}
 
       <View className="flex-row gap-3 pt-1">
         <Pressable
@@ -607,11 +748,11 @@ function SubscriptionDrawer({
 export default function SubscriptionsScreen() {
   const { colorScheme } = useColorScheme();
   const palette = getPalette(colorScheme);
-  const params = useLocalSearchParams<{ id?: string | string[] }>();
+  const params = useLocalSearchParams<{ id?: string | string[]; filter?: string | string[] }>();
   const isDemo = Boolean(useAuthStore((state) => state.user?.isDemo));
   const showSnackbar = useSnackbarStore((state) => state.showSnackbar);
   const [items, setItems] = useState<Subscription[]>([]);
-  const [totals, setTotals] = useState<SubscriptionTotals>(EMPTY_TOTALS);
+  const [totals, setTotals] = useState<SubscriptionTotals>(EMPTY_SUBSCRIPTION_TOTALS);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [pageError, setPageError] = useState("");
@@ -622,41 +763,74 @@ export default function SubscriptionsScreen() {
   const [submitError, setSubmitError] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<Subscription | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [detail, setDetail] = useState<Subscription | null>(null);
+  const [filter, setFilter] = useState<ListFilter>("all");
+  const [renewingAll, setRenewingAll] = useState(false);
   const openedFor = useRef("");
+  const pending = useRef(0);
 
-  const loadSubscriptions = useCallback(async () => {
-    try {
-      const data = await listSubscriptionsApi();
-      setItems(data.items);
-      setTotals(data.totals);
-      setPageError("");
-    } catch (error) {
-      showSnackbar({
-        variant: "error",
-        title: "Could not load subscriptions",
-        message: getApiErrorMessage(error, "Please try again."),
-      });
-    } finally {
-      setLoading(false);
-    }
-  }, [showSnackbar]);
+  const loadSubscriptions = useCallback(
+    async (quiet = false) => {
+      try {
+        const data = await listSubscriptionsApi();
+        setItems(data.items);
+        setTotals(data.totals);
+        setPageError("");
+      } catch (error) {
+        if (!quiet) {
+          showSnackbar({
+            variant: "error",
+            title: "Could not load subscriptions",
+            message: getApiErrorMessage(error, "Please try again."),
+          });
+        }
+      } finally {
+        setLoading(false);
+      }
+    },
+    [showSnackbar],
+  );
 
   useEffect(() => {
     void loadSubscriptions();
   }, [loadSubscriptions]);
 
   const requestedId = firstParam(params.id);
+  const requestedFilter = firstParam(params.filter);
 
   useEffect(() => {
+    if (FILTER_IDS.includes(requestedFilter as ListFilter)) {
+      setFilter(requestedFilter as ListFilter);
+    }
+  }, [requestedFilter]);
+
+  // A link can point at a subscription that is not in the list. Fetch it by id.
+  useEffect(() => {
     if (!requestedId || loading || openedFor.current === requestedId) return;
-    const match = items.find((item) => item.id === requestedId);
     openedFor.current = requestedId;
-    if (!match) return;
-    setDrawerMode("edit");
-    setEditing(match);
-    setSubmitError("");
-    setDrawerOpen(true);
-  }, [items, loading, requestedId]);
+    const match = items.find((item) => item.id === requestedId);
+    if (match) {
+      setDetail(match);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const found = await getSubscriptionApi(requestedId);
+        if (!cancelled) setDetail(found);
+      } catch {
+        if (cancelled) return;
+        showSnackbar({
+          variant: "error",
+          title: "Subscription not found",
+          message: "It may have been deleted.",
+        });
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [items, loading, requestedId, showSnackbar]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -664,16 +838,124 @@ export default function SubscriptionsScreen() {
     setRefreshing(false);
   }, [loadSubscriptions]);
 
-  const current = useMemo(
-    () => items.filter((item) => item.status === "ACTIVE" || item.status === "TRIAL"),
+  const overdueCount = useMemo(
+    () => items.filter(isOverdueSubscription).length,
     [items],
   );
-  const ended = useMemo(
-    () => items.filter((item) => item.status === "PAUSED" || item.status === "CANCELED"),
-    [items],
-  );
+  const current = useMemo(() => {
+    const live = items
+      .filter(isLiveSubscription)
+      .sort((a, b) => a.daysUntilCharge - b.daysUntilCharge);
+    if (filter === "trials") return live.filter((item) => item.status === "TRIAL");
+    if (filter === "renewing") return live.filter((item) => item.status === "ACTIVE");
+    if (filter === "overdue") return live.filter(isOverdueSubscription);
+    if (filter === "stopped") return [];
+    return live;
+  }, [filter, items]);
+  const ended = useMemo(() => {
+    if (filter === "renewing" || filter === "trials" || filter === "overdue") return [];
+    return items
+      .filter(isStoppedSubscription)
+      .sort((a, b) => a.daysUntilCharge - b.daysUntilCharge);
+  }, [filter, items]);
+
+  const replaceItem = useCallback((next: Subscription) => {
+    setItems((list) => list.map((row) => (row.id === next.id ? next : row)));
+    setDetail((open) => (open && open.id === next.id ? next : open));
+  }, []);
+
+  // The row changes right away; the server answer replaces it, and a failure puts it back.
+  const runAction = async (item: Subscription, action: SubscriptionQuickAction) => {
+    if (isDemo) {
+      showSnackbar({
+        variant: "error",
+        title: "That did not work",
+        message: DEMO_SUBSCRIPTION_MESSAGE,
+      });
+      return;
+    }
+    replaceItem(applyQuickAction(item, action));
+    pending.current += 1;
+    try {
+      const saved =
+        action === "renew"
+          ? await renewSubscriptionApi(item.id)
+          : await updateSubscriptionApi(item.id, {
+              status: action === "pause" ? "PAUSED" : "ACTIVE",
+            });
+      if (saved && typeof saved.id === "string") replaceItem(saved);
+      showSnackbar({
+        variant: "success",
+        title:
+          action === "renew"
+            ? "Marked as renewed"
+            : action === "pause"
+              ? "Paused"
+              : action === "resume"
+                ? "Resumed"
+                : "Reactivated",
+        message:
+          action === "renew"
+            ? `${item.service} charges next on ${formatSubscriptionDate(saved?.nextChargeAt)}.`
+            : action === "pause"
+              ? `${item.service} will not remind you until you resume it.`
+              : `${item.service} is active again.`,
+      });
+    } catch (error) {
+      replaceItem(item);
+      showSnackbar({
+        variant: "error",
+        title: "That did not work",
+        message: subscriptionErrorMessage(error, "Could not update this subscription."),
+      });
+    } finally {
+      pending.current = Math.max(0, pending.current - 1);
+      if (pending.current === 0) void loadSubscriptions(true);
+    }
+  };
+
+  const renewAll = async () => {
+    if (renewingAll || overdueCount === 0) return;
+    if (isDemo) {
+      showSnackbar({
+        variant: "error",
+        title: "That did not work",
+        message: DEMO_SUBSCRIPTION_MESSAGE,
+      });
+      return;
+    }
+    const before = items;
+    setRenewingAll(true);
+    setItems((list) =>
+      list.map((row) => (isOverdueSubscription(row) ? applyQuickAction(row, "renew") : row)),
+    );
+    try {
+      const result = await renewAllSubscriptionsApi();
+      setItems(result.items);
+      setTotals(result.totals);
+      setFilter((open) => (open === "overdue" ? "all" : open));
+      showSnackbar({
+        variant: "success",
+        title: "Renewed",
+        message:
+          result.renewed === 1
+            ? "1 subscription moved to its next charge date."
+            : `${result.renewed} subscriptions moved to their next charge dates.`,
+      });
+    } catch (error) {
+      setItems(before);
+      showSnackbar({
+        variant: "error",
+        title: "Could not renew them",
+        message: subscriptionErrorMessage(error, "Could not renew your subscriptions."),
+      });
+    } finally {
+      setRenewingAll(false);
+    }
+  };
 
   const openCreate = () => {
+    setDetail(null);
     setDrawerMode("create");
     setEditing(null);
     setSubmitError("");
@@ -681,6 +963,7 @@ export default function SubscriptionsScreen() {
   };
 
   const openEdit = (item: Subscription) => {
+    setDetail(null);
     setDrawerMode("edit");
     setEditing(item);
     setSubmitError("");
@@ -749,6 +1032,7 @@ export default function SubscriptionsScreen() {
     try {
       await deleteSubscriptionApi(deleteTarget.id);
       if (editing?.id === deleteTarget.id) setDrawerOpen(false);
+      if (detail?.id === deleteTarget.id) setDetail(null);
       await loadSubscriptions();
       showSnackbar({
         variant: "success",
@@ -776,6 +1060,7 @@ export default function SubscriptionsScreen() {
 
   const dueLabel = formatMoneyList(totals?.dueIn30Days) || "Nothing due";
   const yearlyLabel = formatMoneyList(totals?.yearly) || "—";
+  const monthlyLabel = formatMoneyList(totals?.monthly) || "—";
 
   return (
     <View className="flex-1 bg-main dark:bg-dark-main">
@@ -793,7 +1078,7 @@ export default function SubscriptionsScreen() {
               Subscriptions
             </Text>
             <Text className="mt-1 text-sm text-muted dark:text-dark-muted">
-              What you pay for, and when it charges next.
+              What you pay, and the day it charges next.
             </Text>
           </View>
           <Pressable
@@ -814,9 +1099,79 @@ export default function SubscriptionsScreen() {
         ) : null}
 
         <View className="gap-4 rounded-nova-xl border border-glass bg-sidebar p-5 dark:border-dark-glass dark:bg-dark-sidebar">
+          <SummaryLine label="Monthly" value={monthlyLabel} />
+          <SummaryLine label="Yearly" value={yearlyLabel} />
           <SummaryLine label="Due in 30 days" value={dueLabel} />
-          <SummaryLine label="Yearly cost" value={yearlyLabel} />
           <SummaryLine label="Active" value={String(totals?.activeCount ?? 0)} />
+        </View>
+
+        {overdueCount > 0 ? (
+          <View className="gap-3 rounded-nova-xl border border-danger/40 bg-danger/10 p-4 dark:border-dark-danger/40 dark:bg-dark-danger/10">
+            <View className="flex-row items-start gap-3">
+              <Ionicons name="alert-circle-outline" size={22} color={palette.danger} />
+              <View className="flex-1">
+                <Text className="text-[15px] font-black text-primary dark:text-dark-primary">
+                  {overdueCount === 1
+                    ? "1 charge date has passed"
+                    : `${overdueCount} charge dates have passed`}
+                </Text>
+                <Text className="mt-1 text-xs leading-[17px] text-muted dark:text-dark-muted">
+                  Nova never moves a date on its own. If they already charged, renew them and the
+                  dates roll to the next cycle.
+                </Text>
+              </View>
+            </View>
+            <View className="flex-row gap-2">
+              <RowAction
+                label={filter === "overdue" ? "Show all" : "Review"}
+                icon="eye-outline"
+                onPress={() => setFilter(filter === "overdue" ? "all" : "overdue")}
+              />
+              <RowAction
+                label={renewingAll ? "Renewing..." : "Renew all"}
+                icon="refresh-outline"
+                primary
+                onPress={() => {
+                  void renewAll();
+                }}
+              />
+            </View>
+          </View>
+        ) : null}
+
+        <View className="flex-row flex-wrap gap-2">
+          {(
+            [
+              { id: "all", label: "All" },
+              { id: "renewing", label: "Active" },
+              { id: "trials", label: "Trials" },
+              ...(overdueCount > 0 || filter === "overdue"
+                ? [{ id: "overdue", label: `Overdue ${overdueCount}` } as const]
+                : []),
+              { id: "stopped", label: "Stopped" },
+            ] as const
+          ).map((chip) => (
+            <Pressable
+              key={chip.id}
+              accessibilityRole="button"
+              onPress={() => setFilter(chip.id)}
+              className={`rounded-full border px-3 py-1.5 ${
+                filter === chip.id
+                  ? "border-accent/50 bg-accent/15 dark:border-dark-accent/50 dark:bg-dark-accent/15"
+                  : "border-glass bg-glass-button dark:border-dark-glass dark:bg-dark-glass-button"
+              }`}
+            >
+              <Text
+                className={`text-xs font-black ${
+                  filter === chip.id
+                    ? "text-accent dark:text-dark-accent"
+                    : "text-primary dark:text-dark-primary"
+                }`}
+              >
+                {chip.label}
+              </Text>
+            </Pressable>
+          ))}
         </View>
 
         {items.length === 0 ? (
@@ -837,36 +1192,44 @@ export default function SubscriptionsScreen() {
           </View>
         ) : (
           <View className="gap-5">
-            {current.length === 0 ? (
+            {current.length === 0 && ended.length === 0 ? (
               <Text className="text-sm text-muted dark:text-dark-muted">
-                No upcoming charges.
+                Nothing in this view.
               </Text>
-            ) : (
+            ) : null}
+
+            {current.length > 0 ? (
               <View className="gap-4">
                 {current.map((item) => (
                   <SubscriptionRow
                     key={item.id}
                     item={item}
-                    onEdit={openEdit}
-                    onDelete={setDeleteTarget}
+                    onOpen={setDetail}
+                    onAction={(row, action) => {
+                      void runAction(row, action);
+                    }}
                   />
                 ))}
               </View>
-            )}
+            ) : null}
 
             {ended.length > 0 ? (
               <View className="gap-3">
-                <Text className="text-xs font-black uppercase tracking-[1.4px] text-subtle dark:text-dark-subtle">
-                  Ended
-                </Text>
+                {filter === "all" && current.length > 0 ? (
+                  <Text className="text-xs font-black uppercase tracking-[1.4px] text-subtle dark:text-dark-subtle">
+                    Stopped
+                  </Text>
+                ) : null}
                 <View className="gap-4">
                   {ended.map((item) => (
                     <SubscriptionRow
                       key={item.id}
                       item={item}
                       quiet
-                      onEdit={openEdit}
-                      onDelete={setDeleteTarget}
+                      onOpen={setDetail}
+                      onAction={(row, action) => {
+                        void runAction(row, action);
+                      }}
                     />
                   ))}
                 </View>
@@ -875,6 +1238,170 @@ export default function SubscriptionsScreen() {
           </View>
         )}
       </ScrollView>
+
+      <BottomDrawer
+        visible={Boolean(detail)}
+        title={detail?.service ?? "Subscription"}
+        subtitle={
+          detail
+            ? [detail.plan, intervalLabel(detail.intervalUnit, detail.intervalCount)]
+                .filter(Boolean)
+                .join(" · ")
+            : ""
+        }
+        onClose={() => setDetail(null)}
+        footer={
+          <View className="gap-3">
+            {detail ? (
+              <View className="flex-row gap-2">
+                {canMarkRenewed(detail) ? (
+                  <RowAction
+                    label="Mark renewed"
+                    icon="refresh-outline"
+                    primary={isOverdueSubscription(detail)}
+                    onPress={() => {
+                      void runAction(detail, "renew");
+                    }}
+                  />
+                ) : null}
+                {isLiveSubscription(detail) ? (
+                  <RowAction
+                    label="Pause"
+                    icon="pause-outline"
+                    onPress={() => {
+                      void runAction(detail, "pause");
+                    }}
+                  />
+                ) : null}
+                {detail.status === "PAUSED" ? (
+                  <RowAction
+                    label="Resume"
+                    icon="play-outline"
+                    primary
+                    onPress={() => {
+                      void runAction(detail, "resume");
+                    }}
+                  />
+                ) : null}
+                {detail.status === "CANCELED" ? (
+                  <RowAction
+                    label="Reactivate"
+                    icon="arrow-undo-outline"
+                    primary
+                    onPress={() => {
+                      void runAction(detail, "reactivate");
+                    }}
+                  />
+                ) : null}
+              </View>
+            ) : null}
+            <View className="flex-row gap-3">
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => {
+                  if (detail) setDeleteTarget(detail);
+                }}
+                className="min-h-[50px] flex-row items-center justify-center gap-2 rounded-nova border border-danger/40 px-4 active:opacity-75 dark:border-dark-danger/40"
+              >
+                <Ionicons name="trash-outline" size={18} color={palette.danger} />
+                <Text className="text-sm font-extrabold text-danger dark:text-dark-danger">
+                  Delete
+                </Text>
+              </Pressable>
+              <PrimaryButton
+                label="Edit"
+                onPress={() => {
+                  if (detail) openEdit(detail);
+                }}
+                className="flex-1"
+              />
+            </View>
+          </View>
+        }
+      >
+        {detail ? (
+          <View>
+            <View className="flex-row items-start justify-between gap-3">
+              <Text className="text-[34px] font-black text-accent dark:text-dark-accent">
+                {formatMoney(detail.amount, detail.currency)}
+              </Text>
+              <StatusPill status={detail.status} />
+            </View>
+            <Text
+              className={`mt-1 text-sm font-extrabold ${
+                isOverdueSubscription(detail)
+                  ? "text-danger dark:text-dark-danger"
+                  : "text-muted dark:text-dark-muted"
+              }`}
+            >
+              {subscriptionTimingLabel(detail)}
+            </Text>
+            {isOverdueSubscription(detail) ? (
+              <Text className="mt-2 text-xs leading-[17px] text-muted dark:text-dark-muted">
+                The saved date was {formatSubscriptionDate(detail.nextChargeAt)}. If it already
+                charged, mark it renewed and Nova moves to the next date.
+              </Text>
+            ) : null}
+            <View className="mt-4">
+              <DetailLine
+                label="Next charge"
+                value={formatSubscriptionDate(detail.nextChargeAt)}
+              />
+              <DetailLine
+                label="Repeats"
+                value={intervalLabel(detail.intervalUnit, detail.intervalCount)}
+              />
+              <DetailLine
+                label="Cancel by"
+                value={
+                  isLiveSubscription(detail) ? formatSubscriptionDate(detail.lastCancelBy) : ""
+                }
+              />
+              <DetailLine
+                label="Trial ends"
+                value={formatSubscriptionDate(detail.trialEndsAt)}
+              />
+              <DetailLine
+                label="Per month"
+                value={formatMoney(detail.monthlyEquivalent, detail.currency)}
+              />
+              <DetailLine
+                label="Per year"
+                value={formatMoney(detail.yearlyCost, detail.currency)}
+              />
+              <DetailLine
+                label="Reminder"
+                value={
+                  detail.reminderDays === 0
+                    ? "Off"
+                    : `${detail.reminderDays} day${detail.reminderDays === 1 ? "" : "s"} before`
+                }
+              />
+              <DetailLine label="Paid with" value={detail.paymentLabel} />
+              <DetailLine label="Why you keep it" value={detail.reason} />
+              <DetailLine
+                label="Previous price"
+                value={
+                  detail.previousPrice
+                    ? `${formatMoney(detail.previousPrice.amount, detail.previousPrice.currency)} · until ${formatSubscriptionDate(detail.previousPrice.changedAt)}`
+                    : ""
+                }
+              />
+            </View>
+            {isHttpUrl(detail.cancelUrl) ? (
+              <View className="mt-4">
+                <TextLink
+                  label="Open cancel page"
+                  onPress={() => {
+                    const url = detail.cancelUrl?.trim();
+                    if (url) void Linking.openURL(url);
+                  }}
+                />
+              </View>
+            ) : null}
+          </View>
+        ) : null}
+      </BottomDrawer>
 
       <SubscriptionDrawer
         visible={drawerOpen}

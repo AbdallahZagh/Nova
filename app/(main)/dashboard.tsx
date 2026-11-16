@@ -326,7 +326,7 @@ function ContinueStrip({ data }: { data: DashboardContinue }) {
           className="mt-3"
         >
           <Text className="text-xs font-black text-accent dark:text-dark-accent">
-            Today's timeline
+            {"Today's timeline"}
           </Text>
         </Pressable>
       </View>
@@ -348,30 +348,52 @@ function DueIn30DaysCard({ data }: { data: DashboardSubscriptions }) {
   const value = formatMoneyList(data.dueIn30Days) || "Nothing due";
   const hint = nextChargeHint(data.next) || "No upcoming charge";
 
+  const overdue = typeof data.overdueCount === "number" ? data.overdueCount : 0;
+
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel="Due in 30 days"
-      onPress={() => router.push("/(main)/subscriptions" as Href)}
-      className="flex-row items-center gap-4 rounded-nova border border-glass bg-glass-card p-4 dark:border-dark-glass dark:bg-dark-glass-card"
-    >
-      <View className="h-11 w-11 items-center justify-center rounded-nova bg-accent/15 dark:bg-dark-accent/15">
-        <Ionicons name="card-outline" size={20} color={palette.accent} />
-      </View>
-      <View className="flex-1">
-        <Text className="text-xs font-extrabold uppercase tracking-[1.4px] text-subtle dark:text-dark-subtle">
-          Due in 30 days
-        </Text>
-        <Text
-          numberOfLines={2}
-          className="mt-1 text-[28px] font-black text-accent dark:text-dark-accent"
+    <View className="gap-2">
+      {overdue > 0 ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Review overdue subscriptions"
+          onPress={() => router.push("/(main)/subscriptions?filter=overdue" as Href)}
+          className="flex-row items-center gap-3 rounded-nova border border-danger/40 bg-danger/10 px-4 py-3 active:opacity-80 dark:border-dark-danger/40 dark:bg-dark-danger/10"
         >
-          {value}
-        </Text>
-        <Text className="text-xs text-muted dark:text-dark-muted">{hint}</Text>
-      </View>
-      <Ionicons name="chevron-forward" size={16} color={palette.subtle} />
-    </Pressable>
+          <Ionicons name="alert-circle-outline" size={20} color={palette.danger} />
+          <Text className="flex-1 text-sm font-extrabold text-primary dark:text-dark-primary">
+            {overdue === 1
+              ? "1 subscription passed its charge date"
+              : `${overdue} subscriptions passed their charge date`}
+          </Text>
+          <Text className="text-xs font-black text-danger dark:text-dark-danger">
+            Review
+          </Text>
+        </Pressable>
+      ) : null}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Due in 30 days"
+        onPress={() => router.push("/(main)/subscriptions" as Href)}
+        className="flex-row items-center gap-4 rounded-nova border border-glass bg-glass-card p-4 dark:border-dark-glass dark:bg-dark-glass-card"
+      >
+        <View className="h-11 w-11 items-center justify-center rounded-nova bg-accent/15 dark:bg-dark-accent/15">
+          <Ionicons name="card-outline" size={20} color={palette.accent} />
+        </View>
+        <View className="flex-1">
+          <Text className="text-xs font-extrabold uppercase tracking-[1.4px] text-subtle dark:text-dark-subtle">
+            Due in 30 days
+          </Text>
+          <Text
+            numberOfLines={2}
+            className="mt-1 text-[28px] font-black text-accent dark:text-dark-accent"
+          >
+            {value}
+          </Text>
+          <Text className="text-xs text-muted dark:text-dark-muted">{hint}</Text>
+        </View>
+        <Ionicons name="chevron-forward" size={16} color={palette.subtle} />
+      </Pressable>
+    </View>
   );
 }
 

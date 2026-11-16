@@ -1,7 +1,166 @@
 import type {
   MoneyAmount,
+  Subscription,
   SubscriptionIntervalUnit,
+  SubscriptionStatus,
+  SubscriptionTotals,
 } from "@/api/subscriptions";
+
+export const EMPTY_SUBSCRIPTION_TOTALS: SubscriptionTotals = {
+  overdueCount: 0,
+  monthly: [],
+  dueIn30Days: [],
+  yearly: [],
+  activeCount: 0,
+};
+
+function wholeCount(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) && value > 0
+    ? Math.floor(value)
+    : 0;
+}
+
+/** Keeps every total the server sends, including the monthly cost and the overdue count. */
+export function normalizeTotals(
+  totals: Partial<SubscriptionTotals> | null | undefined,
+): SubscriptionTotals {
+  if (!totals) return EMPTY_SUBSCRIPTION_TOTALS;
+  return {
+    overdueCount: wholeCount(totals.overdueCount),
+    monthly: Array.isArray(totals.monthly) ? totals.monthly : [],
+    dueIn30Days: Array.isArray(totals.dueIn30Days) ? totals.dueIn30Days : [],
+    yearly: Array.isArray(totals.yearly) ? totals.yearly : [],
+    activeCount: wholeCount(totals.activeCount),
+  };
+}
+
+export function isLiveSubscription(item: Pick<Subscription, "status">) {
+  return item.status === "ACTIVE" || item.status === "TRIAL";
+}
+
+export function isStoppedSubscription(item: Pick<Subscription, "status">) {
+  return item.status === "PAUSED" || item.status === "CANCELED";
+}
+
+export function isOverdueSubscription(
+  item: Pick<Subscription, "status" | "overdue" | "daysUntilCharge">,
+) {
+  return (
+    isLiveSubscription(item) &&
+    (item.overdue === true || item.daysUntilCharge < 0)
+  );
+}
+
+/** A charge that has passed, or lands today, can be marked as renewed. */
+export function canMarkRenewed(
+  item: Pick<Subscription, "status" | "overdue" | "daysUntilCharge">,
+) {
+  return isLiveSubscription(item) && (isOverdueSubscription(item) || item.daysUntilCharge <= 0);
+}
+
+export function statusLabel(status: SubscriptionStatus) {
+  switch (status) {
+    case "ACTIVE":
+      return "Active";
+    case "TRIAL":
+      return "Trial";
+    case "PAUSED":
+      return "Paused";
+    case "CANCELED":
+      return "Canceled";
+    default:
+      return status;
+  }
+}
+
+export function overdueLabel(days: number | null | undefined) {
+  const count = Math.max(
+    1,
+    Math.floor(Math.abs(typeof days === "number" && Number.isFinite(days) ? days : 1)),
+  );
+  return count === 1 ? "1 day overdue" : `${count} days overdue`;
+}
+
+/** One line for a card: "3 days overdue", "Renews in 4 days", "Paused". */
+export function subscriptionTimingLabel(
+  item: Pick<Subscription, "status" | "overdue" | "daysUntilCharge">,
+) {
+  if (item.status === "PAUSED") return "Paused";
+  if (item.status === "CANCELED") return "Canceled";
+  if (isOverdueSubscription(item)) return overdueLabel(item.daysUntilCharge);
+  return chargeTimingLabel(item.status, item.daysUntilCharge);
+}
+
+export type SubscriptionQuickAction = "renew" | "pause" | "resume" | "reactivate";
+
+function dayStart(date: Date) {
+  const copy = new Date(date);
+  copy.setHours(0, 0, 0, 0);
+  return copy;
+}
+
+function addCycle(date: Date, unit: SubscriptionIntervalUnit, count: number) {
+  const next = new Date(date);
+  const every = count > 0 ? Math.trunc(count) : 1;
+  if (unit === "DAY") next.setDate(next.getDate() + every);
+  else if (unit === "WEEK") next.setDate(next.getDate() + 7 * every);
+  else {
+    const day = next.getDate();
+    next.setDate(1);
+    if (unit === "MONTH") next.setMonth(next.getMonth() + every);
+    else next.setFullYear(next.getFullYear() + every);
+    const last = new Date(next.getFullYear(), next.getMonth() + 1, 0).getDate();
+    next.setDate(Math.min(day, last));
+  }
+  return next;
+}
+
+/**
+ * What a row looks like right after an action, so the screen can update at once.
+ * The server answer replaces it a moment later.
+ */
+export function applyQuickAction(
+  item: Subscription,
+  action: SubscriptionQuickAction,
+  now = new Date(),
+): Subscription {
+  if (action === "pause") {
+    return { ...item, status: "PAUSED", overdue: false, inWarningWindow: false };
+  }
+  if (action === "resume" || action === "reactivate") {
+    return { ...item, status: "ACTIVE", overdue: item.daysUntilCharge < 0 };
+  }
+
+  const today = dayStart(now);
+  const current = new Date(item.nextChargeAt);
+  if (Number.isNaN(current.getTime())) return item;
+  let next = new Date(current);
+  if (dayStart(next).getTime() === today.getTime()) {
+    next = addCycle(next, item.intervalUnit, item.intervalCount);
+  }
+  let guard = 0;
+  while (dayStart(next).getTime() < today.getTime() && guard < 1000) {
+    next = addCycle(next, item.intervalUnit, item.intervalCount);
+    guard += 1;
+  }
+  const days = Math.round((dayStart(next).getTime() - today.getTime()) / 86_400_000);
+  const shift = next.getTime() - current.getTime();
+  const lastCancelBy = item.lastCancelBy
+    ? new Date(new Date(item.lastCancelBy).getTime() + shift).toISOString()
+    : item.lastCancelBy;
+  const trialOver =
+    item.status === "TRIAL" &&
+    (!item.trialEndsAt || dayStart(new Date(item.trialEndsAt)).getTime() <= today.getTime());
+  return {
+    ...item,
+    status: trialOver ? "ACTIVE" : item.status,
+    nextChargeAt: next.toISOString(),
+    daysUntilCharge: days,
+    overdue: false,
+    inWarningWindow: days <= item.reminderDays,
+    lastCancelBy,
+  };
+}
 
 const INTERVAL_SINGULAR: Record<SubscriptionIntervalUnit, string> = {
   DAY: "Daily",

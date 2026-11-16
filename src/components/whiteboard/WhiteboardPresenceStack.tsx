@@ -5,8 +5,8 @@ import {
   groupOnlinePresence,
   presenceDeviceLabel,
   type PresencePlatform,
+  type WhiteboardPresence,
 } from "@/api/whiteboards";
-import type { WhiteboardPresence } from "@/api/whiteboards";
 
 function initials(name: string) {
   const parts = name.trim().split(/\s+/).filter(Boolean);

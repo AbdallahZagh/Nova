@@ -16,6 +16,7 @@ import {
   type SearchSubscription,
   type SearchTask,
   type SearchUser,
+  type SearchNote,
   type SearchWhiteboard,
 } from "@/api/search";
 import { useAuthStore } from "@/store/useAuthStore";
@@ -24,7 +25,7 @@ import { useAppPalette } from "@/theme/useAppPalette";
 
 type ResultItem = {
   id: string;
-  type: "project" | "whiteboard" | "task" | "user" | "subscription";
+  type: "project" | "whiteboard" | "task" | "user" | "subscription" | "note";
   label: string;
   subtitle?: string;
   href: Href | null;
@@ -36,6 +37,7 @@ const ICONS: Record<ResultItem["type"], keyof typeof Ionicons.glyphMap> = {
   task: "checkbox-outline",
   user: "person-outline",
   subscription: "card-outline",
+  note: "document-text-outline",
 };
 
 function userName(user: SearchUser) {
@@ -48,6 +50,7 @@ function groupResults(
   tasks: SearchTask[],
   users: SearchUser[],
   subscriptions: SearchSubscription[],
+  notes: SearchNote[],
   currentUserId?: string,
 ): { title: string; data: ResultItem[] }[] {
   const sections: { title: string; data: ResultItem[] }[] = [];
@@ -105,6 +108,18 @@ function groupResults(
         label: subscription.service,
         subtitle: subscription.plan ?? subscription.status ?? "Subscription",
         href: `/(main)/subscriptions?id=${subscription.id}` as Href,
+      })),
+    });
+  }
+  if (notes.length) {
+    sections.push({
+      title: "Notes",
+      data: notes.map((note) => ({
+        id: `note-${note.id}`,
+        type: "note" as const,
+        label: note.title,
+        subtitle: note.project?.name ?? "Personal note",
+        href: `/(main)/note/${note.id}` as Href,
       })),
     });
   }
@@ -194,6 +209,7 @@ export default function SearchScreen() {
   const [tasks, setTasks] = useState<SearchTask[]>([]);
   const [users, setUsers] = useState<SearchUser[]>([]);
   const [subscriptions, setSubscriptions] = useState<SearchSubscription[]>([]);
+  const [notes, setNotes] = useState<SearchNote[]>([]);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -211,6 +227,7 @@ export default function SearchScreen() {
         setTasks([]);
         setUsers([]);
         setSubscriptions([]);
+        setNotes([]);
         setLoading(false);
         return;
       }
@@ -224,6 +241,7 @@ export default function SearchScreen() {
         setTasks(results.tasks);
         setUsers(results.users);
         setSubscriptions(results.subscriptions);
+        setNotes(results.notes);
       } catch (error) {
         if (cancelled) return;
         setProjects([]);
@@ -231,6 +249,7 @@ export default function SearchScreen() {
         setTasks([]);
         setUsers([]);
         setSubscriptions([]);
+        setNotes([]);
         showSnackbar({
           variant: "error",
           title: "Search failed",
@@ -248,8 +267,8 @@ export default function SearchScreen() {
   }, [debouncedQuery, showSnackbar]);
 
   const sections = useMemo(
-    () => groupResults(projects, whiteboards, tasks, users, subscriptions, currentUserId),
-    [currentUserId, projects, subscriptions, tasks, users, whiteboards],
+    () => groupResults(projects, whiteboards, tasks, users, subscriptions, notes, currentUserId),
+    [currentUserId, notes, projects, subscriptions, tasks, users, whiteboards],
   );
   const hasResults = sections.length > 0;
 

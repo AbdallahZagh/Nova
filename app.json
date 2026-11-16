@@ -12,6 +12,7 @@
       "supportsTablet": true
     },
     "android": {
+      "usesCleartextTraffic": true,
       "softwareKeyboardLayoutMode": "resize",
       "googleServicesFile": "./google-services.json",
       "permissions": [
@@ -53,7 +54,9 @@
           "photosPermission": "Allow Nova to use your photos for a profile picture.",
           "cameraPermission": "Allow Nova to use the camera for a profile picture."
         }
-      ]
+      ],
+      "expo-font",
+      "expo-status-bar"
     ],
     "experiments": {
       "typedRoutes": true

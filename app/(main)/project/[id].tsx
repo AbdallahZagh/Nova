@@ -68,6 +68,7 @@ import { useAuthStore } from "@/store/useAuthStore";
 import { useSnackbarStore } from "@/store/useSnackbarStore";
 import { getPalette } from "@/theme/colors";
 import { consumeOpenNewTask } from "@/pendingProjectAction";
+import { ProjectNotesButton } from "@/components/ProjectNotesButton";
 import {
   filterBoardTasks,
   taskMatchesBoardFilters,
@@ -1264,6 +1265,7 @@ export default function ProjectDetailScreen() {
               <Text className="text-xs font-bold text-muted dark:text-dark-muted">
                 {project.progress}% complete · {tasks.length} on board
               </Text>
+              <ProjectNotesButton projectId={projectId} projectName={project.title} />
               {role ? (
                 <Text className="rounded-full border border-accent/40 px-2.5 py-0.5 text-[11px] font-black text-accent dark:text-dark-accent">
                   {role}

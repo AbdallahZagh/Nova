@@ -1,4 +1,5 @@
-import { Pressable, View, type ReactNode } from "react-native";
+import type { ReactNode } from "react";
+import { Pressable, View } from "react-native";
 import { PenIcon } from "@/components/whiteboard/BoardToolIcons";
 
 type WhiteboardToolsDockProps = {

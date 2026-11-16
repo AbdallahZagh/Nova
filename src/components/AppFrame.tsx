@@ -12,22 +12,27 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { router, usePathname } from "expo-router";
 import { useColorScheme } from "nativewind";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { DynamicLogo } from "@/components/UI/DynamicLogo";
+import { BottomDrawer } from "@/components/BottomDrawer";
 import { OfflineBanner } from "@/components/OfflineBanner";
 import { SystemStatusBanner } from "@/components/SystemStatusBanner";
 import { DemoTourModal } from "@/components/DemoTourModal";
+import { DynamicLogo } from "@/components/UI/DynamicLogo";
 import { useNotificationSync } from "@/hooks/useNotificationSync";
 import { useAuthStore } from "@/store/useAuthStore";
 import { useNotificationStore } from "@/store/useNotificationStore";
 import { getPalette } from "@/theme/colors";
 import { useWhiteboardLeave } from "@/whiteboard/WhiteboardLeaveContext";
 
-const tabs = [
-  { href: "/(main)/dashboard", label: "Dashboard", icon: "grid-outline" },
-  { href: "/(main)/projects", label: "Projects", icon: "folder-open-outline" },
-  { href: "/(main)/whiteboard", label: "Board", icon: "easel-outline" },
-  { href: "/(main)/timeline", label: "Timeline", icon: "git-compare-outline" },
-  { href: "/(main)/subscriptions", label: "Subscriptions", icon: "card-outline" },
+const primaryTabs = [
+  { href: "/(main)/dashboard", label: "Dashboard", icon: "grid-outline" as const },
+  { href: "/(main)/projects", label: "Projects", icon: "folder-open-outline" as const },
+  { href: "/(main)/timeline", label: "Timeline", icon: "git-compare-outline" as const },
+  { href: "/(main)/notes", label: "Notes", icon: "document-text-outline" as const },
+] as const;
+
+const moreTabs = [
+  { href: "/(main)/whiteboard", label: "Whiteboard", icon: "easel-outline" as const },
+  { href: "/(main)/subscriptions", label: "Subscriptions", icon: "card-outline" as const },
 ] as const;
 
 function getInitials(name?: string | null) {
@@ -46,7 +51,12 @@ export function AppFrame({ children }: PropsWithChildren) {
   const user = useAuthStore((state) => state.user);
   const unreadCount = useNotificationStore((state) => state.unreadCount);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
-  const hideTabs = pathname.includes("/whiteboard/");
+  const [moreOpen, setMoreOpen] = useState(false);
+  const hideTabs =
+    pathname.includes("/whiteboard/") || pathname.startsWith("/note/");
+  const moreActive = moreTabs.some((tab) =>
+    pathname.includes(tab.href.replace("/(main)", "")),
+  );
   const { tryLeave } = useWhiteboardLeave();
 
   const go = (href: string) => {
@@ -153,7 +163,7 @@ export function AppFrame({ children }: PropsWithChildren) {
           style={{ bottom: insets.bottom + 8 }}
         >
           <View className="relative flex-row rounded-nova-lg border border-glass bg-sidebar shadow-lg shadow-black/20 dark:border-dark-glass dark:bg-dark-sidebar">
-          {tabs.map((tab) => {
+          {primaryTabs.map((tab) => {
             const active =
               pathname === tab.href.replace("/(main)", "") ||
               pathname === tab.href ||
@@ -176,9 +186,7 @@ export function AppFrame({ children }: PropsWithChildren) {
                 />
                 <Text
                   numberOfLines={1}
-                  adjustsFontSizeToFit
-                  minimumFontScale={0.7}
-                  className={`text-[10px] font-extrabold ${
+                  className={`text-[11px] font-extrabold ${
                     active ? "text-accent dark:text-dark-accent" : "text-muted dark:text-dark-muted"
                   }`}
                   >
@@ -187,9 +195,37 @@ export function AppFrame({ children }: PropsWithChildren) {
               </Pressable>
             );
           })}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="More"
+            onPress={() => setMoreOpen(true)}
+            className={`min-h-[54px] flex-1 items-center justify-center gap-[3px] rounded-nova-lg border ${
+              moreActive ? "border-glass bg-glass-button dark:border-dark-glass dark:bg-dark-glass-button" : "border-transparent"
+            } active:opacity-75`}
+          >
+            <Ionicons name="apps-outline" size={18} color={moreActive ? palette.accent : palette.muted} />
+            <Text className={`text-[11px] font-extrabold ${moreActive ? "text-accent dark:text-dark-accent" : "text-muted dark:text-dark-muted"}`}>
+              More
+            </Text>
+          </Pressable>
           </View>
         </View>
       )}
+      <BottomDrawer visible={moreOpen} title="More" onClose={() => setMoreOpen(false)}>
+        {moreTabs.map((tab) => (
+          <Pressable
+            key={tab.href}
+            onPress={() => {
+              setMoreOpen(false);
+              go(tab.href);
+            }}
+            className="flex-row items-center gap-3 rounded-nova border border-glass bg-glass-card px-4 py-4 active:opacity-75 dark:border-dark-glass dark:bg-dark-glass-card"
+          >
+            <Ionicons name={tab.icon} size={20} color={palette.accent} />
+            <Text className="text-base font-black text-primary dark:text-dark-primary">{tab.label}</Text>
+          </Pressable>
+        ))}
+      </BottomDrawer>
     </View>
   );
 }

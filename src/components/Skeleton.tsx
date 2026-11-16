@@ -42,6 +42,40 @@ export function WhiteboardEditorSkeleton() {
   );
 }
 
+export function NoteDetailSkeleton() {
+  return (
+    <View className="flex-1 gap-5 bg-main p-5 dark:bg-dark-main">
+      <View className="flex-row items-center gap-3">
+        <Skeleton className="h-10 w-10 rounded-nova" />
+        <SkeletonLine className="h-3 flex-1" />
+        <Skeleton className="h-10 w-10 rounded-nova" />
+        <Skeleton className="h-10 w-10 rounded-nova" />
+      </View>
+      <SkeletonLine className="h-8 w-2/3" />
+      <View className="gap-3 pt-1">
+        <SkeletonLine className="w-full" />
+        <SkeletonLine className="w-full" />
+        <SkeletonLine className="w-11/12" />
+        <SkeletonLine className="w-4/5" />
+        <SkeletonLine className="w-3/5" />
+      </View>
+      <Skeleton className="mt-2 h-9 w-40 rounded-full" />
+      <View className="gap-3 pt-2">
+        <SkeletonLine className="h-3 w-16" />
+        <View className="flex-row gap-3">
+          {Array.from({ length: 6 }).map((_, index) => (
+            <SkeletonCircle key={index} className="size-[30px]" />
+          ))}
+        </View>
+      </View>
+      <View className="gap-2 pt-1">
+        <SkeletonLine className="h-3 w-16" />
+        <Skeleton className="h-12 w-full rounded-nova" />
+      </View>
+    </View>
+  );
+}
+
 export function PageSkeleton() {
   return (
     <View className="flex-1 gap-5 bg-main p-5 dark:bg-dark-main">

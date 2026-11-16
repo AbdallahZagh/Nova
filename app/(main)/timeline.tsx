@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -19,13 +19,15 @@ import {
 import {
   getTimelineApi,
   type TimelineFilter,
+  type TimelineSubscription,
   type TimelineTask,
 } from "@/api/timeline";
 import type { TaskStatus } from "@/api/tasks";
 import { BottomDrawer } from "@/components/BottomDrawer";
-import { PageSkeleton } from "@/components/Skeleton";
+import { PageSkeleton, SkeletonLine } from "@/components/Skeleton";
 import { UserProfileLink } from "@/components/UserProfileLink";
 import { useSnackbarStore } from "@/store/useSnackbarStore";
+import { formatMoney } from "@/subscriptions";
 import { getPalette } from "@/theme/colors";
 
 type StatusFilter = "All" | TaskStatus;
@@ -35,6 +37,7 @@ type AgendaGroup = {
   label: string;
   subtitle: string;
   tasks: TimelineTask[];
+  charges: TimelineSubscription[];
 };
 
 const FILTER_OPTIONS: { value: TimelineFilter; label: string }[] = [
@@ -198,6 +201,35 @@ function FilterChip<T extends string>({
   );
 }
 
+function ChargeCard({ charge }: { charge: TimelineSubscription }) {
+  const label = charge.kind === "trial" ? "Trial ends" : "Renews";
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`Open subscription ${charge.service}`}
+      onPress={() =>
+        router.push({
+          pathname: "/(main)/subscriptions",
+          params: { id: charge.id },
+        } as never)
+      }
+      className="rounded-nova border border-dashed border-sky-400/80 bg-sky-400/10 p-4 active:opacity-75"
+    >
+      <Text className="text-[11px] font-black uppercase tracking-[1.2px] text-sky-300">
+        Subscription
+      </Text>
+      <Text className="mt-1 text-[15px] font-black text-sky-200">
+        {charge.service}
+      </Text>
+      <Text className="mt-1 text-xs font-bold text-sky-100/70">
+        {label} · {formatMoney(charge.amount, charge.currency)}
+        {charge.plan ? ` · ${charge.plan}` : ""}
+        {charge.overdue ? " · Overdue" : ""}
+      </Text>
+    </Pressable>
+  );
+}
+
 function TaskCard({ task }: { task: TimelineTask }) {
   const status = normalizeStatus(task.status);
   const overdue = Boolean(task.overdue) && status !== "Completed";
@@ -335,6 +367,7 @@ export default function TimelineScreen() {
   const params = useLocalSearchParams<{ filter?: string | string[] }>();
   const [projects, setProjects] = useState<Project[]>([]);
   const [items, setItems] = useState<TimelineTask[]>([]);
+  const [charges, setCharges] = useState<TimelineSubscription[]>([]);
   const [timeFilter, setTimeFilter] = useState<TimelineFilter>(
     () =>
       parseTimelineFilter(
@@ -343,9 +376,12 @@ export default function TimelineScreen() {
   );
   const [projectId, setProjectId] = useState("all");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("All");
+  const [source, setSource] = useState<"all" | "tasks" | "subscriptions">("all");
   const [projectDrawerOpen, setProjectDrawerOpen] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [filtering, setFiltering] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const loadGeneration = useRef(0);
 
   const selectedProject = useMemo(
     () => projects.find((project) => project.id === projectId),
@@ -353,6 +389,7 @@ export default function TimelineScreen() {
   );
 
   const load = useCallback(async () => {
+    const generation = ++loadGeneration.current;
     try {
       const [projectData, timelineData] = await Promise.all([
         listProjectsApi(),
@@ -361,17 +398,23 @@ export default function TimelineScreen() {
           ...(projectId !== "all" ? { projectId } : {}),
         }),
       ]);
+      if (generation !== loadGeneration.current) return;
       setProjects(sortProjectsByStatus(projectData));
-      setItems(timelineData);
+      setItems(timelineData.items);
+      setCharges(timelineData.subscriptions);
     } catch (error) {
+      if (generation !== loadGeneration.current) return;
       setItems([]);
+      setCharges([]);
       showSnackbar({
         variant: "error",
         title: "Could not load timeline",
         message: getApiErrorMessage(error, "Please try again."),
       });
     } finally {
+      if (generation !== loadGeneration.current) return;
       setLoading(false);
+      setFiltering(false);
     }
   }, [projectId, showSnackbar, timeFilter]);
 
@@ -393,13 +436,24 @@ export default function TimelineScreen() {
   const agendaGroups = useMemo(() => {
     const { start, end } = calendarWindow(timeFilter);
     const byDay = new Map<string, TimelineTask[]>();
-    for (const task of filteredItems) {
+    const chargesByDay = new Map<string, TimelineSubscription[]>();
+    const taskSource = source === "subscriptions" ? [] : filteredItems;
+    for (const task of taskSource) {
       const due = parseDay(task.dueDate);
       if (!due) continue;
       const key = dateKey(due);
       const existing = byDay.get(key);
       if (existing) existing.push(task);
       else byDay.set(key, [task]);
+    }
+    const visibleCharges = source === "tasks" ? [] : charges;
+    for (const charge of visibleCharges) {
+      const due = parseDay(charge.occursAt);
+      if (!due) continue;
+      const key = dateKey(due);
+      const existing = chargesByDay.get(key);
+      if (existing) existing.push(charge);
+      else chargesByDay.set(key, [charge]);
     }
     for (const dayTasks of byDay.values()) {
       dayTasks.sort((a, b) => {
@@ -409,11 +463,14 @@ export default function TimelineScreen() {
       });
     }
 
+    const dayKeys = new Set([...byDay.keys(), ...chargesByDay.keys()]);
     const days =
-      timeFilter === "weekly" ? eachDay(start, end) : Array.from(byDay.keys()).map((key) => {
-        const [y, m, d] = key.split("-").map(Number);
-        return new Date(y, m - 1, d);
-      });
+      timeFilter === "weekly"
+        ? eachDay(start, end)
+        : Array.from(dayKeys).map((key) => {
+            const [y, m, d] = key.split("-").map(Number);
+            return new Date(y, m - 1, d);
+          });
 
     return days.map((day) => {
       const key = dateKey(day);
@@ -422,14 +479,26 @@ export default function TimelineScreen() {
         label: formatLongDate(day),
         subtitle: day.toLocaleDateString(undefined, { year: "numeric" }),
         tasks: byDay.get(key) ?? [],
+        charges: chargesByDay.get(key) ?? [],
       } satisfies AgendaGroup;
     });
-  }, [filteredItems, timeFilter]);
+  }, [charges, filteredItems, source, timeFilter]);
 
-  const windowLabel =
-    items[0]?.windowLabel ??
-    FILTER_OPTIONS.find((option) => option.value === timeFilter)?.label ??
-    "Schedule";
+  const selectedWindow =
+    FILTER_OPTIONS.find((option) => option.value === timeFilter)?.label ?? "Schedule";
+  const windowLabel = filtering ? selectedWindow : (items[0]?.windowLabel ?? selectedWindow);
+
+  function selectTimeFilter(value: TimelineFilter) {
+    if (value === timeFilter) return;
+    setFiltering(true);
+    setTimeFilter(value);
+  }
+
+  function selectProject(value: string) {
+    if (value === projectId) return;
+    setFiltering(true);
+    setProjectId(value);
+  }
 
   if (loading) return <PageSkeleton />;
 
@@ -449,8 +518,13 @@ export default function TimelineScreen() {
                 Schedule
               </Text>
               <Text className="mt-1 text-sm text-muted dark:text-dark-muted">
-                {windowLabel} · {filteredItems.length} task
-                {filteredItems.length === 1 ? "" : "s"}
+                {filtering
+                  ? `Loading ${selectedWindow.toLowerCase()}…`
+                  : `${windowLabel} · ${filteredItems.length} task${filteredItems.length === 1 ? "" : "s"}${
+                      charges.length > 0
+                        ? ` · ${charges.length} charge${charges.length === 1 ? "" : "s"}`
+                        : ""
+                    }`}
               </Text>
             </View>
             {refreshing ? (
@@ -469,7 +543,7 @@ export default function TimelineScreen() {
                   key={option.value}
                   label={option.label}
                   active={timeFilter === option.value}
-                  onPress={() => setTimeFilter(option.value)}
+                  onPress={() => selectTimeFilter(option.value)}
                 />
               ))}
             </View>
@@ -491,6 +565,26 @@ export default function TimelineScreen() {
 
           <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mt-3">
             <View className="flex-row gap-2">
+              {(
+                [
+                  { id: "all", label: "All" },
+                  { id: "tasks", label: "Tasks" },
+                  { id: "subscriptions", label: "Subscriptions" },
+                ] as const
+              ).map((option) => (
+                <FilterChip
+                  key={option.id}
+                  label={option.label}
+                  active={source === option.id}
+                  onPress={() => setSource(option.id)}
+                />
+              ))}
+            </View>
+          </ScrollView>
+
+          {source === "subscriptions" ? null : (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mt-3">
+            <View className="flex-row gap-2">
               {STATUS_OPTIONS.map((status) => (
                 <FilterChip
                   key={status}
@@ -501,10 +595,15 @@ export default function TimelineScreen() {
               ))}
             </View>
           </ScrollView>
+          )}
         </View>
 
-        {agendaGroups.length === 0 ||
-        agendaGroups.every((group) => group.tasks.length === 0) ? (
+        {filtering ? (
+          <AgendaSkeleton />
+        ) : agendaGroups.length === 0 ||
+        agendaGroups.every(
+          (group) => group.tasks.length === 0 && group.charges.length === 0,
+        ) ? (
           <View className="items-center rounded-nova-xl border border-glass bg-sidebar p-8 dark:border-dark-glass dark:bg-dark-sidebar">
             <Ionicons name="calendar-clear-outline" size={32} color={palette.accent} />
             <Text className="mt-3 text-center font-black text-primary dark:text-dark-primary">
@@ -527,17 +626,24 @@ export default function TimelineScreen() {
                   </Text>
                 </View>
                 <Text className="text-xs font-black text-accent dark:text-dark-accent">
-                  {group.tasks.length}
+                  {group.tasks.length + group.charges.length}
                 </Text>
               </View>
-              {group.tasks.length === 0 ? (
+              {group.tasks.length === 0 && group.charges.length === 0 ? (
                 <View className="rounded-nova border border-dashed border-glass px-4 py-3 dark:border-dark-glass">
                   <Text className="text-sm font-bold text-muted dark:text-dark-muted">
-                    No tasks
+                    Nothing due
                   </Text>
                 </View>
               ) : (
-                group.tasks.map((task) => <TaskCard key={task.id} task={task} />)
+                <>
+                  {group.charges.map((charge) => (
+                    <ChargeCard key={charge.id} charge={charge} />
+                  ))}
+                  {group.tasks.map((task) => (
+                    <TaskCard key={task.id} task={task} />
+                  ))}
+                </>
               )}
             </View>
           ))
@@ -548,9 +654,23 @@ export default function TimelineScreen() {
         visible={projectDrawerOpen}
         projects={projects}
         selectedId={projectId}
-        onSelect={setProjectId}
+        onSelect={selectProject}
         onClose={() => setProjectDrawerOpen(false)}
       />
+    </View>
+  );
+}
+
+function AgendaSkeleton() {
+  return (
+    <View className="gap-4">
+      {[0, 1, 2].map((group) => (
+        <View key={group} className="gap-3">
+          <SkeletonLine className="h-4 w-36" />
+          <SkeletonLine className="h-16 w-full rounded-nova" />
+          <SkeletonLine className="h-16 w-full rounded-nova" />
+        </View>
+      ))}
     </View>
   );
 }

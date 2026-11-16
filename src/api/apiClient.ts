@@ -1,4 +1,5 @@
 import { create, isAxiosError, type AxiosRequestConfig, type InternalAxiosRequestConfig } from "axios";
+import Constants from "expo-constants";
 import { router } from "expo-router";
 import {
   enqueueMutation,
@@ -15,11 +16,26 @@ import { useAuthStore } from "@/store/useAuthStore";
 import { useSnackbarStore } from "@/store/useSnackbarStore";
 import { taskConflictMessage } from "@/offline/conflicts";
 
-export const API_BASE_URL = (
-  process.env.EXPO_PUBLIC_API_URL || "https://nova-l5df.onrender.com"
-).replace(/\/$/, "");
+const HOSTED_API_URL = "https://nova-l5df.onrender.com";
 
-type OfflineConfig = AxiosRequestConfig & {
+/** In dev, follow the Metro host so the phone reaches this computer's API. */
+function devApiHost() {
+  const hostUri = Constants.expoConfig?.hostUri;
+  const host = hostUri?.split(":")[0];
+  if (!host || host === "localhost" || host === "127.0.0.1") return null;
+  return host;
+}
+
+function resolveApiBaseUrl() {
+  const configured = process.env.EXPO_PUBLIC_API_URL?.trim();
+  if (configured) return configured.replace(/\/$/, "");
+  const host = __DEV__ ? devApiHost() : null;
+  return host ? `http://${host}:8000` : HOSTED_API_URL;
+}
+
+export const API_BASE_URL = resolveApiBaseUrl();
+
+export type OfflineConfig = AxiosRequestConfig & {
   skipOfflineQueue?: boolean;
   fromOfflineCache?: boolean;
 };

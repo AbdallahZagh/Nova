@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { Modal, Pressable, Text, View } from "react-native";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -6,7 +7,8 @@ import { useAppPalette } from "@/theme/useAppPalette";
 export type ActionSheetItem = {
   key: string;
   label: string;
-  icon: keyof typeof Ionicons.glyphMap;
+  icon?: keyof typeof Ionicons.glyphMap;
+  glyph?: ReactNode;
   disabled?: boolean;
   destructive?: boolean;
   onPress: () => void;
@@ -60,11 +62,14 @@ export function ActionSheet({
                     : ""
                 } ${item.disabled ? "opacity-50" : ""}`}
               >
-                <Ionicons
-                  name={item.icon}
-                  size={18}
-                  color={item.destructive ? palette.danger : palette.primary}
-                />
+                {item.glyph ??
+                  (item.icon ? (
+                    <Ionicons
+                      name={item.icon}
+                      size={18}
+                      color={item.destructive ? palette.danger : palette.primary}
+                    />
+                  ) : null)}
                 <Text
                   className={`flex-1 text-[15px] font-extrabold ${
                     item.destructive

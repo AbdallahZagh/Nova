@@ -1,4 +1,5 @@
 import { apiClient } from "@/api/apiClient";
+import { normalizeTotals } from "@/subscriptions";
 
 export const DEMO_SUBSCRIPTION_MESSAGE =
   "The demo account cannot manage subscriptions.";
@@ -36,6 +37,7 @@ export type Subscription = {
   monthlyEquivalent: string;
   yearlyCost: string;
   daysUntilCharge: number;
+  overdue?: boolean;
   inWarningWindow: boolean;
   previousPrice: SubscriptionPreviousPrice | null;
   createdAt: string;
@@ -43,6 +45,8 @@ export type Subscription = {
 };
 
 export type SubscriptionTotals = {
+  overdueCount: number;
+  monthly: MoneyAmount[];
   dueIn30Days: MoneyAmount[];
   yearly: MoneyAmount[];
   activeCount: number;
@@ -83,37 +87,54 @@ export type DashboardUpcoming = {
 };
 
 export type DashboardSubscriptions = {
+  overdueCount?: number;
+  monthly?: MoneyAmount[];
+  activeCount?: number;
   dueIn30Days: MoneyAmount[];
   next: DashboardUpcoming | null;
   upcoming: DashboardUpcoming[];
   alerts: DashboardUpcoming[];
 };
 
-const EMPTY_TOTALS: SubscriptionTotals = {
-  dueIn30Days: [],
-  yearly: [],
-  activeCount: 0,
-};
+function count(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) && value > 0
+    ? Math.floor(value)
+    : 0;
+}
 
-function normalizeTotals(
-  totals: Partial<SubscriptionTotals> | null | undefined,
-): SubscriptionTotals {
-  if (!totals) return EMPTY_TOTALS;
+function normalizeList(data: Partial<SubscriptionListResponse> | null | undefined) {
   return {
-    dueIn30Days: Array.isArray(totals.dueIn30Days) ? totals.dueIn30Days : [],
-    yearly: Array.isArray(totals.yearly) ? totals.yearly : [],
-    activeCount:
-      typeof totals.activeCount === "number" && Number.isFinite(totals.activeCount)
-        ? totals.activeCount
-        : 0,
+    items: Array.isArray(data?.items) ? data.items : [],
+    totals: normalizeTotals(data?.totals),
   };
 }
 
 export async function listSubscriptionsApi() {
   const response = await apiClient.get<SubscriptionListResponse>("/api/subscriptions");
+  return normalizeList(response.data);
+}
+
+export async function getSubscriptionApi(id: string) {
+  const response = await apiClient.get<Subscription>(
+    `/api/subscriptions/${encodeURIComponent(id)}`,
+  );
+  return response.data;
+}
+
+export async function renewSubscriptionApi(id: string) {
+  const response = await apiClient.post<Subscription>(
+    `/api/subscriptions/${encodeURIComponent(id)}/renew`,
+  );
+  return response.data;
+}
+
+export async function renewAllSubscriptionsApi() {
+  const response = await apiClient.post<
+    SubscriptionListResponse & { renewed?: number }
+  >("/api/subscriptions/renew-all");
   return {
-    items: Array.isArray(response.data?.items) ? response.data.items : [],
-    totals: normalizeTotals(response.data?.totals),
+    ...normalizeList(response.data),
+    renewed: count(response.data?.renewed),
   };
 }
 
@@ -124,7 +145,7 @@ export async function createSubscriptionApi(input: SubscriptionWriteInput) {
 
 export async function updateSubscriptionApi(
   id: string,
-  input: SubscriptionWriteInput,
+  input: Partial<SubscriptionWriteInput>,
 ) {
   const response = await apiClient.patch<Subscription>(
     `/api/subscriptions/${id}`,
