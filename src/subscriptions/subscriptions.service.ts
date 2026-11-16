@@ -10,8 +10,10 @@ import { CreateSubscriptionDto } from './dto/create-subscription.dto';
 import { UpdateSubscriptionDto } from './dto/update-subscription.dto';
 import {
   formatMoney,
+  isBillableStatus,
   metadataChargeKey,
   REMINDER_LOOKBACK_MS,
+  renewalPatch,
   renewalReminderBody,
   sortSubscriptionResponses,
   startOfDay,
@@ -106,8 +108,15 @@ export class SubscriptionsService {
 
   async update(userId: string, id: string, dto: UpdateSubscriptionDto) {
     await this.demo.assertNotDemo(userId, DEMO_SUBSCRIPTION_MESSAGE);
-    if (dto.nextChargeAt !== undefined) assertChargeDate(dto.nextChargeAt);
     const existing = await this.findOwned(userId, id);
+    // An overdue subscription keeps its saved date, so editing the price or plan must not
+    // fail on it. Only a date the user actually changes has to be today or later.
+    if (
+      dto.nextChargeAt !== undefined &&
+      !isSameDay(new Date(dto.nextChargeAt), existing.nextChargeAt)
+    ) {
+      assertChargeDate(dto.nextChargeAt);
+    }
     const data = this.patchData(existing, dto);
     if (Object.keys(data).length === 0) {
       return toSubscriptionResponse(existing, new Date());
@@ -118,6 +127,60 @@ export class SubscriptionsService {
       include: priceInclude,
     });
     return toSubscriptionResponse(updated, new Date());
+  }
+
+  /**
+   * "Mark as renewed": the charge date the user saved has passed, so move it to the next date
+   * in the cycle. This only ever happens when the user asks; saved dates are never changed silently.
+   */
+  async renew(userId: string, id: string) {
+    await this.demo.assertNotDemo(userId, DEMO_SUBSCRIPTION_MESSAGE);
+    const existing = await this.findOwned(userId, id);
+    if (!isBillableStatus(existing.status)) {
+      throw new BadRequestException(
+        'Only active subscriptions and trials can be renewed.',
+      );
+    }
+    const now = new Date();
+    const patch = renewalPatch(existing, now);
+    if (
+      patch.status === existing.status &&
+      patch.nextChargeAt.getTime() === existing.nextChargeAt.getTime()
+    ) {
+      return toSubscriptionResponse(existing, now);
+    }
+    const updated = await this.prisma.subscription.update({
+      where: { id: existing.id },
+      data: patch,
+      include: priceInclude,
+    });
+    return toSubscriptionResponse(updated, now);
+  }
+
+  /**
+   * "Renew all": the same manual action as "Mark as renewed", applied to every active or
+   * trial subscription whose saved charge date has passed. Returns the fresh list so the
+   * screen can update in one round trip.
+   */
+  async renewAllOverdue(userId: string) {
+    await this.demo.assertNotDemo(userId, DEMO_SUBSCRIPTION_MESSAGE);
+    const now = new Date();
+    const rows = await this.prisma.subscription.findMany({
+      where: { userId, status: { in: ['ACTIVE', 'TRIAL'] } },
+      include: priceInclude,
+    });
+    const overdue = rows.filter(
+      (row) => toSubscriptionResponse(row, now).overdue,
+    );
+    await Promise.all(
+      overdue.map((row) =>
+        this.prisma.subscription.update({
+          where: { id: row.id },
+          data: renewalPatch(row, now),
+        }),
+      ),
+    );
+    return { renewed: overdue.length, ...(await this.list(userId)) };
   }
 
   async remindDue(now = new Date()) {
@@ -256,6 +319,10 @@ export class SubscriptionsService {
 
     return data;
   }
+}
+
+function isSameDay(a: Date, b: Date) {
+  return startOfDay(a).getTime() === startOfDay(b).getTime();
 }
 
 function assertChargeDate(value: string) {

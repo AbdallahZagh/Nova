@@ -400,6 +400,7 @@ describe('SubscriptionsService', () => {
       'due-usd',
       'due-eur',
       'trial',
+      'later',
     ]);
     expect(dashboard.alerts.map((item) => item.id)).toEqual(['due-usd']);
     expect(dashboard.dueIn30Days).toEqual(listed.totals.dueIn30Days);
@@ -424,6 +425,120 @@ describe('SubscriptionsService', () => {
     expect(active.nextChargeAt.getTime()).toBe(original);
     expect(new Date(listed.items[0].nextChargeAt).getDate()).toBe(past.getDate());
     expect(new Date(listed.items[0].nextChargeAt).getMonth()).toBe(past.getMonth());
+  });
+
+  it('marks a passed subscription as renewed only when asked', async () => {
+    const store = memory();
+    const service = serviceFor(store);
+    const past = daysFromToday(-3, 9);
+    store.insert({
+      id: 'stale',
+      userId: 'user-1',
+      status: 'ACTIVE',
+      intervalUnit: 'MONTH',
+      intervalCount: 1,
+      nextChargeAt: new Date(past.getTime()),
+    });
+    store.insert({
+      id: 'paused',
+      userId: 'user-1',
+      status: 'PAUSED',
+      intervalUnit: 'MONTH',
+      intervalCount: 1,
+      nextChargeAt: new Date(past.getTime()),
+    });
+
+    const before = await service.get('user-1', 'stale');
+    expect(before.overdue).toBe(true);
+
+    const renewed = await service.renew('user-1', 'stale');
+    expect(renewed.overdue).toBe(false);
+    expect(renewed.daysUntilCharge).toBeGreaterThanOrEqual(0);
+    expect(new Date(renewed.nextChargeAt).getDate()).toBe(past.getDate());
+
+    const again = await service.renew('user-1', 'stale');
+    expect(again.nextChargeAt).toBe(renewed.nextChargeAt);
+
+    await expect(service.renew('user-1', 'paused')).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+  });
+
+  it('renews every overdue subscription at once and leaves the rest alone', async () => {
+    const store = memory();
+    store.users.push({ id: 'demo', isDemo: true });
+    const service = serviceFor(store);
+    const past = daysFromToday(-5, 9);
+    const soon = daysFromToday(6, 9);
+    store.insert({ id: 'a', userId: 'user-1', status: 'ACTIVE', nextChargeAt: new Date(past.getTime()) });
+    store.insert({ id: 'b', userId: 'user-1', status: 'ACTIVE', nextChargeAt: new Date(past.getTime()) });
+    store.insert({ id: 'later', userId: 'user-1', status: 'ACTIVE', nextChargeAt: new Date(soon.getTime()) });
+    store.insert({ id: 'paused', userId: 'user-1', status: 'PAUSED', nextChargeAt: new Date(past.getTime()) });
+    store.insert({ id: 'other', userId: 'user-2', status: 'ACTIVE', nextChargeAt: new Date(past.getTime()) });
+
+    const result = await service.renewAllOverdue('user-1');
+    expect(result.renewed).toBe(2);
+    expect(result.items.find((item) => item.id === 'a')?.overdue).toBe(false);
+    expect(result.items.find((item) => item.id === 'b')?.overdue).toBe(false);
+    expect(result.items.find((item) => item.id === 'later')?.nextChargeAt).toBe(
+      soon.toISOString(),
+    );
+    expect(result.items.find((item) => item.id === 'paused')?.nextChargeAt).toBe(
+      past.toISOString(),
+    );
+    expect(store.subscriptions.find((row) => row.id === 'other')?.nextChargeAt).toEqual(past);
+    expect(result.totals.overdueCount).toBe(0);
+
+    const again = await service.renewAllOverdue('user-1');
+    expect(again.renewed).toBe(0);
+
+    await expect(service.renewAllOverdue('demo')).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
+  });
+
+  it('moves a charge dated today to the next cycle when marked renewed', async () => {
+    const store = memory();
+    const service = serviceFor(store);
+    const today = daysFromToday(0, 9);
+    store.insert({
+      id: 'today',
+      userId: 'user-1',
+      status: 'ACTIVE',
+      intervalUnit: 'MONTH',
+      intervalCount: 1,
+      nextChargeAt: new Date(today.getTime()),
+    });
+    const renewed = await service.renew('user-1', 'today');
+    expect(new Date(renewed.nextChargeAt).getTime()).toBeGreaterThan(today.getTime());
+    expect(renewed.daysUntilCharge).toBeGreaterThanOrEqual(27);
+  });
+
+  it('lets you edit an overdue subscription without touching its date, but not move it into the past', async () => {
+    const store = memory();
+    const service = serviceFor(store);
+    const past = daysFromToday(-3, 9);
+    store.insert({
+      id: 'stale',
+      userId: 'user-1',
+      status: 'ACTIVE',
+      intervalUnit: 'MONTH',
+      intervalCount: 1,
+      nextChargeAt: new Date(past.getTime()),
+    });
+
+    const edited = await service.update('user-1', 'stale', {
+      plan: 'Team',
+      nextChargeAt: past.toISOString(),
+    });
+    expect(edited.plan).toBe('Team');
+    expect(edited.overdue).toBe(true);
+
+    await expect(
+      service.update('user-1', 'stale', {
+        nextChargeAt: daysFromToday(-10).toISOString(),
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
   });
 
   it('refuses demo writes and hides another user’s subscription', async () => {

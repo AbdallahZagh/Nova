@@ -8,6 +8,7 @@ import { AiModule } from './ai/ai.module';
 import { AuthModule } from './auth/auth.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { DemoModule } from './demo/demo.module';
+import { NotesModule } from './notes/notes.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { ProjectsModule } from './projects/projects.module';
@@ -48,6 +49,7 @@ import { OAuthModule } from './oauth/oauth.module';
     TimelineModule,
     DashboardModule,
     SubscriptionsModule,
+    NotesModule,
     WhiteboardsModule,
     SupportModule,
     AdminModule,

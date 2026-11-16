@@ -66,6 +66,8 @@ export type SubscriptionResponse = {
   monthlyEquivalent: string;
   yearlyCost: string;
   daysUntilCharge: number;
+  /** The saved charge date has passed. Nothing moves it until the user marks it renewed. */
+  overdue: boolean;
   inWarningWindow: boolean;
   previousPrice: SubscriptionPreviousPrice | null;
   createdAt: string;
@@ -73,6 +75,9 @@ export type SubscriptionResponse = {
 };
 
 export type SubscriptionTotals = {
+  /** Billable subscriptions whose saved charge date has already passed. */
+  overdueCount: number;
+  monthly: MoneyTotal[];
   dueIn30Days: MoneyTotal[];
   yearly: MoneyTotal[];
   activeCount: number;
@@ -87,12 +92,16 @@ export type UpcomingSubscription = {
   nextChargeAt: string;
   trialEndsAt: string | null;
   daysUntilCharge: number;
+  overdue: boolean;
   inWarningWindow: boolean;
   status: string;
 };
 
 export type DashboardSubscriptions = {
   dueIn30Days: MoneyTotal[];
+  monthly: MoneyTotal[];
+  activeCount: number;
+  overdueCount: number;
   next: UpcomingSubscription | null;
   upcoming: UpcomingSubscription[];
   alerts: UpcomingSubscription[];
@@ -155,6 +164,61 @@ export function shouldRoll(
     isBillableStatus(status) &&
     startOfDay(nextChargeAt).getTime() < startOfDay(now).getTime()
   );
+}
+
+/**
+ * What "Mark as renewed" does: the charge date the user saved has passed, so move it to the
+ * next date in the cycle. Only the user triggers this; the saved date is never changed silently.
+ * A trial whose end has passed becomes a normal paid subscription.
+ */
+export function renewalPatch(
+  row: Pick<
+    SubscriptionSnapshot,
+    'status' | 'trialEndsAt' | 'nextChargeAt' | 'intervalUnit' | 'intervalCount'
+  >,
+  now: Date,
+): { nextChargeAt: Date; status: string } {
+  const trialOver =
+    row.status === 'TRIAL' &&
+    (!row.trialEndsAt ||
+      startOfDay(row.trialEndsAt).getTime() < startOfDay(now).getTime());
+  // A charge dated today has just gone through, so the next one is a full cycle away.
+  // A passed date rolls forward to the first date that is not in the past.
+  const chargesToday =
+    startOfDay(row.nextChargeAt).getTime() === startOfDay(now).getTime();
+  const base = chargesToday
+    ? addInterval(row.nextChargeAt, row.intervalUnit, row.intervalCount)
+    : row.nextChargeAt;
+  return {
+    status: trialOver ? 'ACTIVE' : row.status,
+    nextChargeAt: rollChargeDate(
+      base,
+      row.intervalUnit,
+      row.intervalCount,
+      now,
+    ),
+  };
+}
+
+/** Every charge date that lands inside [start, end], counting forward from the saved date. */
+export function chargeDatesInWindow(
+  nextChargeAt: Date,
+  unit: IntervalUnit,
+  intervalCount: number,
+  window: { start: Date; end: Date },
+  cap = 62,
+): Date[] {
+  const count = Math.max(1, Math.trunc(intervalCount) || 1);
+  const dates: Date[] = [];
+  let cursor = new Date(nextChargeAt.getTime());
+  for (let step = 0; step < cap; step += 1) {
+    if (cursor.getTime() > window.end.getTime()) break;
+    if (cursor.getTime() >= window.start.getTime()) dates.push(cursor);
+    const next = addInterval(cursor, unit, count);
+    if (Number.isNaN(next.getTime()) || next.getTime() <= cursor.getTime()) break;
+    cursor = next;
+  }
+  return dates;
 }
 
 export function lastCancelBy(nextChargeAt: Date): string {
@@ -272,6 +336,15 @@ export function summarizeSubscriptions(
 ): SubscriptionTotals {
   const active = rows.filter((row) => isBillableStatus(row.status));
   return {
+    overdueCount: active.filter(
+      (row) => daysUntilCharge(anchorDate(row), now) < 0,
+    ).length,
+    monthly: sumByCurrency(
+      active.map((row) => ({
+        currency: row.currency,
+        cents: monthlyCents(row.amount, row.intervalUnit, row.intervalCount),
+      })),
+    ),
     dueIn30Days: sumByCurrency(
       active
         .filter((row) => isDueWithin30Days(row.nextChargeAt, now))
@@ -321,6 +394,7 @@ export function toSubscriptionResponse(
     ),
     yearlyCost: yearlyCost(amount, row.intervalUnit, row.intervalCount),
     daysUntilCharge: days,
+    overdue: isBillableStatus(row.status) && days < 0,
     inWarningWindow: isInWarningWindow(row.status, days, row.reminderDays),
     previousPrice: previousPrice(row.prices),
     createdAt: row.createdAt.toISOString(),
@@ -342,6 +416,7 @@ export function toUpcoming(
     nextChargeAt: response.nextChargeAt,
     trialEndsAt: response.trialEndsAt,
     daysUntilCharge: response.daysUntilCharge,
+    overdue: response.overdue,
     inWarningWindow: response.inWarningWindow,
     status: response.status,
   };
@@ -358,19 +433,25 @@ export function toDashboardSubscriptions(
         a.nextChargeAt.getTime() - b.nextChargeAt.getTime() ||
         a.id.localeCompare(b.id),
     );
-  const upcoming = living.slice(0, 3).map((row) => toUpcoming(row, now));
-  const alerts = living
-    .map((row) => toUpcoming(row, now))
+  const views = living.map((row) => toUpcoming(row, now));
+  // Charges that have not happened yet come first; passed ones are counted separately
+  // so the dashboard can ask the user to renew them instead of leading with old dates.
+  const coming = views.filter((item) => !item.overdue);
+  const alerts = coming
     .filter((item) => item.inWarningWindow)
     .sort(
       (a, b) =>
         a.daysUntilCharge - b.daysUntilCharge ||
         a.nextChargeAt.localeCompare(b.nextChargeAt),
     );
+  const totals = summarizeSubscriptions(rows, now);
   return {
-    dueIn30Days: summarizeSubscriptions(rows, now).dueIn30Days,
-    next: upcoming[0] ?? null,
-    upcoming,
+    dueIn30Days: totals.dueIn30Days,
+    monthly: totals.monthly,
+    activeCount: totals.activeCount,
+    overdueCount: totals.overdueCount,
+    next: coming[0] ?? null,
+    upcoming: coming.slice(0, 4),
     alerts,
   };
 }

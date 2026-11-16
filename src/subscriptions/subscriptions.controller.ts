@@ -32,12 +32,31 @@ export class SubscriptionsController {
   @ApiOperation({
     summary: 'List your subscriptions',
     description:
-      'Returns the signed-in user subscriptions, rolled forward to the current cycle, with 30-day and yearly totals.',
+      'Returns the signed-in user subscriptions with monthly, 30-day and yearly totals. Charge dates are shown exactly as saved.',
   })
   @ApiResponse({ status: 200, description: 'Subscription list and totals' })
   @ApiResponse({ status: 401, description: 'Missing or invalid Bearer token' })
   list(@CurrentUser('id') userId: string) {
     return this.subscriptions.list(userId);
+  }
+
+  @Post('renew-all')
+  @ApiOperation({
+    summary: 'Mark every overdue subscription as renewed',
+    description:
+      'Moves each passed charge date to the next date in its cycle. Paused and canceled subscriptions are left alone. Only runs when you ask for it.',
+  })
+  @ApiResponse({
+    status: 201,
+    description: 'How many were renewed, plus the refreshed list and totals',
+  })
+  @ApiResponse({ status: 401, description: 'Missing or invalid Bearer token' })
+  @ApiResponse({
+    status: 403,
+    description: 'Demo accounts cannot manage subscriptions',
+  })
+  renewAll(@CurrentUser('id') userId: string) {
+    return this.subscriptions.renewAllOverdue(userId);
   }
 
   @Get(':id')
@@ -83,6 +102,25 @@ export class SubscriptionsController {
     @Body() dto: UpdateSubscriptionDto,
   ) {
     return this.subscriptions.update(userId, id, dto);
+  }
+
+  @Post(':id/renew')
+  @ApiOperation({
+    summary: 'Mark a subscription as renewed',
+    description:
+      'Moves a passed charge date to the next date in its cycle. A trial that has ended becomes active. Only runs when you ask for it.',
+  })
+  @ApiParam({ name: 'id', description: 'Subscription id' })
+  @ApiResponse({ status: 201, description: 'Subscription with its new charge date' })
+  @ApiResponse({ status: 400, description: 'Paused or canceled subscriptions cannot renew' })
+  @ApiResponse({ status: 401, description: 'Missing or invalid Bearer token' })
+  @ApiResponse({
+    status: 403,
+    description: 'Demo accounts cannot manage subscriptions',
+  })
+  @ApiResponse({ status: 404, description: 'Subscription not found' })
+  renew(@CurrentUser('id') userId: string, @Param('id') id: string) {
+    return this.subscriptions.renew(userId, id);
   }
 
   @Delete(':id')

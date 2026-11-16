@@ -5,6 +5,12 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { myProjectsWhere } from '../common/task-access';
+import {
+  anchorDate,
+  chargeDatesInWindow,
+  formatMoney,
+  isBillableStatus,
+} from '../subscriptions/subscription.logic';
 
 export type TimelineFilter =
   | 'today'
@@ -96,7 +102,7 @@ export class TimelineService {
       offset,
     );
 
-    return tasks
+    const items = tasks
       .filter((task: any) => {
         const due = task.dueDate ? new Date(task.dueDate) : null;
         if (!due || Number.isNaN(due.getTime())) return false;
@@ -126,6 +132,76 @@ export class TimelineService {
           windowLabel: window.label,
         };
       });
+
+    return {
+      items,
+      subscriptions: await this.subscriptionCharges(
+        userId,
+        window,
+        todayStart,
+      ),
+    };
+  }
+
+  private async subscriptionCharges(
+    userId: string,
+    window: { start: Date; end: Date },
+    todayStart: Date,
+  ) {
+    const rows = await (this.prisma as any).subscription.findMany({
+      where: {
+        userId,
+        status: { in: ['ACTIVE', 'TRIAL'] },
+      },
+      select: {
+        id: true,
+        service: true,
+        plan: true,
+        amount: true,
+        currency: true,
+        status: true,
+        nextChargeAt: true,
+        trialEndsAt: true,
+        intervalUnit: true,
+        intervalCount: true,
+      },
+      orderBy: { nextChargeAt: 'asc' },
+    });
+
+    // Count forward from the saved charge date, so every charge that lands in the window is
+    // shown (a weekly subscription appears each week). The saved date itself is never moved.
+    return rows.flatMap((row: any) => {
+      if (!isBillableStatus(row.status)) return [];
+      const trial = row.status === 'TRIAL' && row.trialEndsAt;
+      const dates: Date[] = trial
+        ? [anchorDate(row)]
+        : chargeDatesInWindow(
+            row.nextChargeAt,
+            row.intervalUnit,
+            row.intervalCount,
+            window,
+          );
+      return dates
+        .filter(
+          (date) =>
+            date instanceof Date &&
+            !Number.isNaN(date.getTime()) &&
+            date >= window.start &&
+            date <= window.end,
+        )
+        .map((date) => ({
+          id: row.id,
+          occurrenceKey: `${row.id}:${date.toISOString()}`,
+          service: row.service,
+          plan: row.plan ?? null,
+          amount: formatMoney(row.amount),
+          currency: row.currency,
+          status: row.status,
+          occursAt: date.toISOString(),
+          kind: trial ? 'trial' : 'renewal',
+          overdue: date < todayStart,
+        }));
+    });
   }
 
   private resolveWindow(

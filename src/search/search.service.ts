@@ -8,6 +8,7 @@ const EMPTY_SEARCH_RESULTS = {
   users: [],
   whiteboards: [],
   subscriptions: [],
+  notes: [],
 };
 
 @Injectable()
@@ -20,7 +21,7 @@ export class SearchService {
 
     const accessibleProjectWhere = myProjectsWhere(userId);
 
-    const [projects, tasks, users, whiteboards, subscriptions] = await Promise.all([
+    const [projects, tasks, users, whiteboards, subscriptions, notes] = await Promise.all([
       (this.prisma as any).project.findMany({
         where: {
           ...accessibleProjectWhere,
@@ -110,6 +111,26 @@ export class SearchService {
           amount: true,
           currency: true,
           status: true,
+          nextChargeAt: true,
+        },
+        take: 5,
+      }),
+      (this.prisma as any).note.findMany({
+        where: {
+          userId,
+          OR: [
+            { title: { contains: q, mode: 'insensitive' } },
+            { body: { contains: q, mode: 'insensitive' } },
+          ],
+        },
+        select: {
+          id: true,
+          title: true,
+          body: true,
+          color: true,
+          pinned: true,
+          projectId: true,
+          project: { select: { id: true, name: true } },
         },
         take: 5,
       }),
@@ -139,6 +160,19 @@ export class SearchService {
         amount: item.amount?.toString?.() ?? String(item.amount),
         currency: item.currency,
         status: item.status,
+        nextChargeAt:
+          item.nextChargeAt instanceof Date
+            ? item.nextChargeAt.toISOString()
+            : (item.nextChargeAt ?? null),
+      })),
+      notes: notes.map((item: any) => ({
+        id: item.id,
+        title: item.title?.trim() || item.body.trim().split('\n')[0]?.slice(0, 80) || 'Untitled note',
+        preview: item.body.trim().slice(0, 140),
+        color: item.color,
+        pinned: item.pinned,
+        projectId: item.projectId,
+        project: item.project ? { id: item.project.id, name: item.project.name } : null,
       })),
     };
   }

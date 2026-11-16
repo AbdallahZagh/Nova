@@ -23,7 +23,7 @@ export class SearchController {
 
   @Get()
   @ApiOperation({
-    summary: 'Search projects, tasks, whiteboards, subscriptions, and users',
+    summary: 'Search projects, tasks, whiteboards, subscriptions, notes, and users',
     description:
       'Runs a secure global omnisearch across projects, tasks, whiteboards, the signed-in user subscriptions, and users.',
   })

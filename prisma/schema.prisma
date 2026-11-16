@@ -72,6 +72,15 @@ enum SubscriptionIntervalUnit {
   YEAR
 }
 
+enum NoteColor {
+  SLATE
+  AMBER
+  CORAL
+  SAGE
+  SKY
+  VIOLET
+}
+
 // ─────────────────────────────────────────────
 // User
 // ─────────────────────────────────────────────
@@ -122,6 +131,7 @@ model User {
   aiQuota                  AiUserQuota?
   broadcastsCreated        AdminBroadcast[]
   subscriptions            Subscription[]
+  notes                    Note[]
 
   @@index([role, isActive, isArchived])
   @@index([lastActiveAt])
@@ -147,6 +157,7 @@ model Project {
   members     ProjectMember[]
   suggestions ProjectSuggestion[]
   whiteboards Whiteboard[]
+  notes       Note[]
 
   @@index([ownerId])
   @@index([status])
@@ -819,6 +830,30 @@ model Subscription {
 
   @@index([userId, nextChargeAt])
   @@map("subscriptions")
+}
+
+model Note {
+  id        String    @id @default(uuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  projectId String?
+  project   Project?  @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  title     String?   @db.VarChar(160)
+  body      String    @default("")
+  checklist Json      @default("[]")
+  color     NoteColor @default(SLATE)
+  pinned    Boolean   @default(false)
+  floating  Boolean   @default(false)
+  posX      Float?
+  posY      Float?
+  width     Float?
+  height    Float?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([userId, pinned, updatedAt])
+  @@index([userId, projectId, updatedAt])
+  @@map("notes")
 }
 
 model SubscriptionPrice {

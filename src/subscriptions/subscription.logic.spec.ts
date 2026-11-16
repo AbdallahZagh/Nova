@@ -1,11 +1,14 @@
 import {
+  chargeDatesInWindow,
   formatMoney,
   lastCancelBy,
   metadataChargeKey,
   monthlyEquivalent,
   rollChargeDate,
+  renewalPatch,
   shouldRoll,
   summarizeSubscriptions,
+  toSubscriptionResponse,
   yearlyCost,
 } from './subscription.logic';
 
@@ -67,6 +70,48 @@ describe('subscription logic', () => {
     expect(capped.getFullYear()).toBe(2026);
     expect(capped.getMonth()).toBe(10);
     expect(capped.getDate()).toBe(6);
+  });
+
+  it('keeps a passed date as saved but flags it overdue and still counts it', () => {
+    const stale = snapshot('USD', '48.00', new Date(2026, 9, 7, 12));
+    const view = toSubscriptionResponse(stale, now);
+    expect(view.overdue).toBe(true);
+    expect(view.daysUntilCharge).toBeLessThan(0);
+    expect(new Date(view.nextChargeAt).getMonth()).toBe(9);
+
+    const totals = summarizeSubscriptions([stale], now);
+    expect(totals.overdueCount).toBe(1);
+    expect(totals.monthly).toEqual([{ currency: 'USD', amount: '48.00' }]);
+  });
+
+  it('renews only on request: next cycle date, and an ended trial becomes paid', () => {
+    const stale = snapshot('USD', '48.00', new Date(2026, 9, 7, 12));
+    const patch = renewalPatch(stale, now);
+    expect(patch.status).toBe('ACTIVE');
+    expect(patch.nextChargeAt.getMonth()).toBe(10);
+    expect(patch.nextChargeAt.getDate()).toBe(7);
+
+    const ended = {
+      ...snapshot('USD', '10.00', new Date(2026, 9, 1, 12), 'TRIAL'),
+      trialEndsAt: new Date(2026, 9, 1, 12),
+    };
+    expect(renewalPatch(ended, now).status).toBe('ACTIVE');
+
+    const trialing = {
+      ...snapshot('USD', '10.00', new Date(2026, 10, 20, 12), 'TRIAL'),
+      trialEndsAt: new Date(2026, 10, 20, 12),
+    };
+    expect(renewalPatch(trialing, now).status).toBe('TRIAL');
+  });
+
+  it('lists every charge that lands in a window', () => {
+    const dates = chargeDatesInWindow(
+      new Date(2026, 10, 7, 12),
+      'WEEK',
+      1,
+      { start: new Date(2026, 10, 1), end: new Date(2026, 10, 30, 23, 59) },
+    );
+    expect(dates.map((date) => date.getDate())).toEqual([7, 14, 21, 28]);
   });
 
   it('recognizes a reminder that was already sent for this charge', () => {
