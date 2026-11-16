@@ -16,7 +16,8 @@ import {
   ShieldCheck,
   Trash2,
 } from "lucide-react";
-import { clearSession } from "@/app/actions/session";
+import { clearSessionCookie } from "@/app/actions/session";
+import { clearSessionCookieClient } from "@/lib/auth";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { ActivityHeatmap } from "@/components/dashboard/ActivityHeatmap";
 import { ProfileHero } from "@/components/profile/ProfileHero";
@@ -33,7 +34,7 @@ import {
   verifyOtpApi,
 } from "@/lib/api/auth";
 import { deactivateMeApi, deleteAvatarApi, uploadAvatarApi } from "@/lib/api/users";
-import { ApiError } from "@/lib/api/client";
+import { ApiError, clearAccessToken } from "@/lib/api/client";
 import { cn } from "@/lib/cn";
 import {
   bodyToUsername,
@@ -838,7 +839,11 @@ export default function ProfilePage() {
       });
       return;
     }
-    await clearSession();
+    clearAccessToken();
+    clearSessionCookieClient();
+    await clearSessionCookie().catch(() => {});
+    router.replace("/");
+    router.refresh();
   }
 
   if (loading) {

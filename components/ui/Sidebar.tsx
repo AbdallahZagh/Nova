@@ -15,6 +15,7 @@ import {
   X,
 } from "lucide-react";
 import { clearSessionCookie } from "@/app/actions/session";
+import { clearSessionCookieClient } from "@/lib/auth";
 import { useToast } from "@/components/ui/Toast";
 import { logoutApi } from "@/lib/api/auth";
 import { clearAccessToken } from "@/lib/api/client";
@@ -49,7 +50,8 @@ export function Sidebar({ mobileOpen = false, onClose }: SidebarProps) {
     try {
       await logoutApi().catch(() => {});
       clearAccessToken();
-      await clearSessionCookie();
+      clearSessionCookieClient();
+      await clearSessionCookie().catch(() => {});
       router.replace("/");
       router.refresh();
     } catch {

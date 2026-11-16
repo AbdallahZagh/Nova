@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { establishSession } from "@/app/actions/session";
+import { writeSessionCookie } from "@/lib/auth";
 import { Input, PasswordInput } from "@/components/ui/input";
 import { useToast } from "@/components/ui/Toast";
 import { loginApi, reactivateApi } from "@/lib/api/auth";
@@ -91,7 +91,7 @@ function LoginFormContent({
         return;
       }
       setAccessToken(accessToken);
-      await establishSession();
+      writeSessionCookie();
 
       toast({ variant: "success", title: "Welcome back" });
       if (onAuthenticated) {
@@ -155,7 +155,7 @@ function LoginFormContent({
         throw new ApiError("Demo login did not return a token.", 500, response);
       }
       setAccessToken(accessToken);
-      await establishSession();
+      writeSessionCookie();
       toast({
         variant: "success",
         title: "Demo workspace",

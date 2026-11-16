@@ -2,9 +2,7 @@
 
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { AUTH_COOKIE } from "@/lib/auth";
-
-const SESSION_MAX_AGE = 60 * 60 * 24 * 7;
+import { AUTH_COOKIE, SESSION_MAX_AGE } from "@/lib/auth";
 
 export async function establishSession() {
   const cookieStore = await cookies();

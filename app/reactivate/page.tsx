@@ -10,7 +10,7 @@ import {
   Mail,
   UserCheck,
 } from "lucide-react";
-import { establishSession } from "@/app/actions/session";
+import { writeSessionCookie } from "@/lib/auth";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { Input } from "@/components/ui/input";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
@@ -245,7 +245,7 @@ function ReactivateContent() {
         throw new Error("No access token returned. Please sign in manually.");
       }
       setAccessToken(res.accessToken);
-      await establishSession();
+      writeSessionCookie();
       setStep("done");
       toast({
         variant: "success",
