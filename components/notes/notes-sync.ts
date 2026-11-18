@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { getSupabaseRealtimeClient } from "@/lib/supabase/client";
 import type { Note } from "@/lib/notes";
 
 export const NOTES_CHANGED_EVENT = "nova:notes-changed";
@@ -15,6 +16,32 @@ export function emitNotesChange(change: NotesChange) {
 
 export function requestNewSticky() {
   window.dispatchEvent(new Event(NEW_STICKY_EVENT));
+}
+
+export function isNewerNote(incoming: string, current?: string | null) {
+  const next = new Date(incoming).getTime();
+  const previous = current ? new Date(current).getTime() : 0;
+  return Number.isFinite(next) && next > previous;
+}
+
+/** Live notes for this account, from every other signed-in device. */
+export function useNotesRealtime(userId?: string | null) {
+  useEffect(() => {
+    if (!userId) return;
+    const supabase = getSupabaseRealtimeClient();
+    if (!supabase) return;
+    const channel = supabase
+      .channel(`notes:${userId}`)
+      .on("broadcast", { event: "note" }, ({ payload }) => {
+        const message = payload as NotesChange | undefined;
+        if (!message || (message.kind !== "saved" && message.kind !== "deleted")) return;
+        emitNotesChange(message);
+      })
+      .subscribe();
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [userId]);
 }
 
 export function useNotesChanges(handler: (change: NotesChange) => void) {

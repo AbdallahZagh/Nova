@@ -12,7 +12,7 @@ import {
   type NoteWrite,
 } from "@/lib/notes";
 import { useToast } from "@/components/ui/Toast";
-import { emitNotesChange } from "@/components/notes/notes-sync";
+import { emitNotesChange, isNewerNote, useNotesChanges } from "@/components/notes/notes-sync";
 
 export type SaveStatus = "idle" | "saving" | "saved" | "error";
 
@@ -165,6 +165,33 @@ export function useNoteDraft({ note, defaults, onCreated }: Options) {
       void flushRef.current();
     };
   }, []);
+
+  useNotesChanges((change) => {
+    if (deletedRef.current || change.kind !== "saved") return;
+    if (change.note.id !== idRef.current) return;
+    if (Object.keys(pendingRef.current).length > 0) return;
+    if (!isNewerNote(change.note.updatedAt, savedRef.current?.updatedAt)) return;
+    const remote = change.note;
+    savedRef.current = remote;
+    fieldsRef.current = {
+      title: remote.title ?? "",
+      body: remote.body,
+      checklist: remote.checklist,
+      color: remote.color,
+      projectId: remote.projectId ?? "",
+      pinned: remote.pinned,
+      floating: remote.floating,
+    };
+    positionRef.current = {
+      posX: remote.posX ?? undefined,
+      posY: remote.posY ?? undefined,
+      width: remote.width ?? undefined,
+      height: remote.height ?? undefined,
+    };
+    setFields(fieldsRef.current);
+    setSaved(remote);
+    setStatus("saved");
+  });
 
   const set = useCallback(
     (patch: NoteFieldsPatch) => {

@@ -54,7 +54,7 @@ type AppDataContextValue = {
     projectId: string,
     taskId: string,
     subtaskId: string,
-    patch: { label?: string; done?: boolean },
+    patch: { label?: string; done?: boolean; dueDateIso?: string | null },
   ) => Promise<SubtaskItem>;
   deleteSubtask: (
     projectId: string,
@@ -293,11 +293,12 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       projectId: string,
       taskId: string,
       subtaskId: string,
-      patch: { label?: string; done?: boolean },
+      patch: { label?: string; done?: boolean; dueDateIso?: string | null },
     ) => {
-      const apiPatch: { title?: string; isCompleted?: boolean } = {};
+      const apiPatch: { title?: string; isCompleted?: boolean; dueDate?: string | null } = {};
       if (patch.label !== undefined) apiPatch.title = patch.label;
       if (patch.done !== undefined) apiPatch.isCompleted = patch.done;
+      if (patch.dueDateIso !== undefined) apiPatch.dueDate = patch.dueDateIso;
       const saved = await updateSubtaskApi(subtaskId, apiPatch);
       patchTaskSubtasks(projectId, taskId, (list) =>
         list.map((s) => (s.id === subtaskId ? saved : s)),

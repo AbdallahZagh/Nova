@@ -104,6 +104,7 @@ export type Task = {
     id: string;
     label: string;
     done: boolean;
+    dueDateIso?: string | null;
     assignees?: {
       id?: string;
       initials: string;
@@ -166,6 +167,7 @@ export type CreateTaskInput = {
     id: string;
     label: string;
     done: boolean;
+    dueDateIso?: string | null;
     assigneeIds?: string[];
   }[];
 };

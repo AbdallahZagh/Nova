@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import { Check, Loader2, X } from "lucide-react";
+import { DatePicker } from "@/components/ui/Calendar";
 import { MultiSelect } from "@/components/ui/MultiSelect";
 import { UserAvatar } from "@/components/users/UserAvatar";
 import { UserProfileLink } from "@/components/users/UserProfileLink";
@@ -26,6 +27,7 @@ export function TaskDrawerSubtaskRow({
   onDelete,
   onAssigneesChange,
   onAssigneesSave,
+  onDueDateChange,
 }: {
   subtask: Subtask;
   committedLabel: string;
@@ -41,6 +43,7 @@ export function TaskDrawerSubtaskRow({
   onDelete: () => void;
   onAssigneesChange: (assigneeIds: string[]) => void;
   onAssigneesSave: () => void;
+  onDueDateChange: (date: Date | null) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -148,6 +151,18 @@ export function TaskDrawerSubtaskRow({
           <X className="size-3.5" />
         </button>
       )}
+      <div className="basis-full">
+        <DatePicker
+          value={
+            subtask.dueDateIso ? new Date(subtask.dueDateIso) : null
+          }
+          onChange={onDueDateChange}
+          placeholder="Subtask date"
+          aria-label="Subtask due date"
+          disabled={busy || readOnly}
+          className="[&_button]:h-9 [&_button]:text-xs"
+        />
+      </div>
       {canAssignSubtasks && !readOnly ? (
         <div className="basis-full pt-1">
           <MultiSelect

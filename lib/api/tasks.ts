@@ -472,7 +472,7 @@ async function syncTaskSubtasks(
   await Promise.all(
     next.map(async (subtask) => {
       if (!isPersistedSubtaskId(subtask.id)) {
-        const created = await createSubtaskApi(taskId, subtask.label);
+        const created = await createSubtaskApi(taskId, subtask.label, subtask.dueDateIso);
         if (subtask.done) {
           await updateSubtaskApi(created.id, { isCompleted: true });
         }
@@ -485,9 +485,12 @@ async function syncTaskSubtasks(
       const current = currentById.get(subtask.id);
       if (!current) return;
 
-      const patch: { title?: string; isCompleted?: boolean } = {};
+      const patch: { title?: string; isCompleted?: boolean; dueDate?: string | null } = {};
       if (subtask.label !== current.label.trim()) patch.title = subtask.label;
       if (subtask.done !== current.done) patch.isCompleted = subtask.done;
+      if ((subtask.dueDateIso ?? null) !== (current.dueDateIso ?? null)) {
+        patch.dueDate = subtask.dueDateIso ?? null;
+      }
       if (Object.keys(patch).length > 0) {
         await updateSubtaskApi(subtask.id, patch);
       }

@@ -7,12 +7,16 @@ import { OfflineBanner } from "@/components/offline/OfflineBanner";
 import { SystemStatusBanner } from "@/components/system/SystemStatusBanner";
 import { DemoTourModal } from "@/components/demo/DemoTourModal";
 import { FloatingStickyDock } from "@/components/notes/FloatingStickyDock";
+import { useNotesRealtime } from "@/components/notes/notes-sync";
+import { useUser } from "@/components/providers/UserProvider";
 
 type AppShellProps = {
   children: React.ReactNode;
 };
 
 export function AppShell({ children }: AppShellProps) {
+  const { profile } = useUser();
+  useNotesRealtime(profile?.id);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
 

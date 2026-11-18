@@ -7,6 +7,7 @@ export type ApiSubtask = {
   isCompleted?: boolean;
   done?: boolean;
   isDone?: boolean;
+  dueDate?: string | null;
   assignees?: Array<ApiSubtaskAssignee | ApiSubtaskUser>;
   assignedUsers?: ApiSubtaskUser[];
   assignments?: ApiSubtaskAssignee[];
@@ -47,6 +48,7 @@ export type SubtaskItem = {
   id: string;
   label: string;
   done: boolean;
+  dueDateIso: string | null;
   assignees: SubtaskAssignee[];
   assigneeIds: string[];
 };
@@ -97,26 +99,36 @@ export function apiSubtaskToSubtask(api: ApiSubtask): SubtaskItem {
     id: api.id,
     label: api.label ?? api.title ?? "",
     done: Boolean(api.isCompleted ?? api.done ?? api.isDone),
+    dueDateIso: api.dueDate ?? null,
     assignees,
     assigneeIds: assignees.map((assignee) => assignee.id).filter(Boolean) as string[],
   };
 }
 
-export async function createSubtaskApi(taskId: string, title: string) {
+export async function createSubtaskApi(
+  taskId: string,
+  title: string,
+  dueDate?: string | null,
+) {
   const data = await apiFetch<ApiSubtask>("/api/subtasks", {
     method: "POST",
-    body: JSON.stringify({ taskId, title: title.trim() }),
+    body: JSON.stringify({
+      taskId,
+      title: title.trim(),
+      ...(dueDate ? { dueDate } : {}),
+    }),
   });
   return apiSubtaskToSubtask(data);
 }
 
 export async function updateSubtaskApi(
   id: string,
-  patch: { title?: string; isCompleted?: boolean },
+  patch: { title?: string; isCompleted?: boolean; dueDate?: string | null },
 ) {
-  const body: Record<string, string | boolean> = {};
+  const body: Record<string, string | boolean | null> = {};
   if (patch.title !== undefined) body.title = patch.title.trim();
   if (patch.isCompleted !== undefined) body.isCompleted = patch.isCompleted;
+  if (patch.dueDate !== undefined) body.dueDate = patch.dueDate;
 
   const data = await apiFetch<ApiSubtask>(`/api/subtasks/${id}`, {
     method: "PATCH",

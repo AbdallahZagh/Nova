@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Loader2, Plus, Trash2 } from "lucide-react";
+import { Loader2, Plus, Sparkles, Trash2 } from "lucide-react";
 import { TaskDrawerSubtaskRow } from "@/components/tasks/TaskDrawerSubtaskRow";
 import { MentionComposer } from "@/components/mentions/MentionComposer";
 import { MentionText } from "@/components/mentions/MentionText";
@@ -14,7 +14,8 @@ import { useToast } from "@/components/ui/Toast";
 import { UserAvatar } from "@/components/users/UserAvatar";
 import { UserProfileLink } from "@/components/users/UserProfileLink";
 import { useAppData } from "@/components/providers/AppDataProvider";
-import { ApiError } from "@/lib/api/client";
+import { ApiError, apiFetch } from "@/lib/api/client";
+import { useUser } from "@/components/providers/UserProvider";
 import {
   isPersistedSubtaskId,
   syncSubtaskAssigneesApi,
@@ -122,6 +123,7 @@ export function TaskDrawerDetails({
   subtaskAssigneeOptions = [],
 }: TaskDrawerDetailsProps) {
   const { toast } = useToast();
+  const { profile } = useUser();
   const { createSubtask, updateSubtask, deleteSubtask } = useAppData();
   const [draft, setDraft] = useState<Task>(() => ({
     ...task,
@@ -131,6 +133,7 @@ export function TaskDrawerDetails({
   }));
   const [newSubtaskLabel, setNewSubtaskLabel] = useState("");
   const [addingSubtask, setAddingSubtask] = useState(false);
+  const [suggesting, setSuggesting] = useState(false);
   const [busySubtaskId, setBusySubtaskId] = useState<string | null>(null);
   const [busySubtaskAssignmentId, setBusySubtaskAssignmentId] = useState<string | null>(null);
   const [comments, setComments] = useState<TaskComment[]>([]);
@@ -503,6 +506,92 @@ export function TaskDrawerDetails({
     }
   };
 
+  const setSubtaskDueDate = async (id: string, date: Date | null) => {
+    if (readOnly) return;
+    const dueDateIso = date ? date.toISOString() : null;
+    const previous = draft.subtasks;
+    updateSubtasksLocal(
+      previous.map((item) => (item.id === id ? { ...item, dueDateIso } : item)),
+    );
+    if (!isPersistedSubtaskId(id)) return;
+    setBusySubtaskId(id);
+    try {
+      await updateSubtask(projectId, task.id, id, { dueDateIso });
+    } catch (err) {
+      updateSubtasksLocal(previous);
+      subtaskError("Could not update the subtask date", err);
+    } finally {
+      setBusySubtaskId(null);
+    }
+  };
+
+  const suggestUpdate = async () => {
+    const title = draft.title.trim();
+    if (!title || suggesting || readOnly) {
+      if (!title) {
+        toast({
+          variant: "warning",
+          title: "Add a title first",
+          message: "The AI needs a task title before it can suggest an update.",
+        });
+      }
+      return;
+    }
+    setSuggesting(true);
+    try {
+      const suggestion = await apiFetch<{
+        description: string;
+        subTasks: string[];
+        priority: "LOW" | "MEDIUM" | "HIGH";
+        suggestedDaysUntilDue: number;
+      }>("/api/tasks/ai-suggest", {
+        method: "POST",
+        body: JSON.stringify({
+          title,
+          description: draft.description,
+          existingSubtasks: draft.subtasks.map((item) => item.label),
+        }),
+      });
+      const due = new Date();
+      due.setDate(due.getDate() + Math.max(1, suggestion.suggestedDaysUntilDue || 1));
+      const priority: TaskPriority =
+        suggestion.priority === "LOW"
+          ? "Low"
+          : suggestion.priority === "HIGH"
+            ? "High"
+            : "Medium";
+      const suggested = {
+        description: suggestion.description || draft.description,
+        priority,
+        dueDateIso: due.toISOString(),
+        dueDate: formatDueDate(due),
+      };
+      const existing = new Set(
+        draft.subtasks.map((item) => item.label.trim().toLowerCase()),
+      );
+      for (const label of suggestion.subTasks ?? []) {
+        const trimmed = label.trim();
+        if (!trimmed || existing.has(trimmed.toLowerCase())) continue;
+        existing.add(trimmed.toLowerCase());
+        await createSubtask(projectId, task.id, trimmed);
+      }
+      setDraft((prev) => ({ ...prev, ...suggested }));
+      toast({
+        variant: "success",
+        title: "Update suggested",
+        message: "Review the description, date, and new subtasks, then save.",
+      });
+    } catch (err) {
+      toast({
+        variant: "error",
+        title: "AI suggestion failed",
+        message: err instanceof ApiError ? err.message : "Could not suggest an update.",
+      });
+    } finally {
+      setSuggesting(false);
+    }
+  };
+
   const addSubtask = async () => {
     const label = newSubtaskLabel.trim();
     if (!label) return;
@@ -622,6 +711,28 @@ export function TaskDrawerDetails({
         className="text-xl font-semibold"
         aria-label="Task title"
       />
+      {!readOnly && !profile?.isDemo ? (
+        <button
+          type="button"
+          onClick={() => void suggestUpdate()}
+          disabled={suggesting || !draft.title.trim()}
+          className="mt-2 flex w-full items-center justify-between gap-3 rounded-xl border border-glass bg-glass-button/60 px-3 py-2 text-left transition hover:border-accent/60 hover:bg-accent/10 disabled:cursor-not-allowed disabled:opacity-45"
+        >
+          <span className="flex min-w-0 items-center gap-2.5">
+            <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-accent text-white">
+              <Sparkles className={cn("size-4", suggesting && "animate-pulse")} />
+            </span>
+            <span className="min-w-0">
+              <span className="block text-xs font-semibold text-primary">
+                {suggesting ? "Suggesting an update" : "Suggest an update"}
+              </span>
+              <span className="block truncate text-[11px] text-primary/55">
+                Refresh the description, priority, due date, and missing subtasks.
+              </span>
+            </span>
+          </span>
+        </button>
+      ) : null}
 
       <div className="grid grid-cols-2 gap-3">
         <div>
@@ -804,6 +915,7 @@ export function TaskDrawerDetails({
                   updateSubtaskAssigneesLocal(subtask.id, assigneeIds)
                 }
                 onAssigneesSave={() => void saveSubtaskAssignees(subtask)}
+                onDueDateChange={(date) => void setSubtaskDueDate(subtask.id, date)}
               />
             ))}
           </ul>
