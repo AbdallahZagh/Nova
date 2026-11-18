@@ -1,5 +1,5 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsBoolean, IsDateString, IsOptional, IsString } from 'class-validator';
+import { IsBoolean, IsDateString, IsOptional, IsString, ValidateIf } from 'class-validator';
 
 export class UpdateSubtaskDto {
   @ApiPropertyOptional({
@@ -23,6 +23,7 @@ export class UpdateSubtaskDto {
     description: 'Optional deadline in ISO 8601 format',
   })
   @IsOptional()
+  @ValidateIf((_object, value) => value !== null)
   @IsDateString()
-  dueDate?: string;
+  dueDate?: string | null;
 }

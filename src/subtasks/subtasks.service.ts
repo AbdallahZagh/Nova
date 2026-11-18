@@ -66,7 +66,8 @@ export class SubtasksService {
     const data: Record<string, any> = {};
     if (dto.title !== undefined) data.title = dto.title;
     if (dto.isCompleted !== undefined) data.isCompleted = dto.isCompleted;
-    if (dto.dueDate !== undefined) data.dueDate = new Date(dto.dueDate);
+    if (dto.dueDate === null) data.dueDate = null;
+    else if (dto.dueDate !== undefined) data.dueDate = new Date(dto.dueDate);
 
     const subtask = await (this.prisma as any).subtask.update({
       where: { id },

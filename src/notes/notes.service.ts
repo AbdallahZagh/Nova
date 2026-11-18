@@ -15,6 +15,7 @@ import {
   normalizeChecklist,
   previewText,
 } from './note.logic';
+import { NotesRealtime } from './notes-realtime';
 
 const noteInclude = {
   project: { select: { id: true, name: true, status: true } },
@@ -41,7 +42,10 @@ type NoteRow = {
 
 @Injectable()
 export class NotesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly realtime: NotesRealtime,
+  ) {}
 
   async list(
     userId: string,
@@ -107,7 +111,9 @@ export class NotesService {
       },
       include: noteInclude,
     });
-    return this.toResponse(created as NoteRow);
+    const note = this.toResponse(created as NoteRow);
+    this.realtime.publish(userId, { kind: 'saved', note });
+    return note;
   }
 
   async update(userId: string, id: string, dto: WriteNoteDto) {
@@ -140,12 +146,15 @@ export class NotesService {
       },
       include: noteInclude,
     });
-    return this.toResponse(updated as NoteRow);
+    const note = this.toResponse(updated as NoteRow);
+    this.realtime.publish(userId, { kind: 'saved', note });
+    return note;
   }
 
   async remove(userId: string, id: string) {
     const existing = await this.findOwned(userId, id);
     await this.prisma.note.delete({ where: { id: existing.id } });
+    this.realtime.publish(userId, { kind: 'deleted', id: existing.id });
     return { message: 'Note deleted' };
   }
 

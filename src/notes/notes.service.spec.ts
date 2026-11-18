@@ -1,5 +1,6 @@
 import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { NotesRealtime } from './notes-realtime';
 import { NotesService } from './notes.service';
 
 function row(overrides: Record<string, unknown> = {}) {
@@ -44,7 +45,9 @@ function service(options?: { project?: boolean }) {
     },
   };
   return {
-    notes: new NotesService(prisma as unknown as PrismaService),
+    notes: new NotesService(prisma as unknown as PrismaService, {
+      publish: () => undefined,
+    } as unknown as NotesRealtime),
     prisma,
   };
 }

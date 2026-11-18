@@ -75,6 +75,6 @@ export class AiController {
     @CurrentUser() user: AuthUser,
     @Body() dto: AiSuggestDto,
   ) {
-    return this.aiService.generateTaskSuggestion(dto.title, user.id, user.isDemo);
+    return this.aiService.generateTaskSuggestion(dto, user.id, user.isDemo);
   }
 }

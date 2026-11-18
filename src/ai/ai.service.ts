@@ -92,21 +92,34 @@ export class AiService {
   }
 
   async generateTaskSuggestion(
-    title: string,
+    input: { title: string; description?: string; existingSubtasks?: string[] },
     userId: string,
     isDemo: boolean,
   ): Promise<AiTaskSuggestionDto> {
-    const trimmedTitle = title.trim();
+    const trimmedTitle = input.title.trim();
     if (!trimmedTitle) {
       throw new BadRequestException('Title is required');
     }
     await this.assertAllowed(userId, isDemo, AiFeature.TASK_SUGGEST);
     const started = Date.now();
+    const description = input.description?.trim();
+    const existing = (input.existingSubtasks ?? [])
+      .map((item) => item.trim())
+      .filter(Boolean)
+      .slice(0, 20);
 
     try {
       const parsed = await this.generateJson(
         TASK_SYSTEM_INSTRUCTION,
-        `You are an expert project manager. Generate metadata suggestions for a task titled: "${trimmedTitle}".`,
+        [
+          `Generate metadata suggestions for a task titled: "${trimmedTitle}".`,
+          description ? `Current description: "${description}". Improve it if it is thin.` : '',
+          existing.length
+            ? `These steps already exist and must not be repeated: ${existing.join('; ')}.`
+            : '',
+        ]
+          .filter(Boolean)
+          .join('\n'),
         TASK_RESPONSE_SCHEMA,
       );
 
