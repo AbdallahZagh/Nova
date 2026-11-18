@@ -11,7 +11,7 @@ import {
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { router, useLocalSearchParams } from "expo-router";
 import { useColorScheme } from "nativewind";
-import { getApiErrorMessage } from "@/api/apiClient";
+import { apiClient, getApiErrorMessage } from "@/api/apiClient";
 import {
   dateInputToIso,
   deleteTaskApi,
@@ -116,6 +116,7 @@ export default function TaskDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [suggesting, setSuggesting] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [comments, setComments] = useState<TaskComment[]>([]);
@@ -205,6 +206,66 @@ export default function TaskDetailScreen() {
   const updateTask = (patch: Partial<Task>) => {
     if (readOnly) return;
     setTask((current) => (current ? { ...current, ...patch } : current));
+  };
+
+  const suggestUpdate = async () => {
+    if (!task || readOnly || suggesting) return;
+    const title = task.title.trim();
+    if (!title) {
+      showSnackbar({
+        variant: "warning",
+        title: "Add a title first",
+        message: "The AI needs a task title before it can suggest an update.",
+      });
+      return;
+    }
+    setSuggesting(true);
+    try {
+      const { data } = await apiClient.post<{
+        description: string;
+        subTasks: string[];
+        priority: "LOW" | "MEDIUM" | "HIGH";
+        suggestedDaysUntilDue: number;
+      }>("/api/tasks/ai-suggest", {
+        title,
+        description: task.description,
+        existingSubtasks: task.subtasks.map((item) => item.label),
+      });
+      const due = new Date();
+      due.setDate(due.getDate() + Math.max(1, data.suggestedDaysUntilDue || 1));
+      const existing = new Set(task.subtasks.map((item) => item.label.trim().toLowerCase()));
+      const added = (data.subTasks ?? [])
+        .map((label) => label.trim())
+        .filter((label) => label && !existing.has(label.toLowerCase()))
+        .map((label, index) => ({
+          id: `ai-${Date.now()}-${index}`,
+          label,
+          done: false,
+          dueDateIso: null,
+          assignees: [],
+          assigneeIds: [],
+        }));
+      updateTask({
+        description: data.description || task.description,
+        priority: data.priority === "LOW" ? "Low" : data.priority === "HIGH" ? "High" : "Medium",
+        dueDateIso: due.toISOString(),
+        dueDate: due.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+        subtasks: [...task.subtasks, ...added],
+      });
+      showSnackbar({
+        variant: "success",
+        title: "Update suggested",
+        message: "Review it, then save the task.",
+      });
+    } catch (error) {
+      showSnackbar({
+        variant: "error",
+        title: "AI suggestion failed",
+        message: getApiErrorMessage(error, "Could not suggest an update."),
+      });
+    } finally {
+      setSuggesting(false);
+    }
   };
 
   const save = async () => {
@@ -369,6 +430,22 @@ export default function TaskDetailScreen() {
             placeholderTextColor={palette.muted}
             className="rounded-nova border border-glass bg-glass-button px-3.5 py-3 text-[15px] font-black text-primary dark:border-dark-glass dark:bg-dark-glass-button dark:text-dark-primary"
           />
+          {!readOnly && !user?.isDemo ? (
+            <Pressable
+              onPress={() => void suggestUpdate()}
+              disabled={suggesting || !task.title.trim()}
+              className="mt-3 min-h-11 flex-row items-center justify-center gap-2 rounded-nova bg-accent px-3 disabled:opacity-45 dark:bg-dark-accent"
+            >
+              {suggesting ? (
+                <ActivityIndicator color={palette.white} />
+              ) : (
+                <Ionicons name="sparkles-outline" size={16} color={palette.white} />
+              )}
+              <Text className="font-black text-white">
+                {suggesting ? "Suggesting…" : "Suggest an update"}
+              </Text>
+            </Pressable>
+          ) : null}
           <Text className="mb-2 mt-4 text-[11px] font-black uppercase tracking-[1.2px] text-muted dark:text-dark-muted">
             Description
           </Text>
@@ -455,6 +532,7 @@ export default function TaskDetailScreen() {
                           id: `new-${Date.now()}`,
                           label: "",
                           done: false,
+                          dueDateIso: null,
                           assignees: [],
                           assigneeIds: [],
                         },
@@ -542,6 +620,23 @@ export default function TaskDetailScreen() {
                         <Ionicons name="close-outline" size={16} color={palette.muted} />
                       </Pressable>
                     ) : null}
+                  </View>
+                  <View className="mt-3">
+                    <CalendarField
+                      value={isoToDateInputValue(subtask.dueDateIso)}
+                      onChange={(value) =>
+                        updateTask({
+                          subtasks: task.subtasks.map((item) =>
+                            item.id === subtask.id
+                              ? { ...item, dueDateIso: dateInputToIso(value) }
+                              : item,
+                          ),
+                        })
+                      }
+                      placeholder="Subtask date"
+                      disabled={readOnly}
+                      drawerTitle="Subtask date"
+                    />
                   </View>
                   {canAssignSubtasks ? (
                     <View className="mt-3">

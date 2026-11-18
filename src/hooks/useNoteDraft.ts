@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { getApiErrorMessage } from "@/api/apiClient";
 import { createNoteApi, deleteNoteApi, updateNoteApi } from "@/api/notes";
 import { useSnackbarStore } from "@/store/useSnackbarStore";
+import { isNewerNote, subscribeNoteChanges } from "@/notes-live";
 import {
   isBlankDraft,
   type ChecklistItem,
@@ -62,6 +63,7 @@ export function useNoteDraft({
   const [errorMessage, setErrorMessage] = useState("");
 
   const fieldsRef = useRef(fields);
+  const savedRef = useRef<Note | null>(note);
   const idRef = useRef<string | null>(note?.id ?? null);
   const pendingRef = useRef<NoteWrite>({});
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -87,6 +89,7 @@ export function useNoteDraft({
         result = await updateNoteApi(idRef.current, patch);
       }
       failedRef.current = false;
+      savedRef.current = result;
       setSaved(result);
       setStatus("saved");
       setErrorMessage("");
@@ -120,6 +123,28 @@ export function useNoteDraft({
     return () => {
       void flushRef.current();
     };
+  }, []);
+
+  useEffect(() => {
+    return subscribeNoteChanges((change) => {
+      if (deletedRef.current || change.kind !== "saved") return;
+      if (change.note.id !== idRef.current) return;
+      if (Object.keys(pendingRef.current).length > 0) return;
+      if (!isNewerNote(change.note.updatedAt, savedRef.current?.updatedAt)) return;
+      const remote = change.note;
+      savedRef.current = remote;
+      fieldsRef.current = {
+        title: remote.title ?? "",
+        body: remote.body,
+        checklist: remote.checklist ?? [],
+        color: remote.color,
+        projectId: remote.projectId ?? "",
+        pinned: remote.pinned,
+      };
+      setFields(fieldsRef.current);
+      setSaved(remote);
+      setStatus("saved");
+    });
   }, []);
 
   const set = useCallback(

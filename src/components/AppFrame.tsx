@@ -18,6 +18,7 @@ import { SystemStatusBanner } from "@/components/SystemStatusBanner";
 import { DemoTourModal } from "@/components/DemoTourModal";
 import { DynamicLogo } from "@/components/UI/DynamicLogo";
 import { useNotificationSync } from "@/hooks/useNotificationSync";
+import { useNotesRealtime } from "@/notes-live";
 import { useAuthStore } from "@/store/useAuthStore";
 import { useNotificationStore } from "@/store/useNotificationStore";
 import { getPalette } from "@/theme/colors";
@@ -65,6 +66,7 @@ export function AppFrame({ children }: PropsWithChildren) {
   };
 
   useNotificationSync(user);
+  useNotesRealtime(user?.id);
 
   useEffect(() => {
     const showSubscription = Keyboard.addListener("keyboardDidShow", () =>

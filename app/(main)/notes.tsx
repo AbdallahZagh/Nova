@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Pressable,
   RefreshControl,
@@ -17,6 +17,7 @@ import { NoteCard } from "@/components/NoteCard";
 import { NotePin } from "@/components/NotePin";
 import { PageSkeleton } from "@/components/Skeleton";
 import { useSnackbarStore } from "@/store/useSnackbarStore";
+import { subscribeNoteChanges } from "@/notes-live";
 import {
   filterNotes,
   noteTitle,
@@ -61,6 +62,16 @@ export default function NotesScreen() {
   }, [showSnackbar]);
 
   // Reload whenever you come back from a note, so edits show up straight away.
+  useEffect(() => {
+    return subscribeNoteChanges((change) => {
+      if (change.kind === "deleted") {
+        setNotes((current) => current.filter((item) => item.id !== change.id));
+        return;
+      }
+      setNotes((current) => upsertNote(current, change.note));
+    });
+  }, []);
+
   useFocusEffect(
     useCallback(() => {
       void load();
