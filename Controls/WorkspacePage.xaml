@@ -1,0 +1,39 @@
+<Page
+    x:Class="NovaTaskflow.Controls.WorkspacePage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:controls="using:NovaTaskflow.Controls"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Grid x:Name="PageLayout" Padding="30,23,30,22" RowSpacing="12" SizeChanged="AdaptLayout">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+        <Grid x:Name="PageHeader" ColumnSpacing="12">
+            <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition x:Name="ActionColumn" Width="Auto" MaxWidth="510"/></Grid.ColumnDefinitions>
+            <StackPanel Spacing="5">
+                <TextBlock x:Name="TitleText" Style="{StaticResource NovaTitle}" TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis"/>
+                <TextBlock x:Name="SubtitleText" Style="{StaticResource NovaSubtitle}" Visibility="Collapsed"/>
+            </StackPanel>
+            <controls:WrapPanel x:Name="Actions" Grid.Column="1" VerticalAlignment="Center"/>
+        </Grid>
+        <ScrollViewer x:Name="FilterScroll" Grid.Row="1" HorizontalScrollMode="Disabled"
+                      HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+            <StackPanel x:Name="Filters" Spacing="8"/>
+        </ScrollViewer>
+        <Grid Grid.Row="2">
+            <ContentControl x:Name="ContentHost" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch">
+                <ContentControl.ContentTransitions>
+                    <TransitionCollection><ContentThemeTransition HorizontalOffset="0" VerticalOffset="12"/></TransitionCollection>
+                </ContentControl.ContentTransitions>
+            </ContentControl>
+            <StackPanel x:Name="Shimmer" Visibility="Collapsed" Spacing="10" IsHitTestVisible="False">
+                <Border Background="{ThemeResource NovaButton}" CornerRadius="12" Height="108"/>
+                <Border Background="{ThemeResource NovaButton}" CornerRadius="12" Height="67"/>
+                <Border Background="{ThemeResource NovaButton}" CornerRadius="12" Height="67"/>
+                <Border Background="{ThemeResource NovaButton}" CornerRadius="12" Height="67"/>
+            </StackPanel>
+        </Grid>
+    </Grid>
+</Page>

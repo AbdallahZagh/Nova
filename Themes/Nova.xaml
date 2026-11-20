@@ -1,0 +1,488 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:controls="using:NovaTaskflow.Controls"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <ResourceDictionary.ThemeDictionaries>
+        <ResourceDictionary x:Key="Dark">
+            <SolidColorBrush x:Key="NovaPage" Color="#FF161312" />
+            <SolidColorBrush x:Key="NovaPaper" Color="#FF1C1816" />
+            <SolidColorBrush x:Key="NovaText" Color="#FFE8E3E0" />
+            <SolidColorBrush x:Key="NovaMuted" Color="#FFB4AAA4" />
+            <SolidColorBrush x:Key="NovaAccent" Color="#FFE66A17" />
+            <SolidColorBrush x:Key="NovaActionText" Color="#FF161312" />
+            <SolidColorBrush x:Key="NovaAction" Color="#FFE66A17" />
+            <SolidColorBrush x:Key="NovaButton" Color="#FF241D1B" />
+            <SolidColorBrush x:Key="NovaBorder" Color="#24FFFFFF" />
+            <SolidColorBrush x:Key="NovaDanger" Color="#FFFF8C82" />
+            <SolidColorBrush x:Key="NovaAccentText" Color="#FFF7904B" />
+            <SolidColorBrush x:Key="NovaAccentWash" Color="#2AE66A17" />
+            <SolidColorBrush x:Key="NovaFeature" Color="#FF251A14" />
+            <SolidColorBrush x:Key="NovaSurface" Color="#FF201713" />
+            <SolidColorBrush x:Key="NovaOverlay" Color="#FF211B18" />
+            <SolidColorBrush x:Key="ListViewItemBackgroundSelected" Color="#42E66A17" />
+            <SolidColorBrush x:Key="ListViewItemBackgroundSelectedPointerOver" Color="#59E66A17" />
+            <SolidColorBrush x:Key="ListViewItemForegroundSelected" Color="#FFF7904B" />
+            <SolidColorBrush x:Key="ButtonBackgroundPointerOver" Color="#FF2F2520" />
+            <SolidColorBrush x:Key="ButtonBackgroundPressed" Color="#FF3A2A21" />
+            <SolidColorBrush x:Key="ButtonForegroundPointerOver" Color="#FFE8E3E0" />
+            <SolidColorBrush x:Key="ButtonForegroundPressed" Color="#FFE8E3E0" />
+            <SolidColorBrush x:Key="NovaFieldHoverBorder" Color="#FF806D61"/>
+            <SolidColorBrush x:Key="NovaFieldFocusBorder" Color="#66E66A17"/>
+            <Thickness x:Key="TextControlBorderThemeThicknessFocused">1</Thickness>
+            <SolidColorBrush x:Key="NovaActionHover" Color="#FFF68036"/>
+            <SolidColorBrush x:Key="NovaActionPressed" Color="#FFD36114"/>
+            <CornerRadius x:Key="OverlayCornerRadius">12</CornerRadius>
+            <StaticResource x:Key="AccentFillColorDefaultBrush" ResourceKey="NovaAction"/>
+            <StaticResource x:Key="AccentFillColorSecondaryBrush" ResourceKey="NovaActionHover"/>
+            <StaticResource x:Key="AccentFillColorTertiaryBrush" ResourceKey="NovaActionPressed"/>
+            <StaticResource x:Key="AccentTextFillColorPrimaryBrush" ResourceKey="NovaAccentText"/>
+            <StaticResource x:Key="TextOnAccentFillColorPrimaryBrush" ResourceKey="NovaActionText"/>
+            <StaticResource x:Key="ComboBoxItemPillFillBrush" ResourceKey="NovaAccent"/>
+            <StaticResource x:Key="TextControlBackground" ResourceKey="NovaButton"/>
+            <StaticResource x:Key="TextControlBackgroundPointerOver" ResourceKey="ButtonBackgroundPointerOver"/>
+            <StaticResource x:Key="TextControlBackgroundFocused" ResourceKey="NovaButton"/>
+            <StaticResource x:Key="TextControlBorderBrush" ResourceKey="NovaBorder"/>
+            <StaticResource x:Key="TextControlBorderBrushFocused" ResourceKey="NovaFieldFocusBorder"/>
+            <StaticResource x:Key="TextControlBorderBrushPointerOver" ResourceKey="NovaFieldHoverBorder"/>
+            <StaticResource x:Key="TextControlForeground" ResourceKey="NovaText"/>
+            <StaticResource x:Key="TextControlForegroundFocused" ResourceKey="NovaText"/>
+            <StaticResource x:Key="TextControlForegroundPointerOver" ResourceKey="NovaText"/>
+            <StaticResource x:Key="TextControlHeaderForeground" ResourceKey="NovaMuted"/>
+            <StaticResource x:Key="TextControlPlaceholderForeground" ResourceKey="NovaMuted"/>
+            <StaticResource x:Key="TextControlPlaceholderForegroundFocused" ResourceKey="NovaMuted"/>
+            <StaticResource x:Key="TextControlPlaceholderForegroundPointerOver" ResourceKey="NovaMuted"/>
+            <StaticResource x:Key="TextControlSelectionHighlightColor" ResourceKey="NovaAction"/>
+            <StaticResource x:Key="ComboBoxBackground" ResourceKey="NovaButton"/>
+            <StaticResource x:Key="ComboBoxBackgroundPointerOver" ResourceKey="ButtonBackgroundPointerOver"/>
+            <StaticResource x:Key="ComboBoxBackgroundPressed" ResourceKey="ButtonBackgroundPressed"/>
+            <StaticResource x:Key="ComboBoxBackgroundFocused" ResourceKey="NovaOverlay"/>
+            <StaticResource x:Key="ComboBoxBorderBrush" ResourceKey="NovaBorder"/>
+            <StaticResource x:Key="ComboBoxBorderBrushPointerOver" ResourceKey="NovaFieldHoverBorder"/>
+            <StaticResource x:Key="ComboBoxBorderBrushPressed" ResourceKey="NovaFieldFocusBorder"/>
+            <StaticResource x:Key="ComboBoxForeground" ResourceKey="NovaText"/>
+            <StaticResource x:Key="ComboBoxHeaderForeground" ResourceKey="NovaMuted"/>
+            <StaticResource x:Key="ComboBoxDropDownGlyphForeground" ResourceKey="NovaAccentText"/>
+            <StaticResource x:Key="ComboBoxDropDownBackground" ResourceKey="NovaOverlay"/>
+            <StaticResource x:Key="ComboBoxDropDownBorderBrush" ResourceKey="NovaBorder"/>
+            <StaticResource x:Key="ComboBoxItemForeground" ResourceKey="NovaText"/>
+            <StaticResource x:Key="ComboBoxItemForegroundSelected" ResourceKey="NovaAccentText"/>
+            <StaticResource x:Key="ComboBoxItemBackgroundPointerOver" ResourceKey="ButtonBackgroundPointerOver"/>
+            <StaticResource x:Key="ComboBoxItemBackgroundSelected" ResourceKey="NovaAccentWash"/>
+            <StaticResource x:Key="ComboBoxItemBackgroundSelectedPointerOver" ResourceKey="NovaAccentWash"/>
+            <StaticResource x:Key="ComboBoxItemBackgroundSelectedUnfocused" ResourceKey="NovaAccentWash"/>
+            <StaticResource x:Key="ComboBoxItemBackgroundPressed" ResourceKey="ButtonBackgroundPressed"/>
+            <StaticResource x:Key="CalendarDatePickerBackground" ResourceKey="NovaButton"/>
+            <StaticResource x:Key="CalendarDatePickerBackgroundPointerOver" ResourceKey="ButtonBackgroundPointerOver"/>
+            <StaticResource x:Key="CalendarDatePickerBackgroundPressed" ResourceKey="ButtonBackgroundPressed"/>
+            <StaticResource x:Key="CalendarDatePickerBackgroundFocused" ResourceKey="NovaOverlay"/>
+            <StaticResource x:Key="CalendarDatePickerBorderBrush" ResourceKey="NovaBorder"/>
+            <StaticResource x:Key="CalendarDatePickerBorderBrushPointerOver" ResourceKey="NovaFieldHoverBorder"/>
+            <StaticResource x:Key="CalendarDatePickerBorderBrushPressed" ResourceKey="NovaFieldFocusBorder"/>
+            <StaticResource x:Key="CalendarDatePickerCalendarGlyphForeground" ResourceKey="NovaAccentText"/>
+            <StaticResource x:Key="CalendarDatePickerCalendarGlyphForegroundPointerOver" ResourceKey="NovaAccentText"/>
+            <StaticResource x:Key="CalendarDatePickerHeaderForeground" ResourceKey="NovaMuted"/>
+            <StaticResource x:Key="CalendarDatePickerTextForeground" ResourceKey="NovaMuted"/>
+            <StaticResource x:Key="CalendarDatePickerTextForegroundSelected" ResourceKey="NovaText"/>
+            <StaticResource x:Key="MenuFlyoutPresenterBackground" ResourceKey="NovaOverlay"/>
+            <StaticResource x:Key="MenuFlyoutPresenterBorderBrush" ResourceKey="NovaBorder"/>
+            <StaticResource x:Key="MenuFlyoutItemForeground" ResourceKey="NovaText"/>
+            <StaticResource x:Key="MenuFlyoutItemBackgroundPointerOver" ResourceKey="ButtonBackgroundPointerOver"/>
+            <StaticResource x:Key="MenuFlyoutItemBackgroundPressed" ResourceKey="ButtonBackgroundPressed"/>
+            <StaticResource x:Key="AutoSuggestBoxSuggestionsListBackground" ResourceKey="NovaOverlay"/>
+            <StaticResource x:Key="AutoSuggestBoxSuggestionsListBorderBrush" ResourceKey="NovaBorder"/>
+            <StaticResource x:Key="ContentDialogBackground" ResourceKey="NovaOverlay"/>
+            <StaticResource x:Key="ContentDialogBorderBrush" ResourceKey="NovaBorder"/>
+            <StaticResource x:Key="ContentDialogForeground" ResourceKey="NovaText"/>
+            <StaticResource x:Key="ContentDialogSeparatorBorderBrush" ResourceKey="NovaBorder"/>
+            <StaticResource x:Key="AccentButtonBackground" ResourceKey="NovaAction"/>
+            <StaticResource x:Key="AccentButtonBackgroundPointerOver" ResourceKey="NovaActionHover"/>
+            <StaticResource x:Key="AccentButtonBackgroundPressed" ResourceKey="NovaActionPressed"/>
+            <StaticResource x:Key="AccentButtonForeground" ResourceKey="NovaActionText"/>
+            <StaticResource x:Key="AccentButtonForegroundPointerOver" ResourceKey="NovaActionText"/>
+            <StaticResource x:Key="AccentButtonForegroundPressed" ResourceKey="NovaActionText"/>
+            <StaticResource x:Key="AccentButtonBorderBrush" ResourceKey="NovaAction"/>
+            <StaticResource x:Key="AccentButtonBorderBrushPointerOver" ResourceKey="NovaActionHover"/>
+            <StaticResource x:Key="AccentButtonBorderBrushPressed" ResourceKey="NovaActionPressed"/>
+            <StaticResource x:Key="ToggleSwitchFillOn" ResourceKey="NovaAction"/>
+            <StaticResource x:Key="ToggleSwitchFillOnPointerOver" ResourceKey="NovaActionHover"/>
+            <StaticResource x:Key="ToggleSwitchFillOnPressed" ResourceKey="NovaActionPressed"/>
+            <StaticResource x:Key="ToggleSwitchKnobFillOn" ResourceKey="NovaActionText"/>
+            <StaticResource x:Key="ToggleSwitchKnobFillOnPointerOver" ResourceKey="NovaActionText"/>
+            <StaticResource x:Key="ToggleSwitchKnobFillOnPressed" ResourceKey="NovaActionText"/>
+            <StaticResource x:Key="CheckBoxCheckBackgroundFillChecked" ResourceKey="NovaAction"/>
+            <StaticResource x:Key="CheckBoxCheckBackgroundFillCheckedPointerOver" ResourceKey="NovaActionHover"/>
+            <StaticResource x:Key="CheckBoxCheckBackgroundFillCheckedPressed" ResourceKey="NovaActionPressed"/>
+            <StaticResource x:Key="CheckBoxCheckBackgroundStrokeChecked" ResourceKey="NovaAction"/>
+            <StaticResource x:Key="CheckBoxCheckGlyphForegroundChecked" ResourceKey="NovaActionText"/>
+            <StaticResource x:Key="CheckBoxCheckGlyphForegroundCheckedPressed" ResourceKey="NovaActionText"/>
+            <StaticResource x:Key="CheckBoxCheckGlyphForegroundCheckedPointerOver" ResourceKey="NovaActionText"/>
+            <StaticResource x:Key="SliderThumbBackground" ResourceKey="NovaAction"/>
+            <StaticResource x:Key="SliderTrackValueFill" ResourceKey="NovaAction"/>
+            <StaticResource x:Key="SliderTrackValueFillPointerOver" ResourceKey="NovaActionHover"/>
+            <StaticResource x:Key="SliderTrackValueFillPressed" ResourceKey="NovaActionPressed"/>
+            <StaticResource x:Key="RadioButtonCheckGlyphFill" ResourceKey="NovaAction"/>
+            <StaticResource x:Key="RadioButtonCheckGlyphStrokeChecked" ResourceKey="NovaAction"/>
+        </ResourceDictionary>
+        <ResourceDictionary x:Key="Light">
+            <SolidColorBrush x:Key="NovaPage" Color="#FFF5F1EC" />
+            <SolidColorBrush x:Key="NovaPaper" Color="#FFEDE6DB" />
+            <SolidColorBrush x:Key="NovaText" Color="#FF1C1208" />
+            <SolidColorBrush x:Key="NovaMuted" Color="#FF65584F" />
+            <SolidColorBrush x:Key="NovaAccent" Color="#FFC56010" />
+            <SolidColorBrush x:Key="NovaActionText" Color="#FFFFFFFF" />
+            <SolidColorBrush x:Key="NovaAction" Color="#FFAC4F0D" />
+            <SolidColorBrush x:Key="NovaButton" Color="#FFE7DED2" />
+            <SolidColorBrush x:Key="NovaBorder" Color="#242A1606" />
+            <SolidColorBrush x:Key="NovaDanger" Color="#FFB42318" />
+            <SolidColorBrush x:Key="NovaAccentText" Color="#FF8E440D" />
+            <SolidColorBrush x:Key="NovaAccentWash" Color="#23C56010" />
+            <SolidColorBrush x:Key="NovaFeature" Color="#FFF0E4D7" />
+            <SolidColorBrush x:Key="NovaSurface" Color="#FFEBE6E0" />
+            <SolidColorBrush x:Key="NovaOverlay" Color="#FFF5F1EC" />
+            <SolidColorBrush x:Key="ListViewItemBackgroundSelected" Color="#28C56010" />
+            <SolidColorBrush x:Key="ListViewItemBackgroundSelectedPointerOver" Color="#3DC56010" />
+            <SolidColorBrush x:Key="ListViewItemForegroundSelected" Color="#FF8E440D" />
+            <SolidColorBrush x:Key="ButtonBackgroundPointerOver" Color="#FFE6DBCE" />
+            <SolidColorBrush x:Key="ButtonBackgroundPressed" Color="#FFDDD0C0" />
+            <SolidColorBrush x:Key="ButtonForegroundPointerOver" Color="#FF1C1208" />
+            <SolidColorBrush x:Key="ButtonForegroundPressed" Color="#FF1C1208" />
+            <SolidColorBrush x:Key="NovaFieldHoverBorder" Color="#FF927B67"/>
+            <SolidColorBrush x:Key="NovaFieldFocusBorder" Color="#66C56010"/>
+            <Thickness x:Key="TextControlBorderThemeThicknessFocused">1</Thickness>
+            <SolidColorBrush x:Key="NovaActionHover" Color="#FF9C480B"/>
+            <SolidColorBrush x:Key="NovaActionPressed" Color="#FF873D09"/>
+            <CornerRadius x:Key="OverlayCornerRadius">12</CornerRadius>
+            <StaticResource x:Key="AccentFillColorDefaultBrush" ResourceKey="NovaAction"/>
+            <StaticResource x:Key="AccentFillColorSecondaryBrush" ResourceKey="NovaActionHover"/>
+            <StaticResource x:Key="AccentFillColorTertiaryBrush" ResourceKey="NovaActionPressed"/>
+            <StaticResource x:Key="AccentTextFillColorPrimaryBrush" ResourceKey="NovaAccentText"/>
+            <StaticResource x:Key="TextOnAccentFillColorPrimaryBrush" ResourceKey="NovaActionText"/>
+            <StaticResource x:Key="ComboBoxItemPillFillBrush" ResourceKey="NovaAccent"/>
+            <StaticResource x:Key="TextControlBackground" ResourceKey="NovaButton"/>
+            <StaticResource x:Key="TextControlBackgroundPointerOver" ResourceKey="ButtonBackgroundPointerOver"/>
+            <StaticResource x:Key="TextControlBackgroundFocused" ResourceKey="NovaButton"/>
+            <StaticResource x:Key="TextControlBorderBrush" ResourceKey="NovaBorder"/>
+            <StaticResource x:Key="TextControlBorderBrushFocused" ResourceKey="NovaFieldFocusBorder"/>
+            <StaticResource x:Key="TextControlBorderBrushPointerOver" ResourceKey="NovaFieldHoverBorder"/>
+            <StaticResource x:Key="TextControlForeground" ResourceKey="NovaText"/>
+            <StaticResource x:Key="TextControlForegroundFocused" ResourceKey="NovaText"/>
+            <StaticResource x:Key="TextControlForegroundPointerOver" ResourceKey="NovaText"/>
+            <StaticResource x:Key="TextControlHeaderForeground" ResourceKey="NovaMuted"/>
+            <StaticResource x:Key="TextControlPlaceholderForeground" ResourceKey="NovaMuted"/>
+            <StaticResource x:Key="TextControlPlaceholderForegroundFocused" ResourceKey="NovaMuted"/>
+            <StaticResource x:Key="TextControlPlaceholderForegroundPointerOver" ResourceKey="NovaMuted"/>
+            <StaticResource x:Key="TextControlSelectionHighlightColor" ResourceKey="NovaAction"/>
+            <StaticResource x:Key="ComboBoxBackground" ResourceKey="NovaButton"/>
+            <StaticResource x:Key="ComboBoxBackgroundPointerOver" ResourceKey="ButtonBackgroundPointerOver"/>
+            <StaticResource x:Key="ComboBoxBackgroundPressed" ResourceKey="ButtonBackgroundPressed"/>
+            <StaticResource x:Key="ComboBoxBackgroundFocused" ResourceKey="NovaOverlay"/>
+            <StaticResource x:Key="ComboBoxBorderBrush" ResourceKey="NovaBorder"/>
+            <StaticResource x:Key="ComboBoxBorderBrushPointerOver" ResourceKey="NovaFieldHoverBorder"/>
+            <StaticResource x:Key="ComboBoxBorderBrushPressed" ResourceKey="NovaFieldFocusBorder"/>
+            <StaticResource x:Key="ComboBoxForeground" ResourceKey="NovaText"/>
+            <StaticResource x:Key="ComboBoxHeaderForeground" ResourceKey="NovaMuted"/>
+            <StaticResource x:Key="ComboBoxDropDownGlyphForeground" ResourceKey="NovaAccentText"/>
+            <StaticResource x:Key="ComboBoxDropDownBackground" ResourceKey="NovaOverlay"/>
+            <StaticResource x:Key="ComboBoxDropDownBorderBrush" ResourceKey="NovaBorder"/>
+            <StaticResource x:Key="ComboBoxItemForeground" ResourceKey="NovaText"/>
+            <StaticResource x:Key="ComboBoxItemForegroundSelected" ResourceKey="NovaAccentText"/>
+            <StaticResource x:Key="ComboBoxItemBackgroundPointerOver" ResourceKey="ButtonBackgroundPointerOver"/>
+            <StaticResource x:Key="ComboBoxItemBackgroundSelected" ResourceKey="NovaAccentWash"/>
+            <StaticResource x:Key="ComboBoxItemBackgroundSelectedPointerOver" ResourceKey="NovaAccentWash"/>
+            <StaticResource x:Key="ComboBoxItemBackgroundSelectedUnfocused" ResourceKey="NovaAccentWash"/>
+            <StaticResource x:Key="ComboBoxItemBackgroundPressed" ResourceKey="ButtonBackgroundPressed"/>
+            <StaticResource x:Key="CalendarDatePickerBackground" ResourceKey="NovaButton"/>
+            <StaticResource x:Key="CalendarDatePickerBackgroundPointerOver" ResourceKey="ButtonBackgroundPointerOver"/>
+            <StaticResource x:Key="CalendarDatePickerBackgroundPressed" ResourceKey="ButtonBackgroundPressed"/>
+            <StaticResource x:Key="CalendarDatePickerBackgroundFocused" ResourceKey="NovaOverlay"/>
+            <StaticResource x:Key="CalendarDatePickerBorderBrush" ResourceKey="NovaBorder"/>
+            <StaticResource x:Key="CalendarDatePickerBorderBrushPointerOver" ResourceKey="NovaFieldHoverBorder"/>
+            <StaticResource x:Key="CalendarDatePickerBorderBrushPressed" ResourceKey="NovaFieldFocusBorder"/>
+            <StaticResource x:Key="CalendarDatePickerCalendarGlyphForeground" ResourceKey="NovaAccentText"/>
+            <StaticResource x:Key="CalendarDatePickerCalendarGlyphForegroundPointerOver" ResourceKey="NovaAccentText"/>
+            <StaticResource x:Key="CalendarDatePickerHeaderForeground" ResourceKey="NovaMuted"/>
+            <StaticResource x:Key="CalendarDatePickerTextForeground" ResourceKey="NovaMuted"/>
+            <StaticResource x:Key="CalendarDatePickerTextForegroundSelected" ResourceKey="NovaText"/>
+            <StaticResource x:Key="MenuFlyoutPresenterBackground" ResourceKey="NovaOverlay"/>
+            <StaticResource x:Key="MenuFlyoutPresenterBorderBrush" ResourceKey="NovaBorder"/>
+            <StaticResource x:Key="MenuFlyoutItemForeground" ResourceKey="NovaText"/>
+            <StaticResource x:Key="MenuFlyoutItemBackgroundPointerOver" ResourceKey="ButtonBackgroundPointerOver"/>
+            <StaticResource x:Key="MenuFlyoutItemBackgroundPressed" ResourceKey="ButtonBackgroundPressed"/>
+            <StaticResource x:Key="AutoSuggestBoxSuggestionsListBackground" ResourceKey="NovaOverlay"/>
+            <StaticResource x:Key="AutoSuggestBoxSuggestionsListBorderBrush" ResourceKey="NovaBorder"/>
+            <StaticResource x:Key="ContentDialogBackground" ResourceKey="NovaOverlay"/>
+            <StaticResource x:Key="ContentDialogBorderBrush" ResourceKey="NovaBorder"/>
+            <StaticResource x:Key="ContentDialogForeground" ResourceKey="NovaText"/>
+            <StaticResource x:Key="ContentDialogSeparatorBorderBrush" ResourceKey="NovaBorder"/>
+            <StaticResource x:Key="AccentButtonBackground" ResourceKey="NovaAction"/>
+            <StaticResource x:Key="AccentButtonBackgroundPointerOver" ResourceKey="NovaActionHover"/>
+            <StaticResource x:Key="AccentButtonBackgroundPressed" ResourceKey="NovaActionPressed"/>
+            <StaticResource x:Key="AccentButtonForeground" ResourceKey="NovaActionText"/>
+            <StaticResource x:Key="AccentButtonForegroundPointerOver" ResourceKey="NovaActionText"/>
+            <StaticResource x:Key="AccentButtonForegroundPressed" ResourceKey="NovaActionText"/>
+            <StaticResource x:Key="AccentButtonBorderBrush" ResourceKey="NovaAction"/>
+            <StaticResource x:Key="AccentButtonBorderBrushPointerOver" ResourceKey="NovaActionHover"/>
+            <StaticResource x:Key="AccentButtonBorderBrushPressed" ResourceKey="NovaActionPressed"/>
+            <StaticResource x:Key="ToggleSwitchFillOn" ResourceKey="NovaAction"/>
+            <StaticResource x:Key="ToggleSwitchFillOnPointerOver" ResourceKey="NovaActionHover"/>
+            <StaticResource x:Key="ToggleSwitchFillOnPressed" ResourceKey="NovaActionPressed"/>
+            <StaticResource x:Key="ToggleSwitchKnobFillOn" ResourceKey="NovaActionText"/>
+            <StaticResource x:Key="ToggleSwitchKnobFillOnPointerOver" ResourceKey="NovaActionText"/>
+            <StaticResource x:Key="ToggleSwitchKnobFillOnPressed" ResourceKey="NovaActionText"/>
+            <StaticResource x:Key="CheckBoxCheckBackgroundFillChecked" ResourceKey="NovaAction"/>
+            <StaticResource x:Key="CheckBoxCheckBackgroundFillCheckedPointerOver" ResourceKey="NovaActionHover"/>
+            <StaticResource x:Key="CheckBoxCheckBackgroundFillCheckedPressed" ResourceKey="NovaActionPressed"/>
+            <StaticResource x:Key="CheckBoxCheckBackgroundStrokeChecked" ResourceKey="NovaAction"/>
+            <StaticResource x:Key="CheckBoxCheckGlyphForegroundChecked" ResourceKey="NovaActionText"/>
+            <StaticResource x:Key="CheckBoxCheckGlyphForegroundCheckedPressed" ResourceKey="NovaActionText"/>
+            <StaticResource x:Key="CheckBoxCheckGlyphForegroundCheckedPointerOver" ResourceKey="NovaActionText"/>
+            <StaticResource x:Key="SliderThumbBackground" ResourceKey="NovaAction"/>
+            <StaticResource x:Key="SliderTrackValueFill" ResourceKey="NovaAction"/>
+            <StaticResource x:Key="SliderTrackValueFillPointerOver" ResourceKey="NovaActionHover"/>
+            <StaticResource x:Key="SliderTrackValueFillPressed" ResourceKey="NovaActionPressed"/>
+            <StaticResource x:Key="RadioButtonCheckGlyphFill" ResourceKey="NovaAction"/>
+            <StaticResource x:Key="RadioButtonCheckGlyphStrokeChecked" ResourceKey="NovaAction"/>
+        </ResourceDictionary>
+        <ResourceDictionary x:Key="HighContrast">
+            <SolidColorBrush x:Key="NovaPage" Color="{ThemeResource SystemColorWindowColor}"/>
+            <StaticResource x:Key="NovaPaper" ResourceKey="NovaPage"/>
+            <StaticResource x:Key="NovaSurface" ResourceKey="NovaPage"/>
+            <StaticResource x:Key="NovaFeature" ResourceKey="NovaPage"/>
+            <StaticResource x:Key="NovaOverlay" ResourceKey="NovaPage"/>
+            <SolidColorBrush x:Key="NovaText" Color="{ThemeResource SystemColorWindowTextColor}"/>
+            <StaticResource x:Key="NovaMuted" ResourceKey="NovaText"/>
+            <StaticResource x:Key="NovaDanger" ResourceKey="NovaText"/>
+            <StaticResource x:Key="NovaBorder" ResourceKey="NovaText"/>
+            <SolidColorBrush x:Key="NovaAccent" Color="{ThemeResource SystemColorHighlightColor}"/>
+            <StaticResource x:Key="NovaAction" ResourceKey="NovaAccent"/>
+            <StaticResource x:Key="NovaAccentWash" ResourceKey="NovaAccent"/>
+            <SolidColorBrush x:Key="NovaActionText" Color="{ThemeResource SystemColorHighlightTextColor}"/>
+            <StaticResource x:Key="NovaAccentText" ResourceKey="NovaText"/>
+            <SolidColorBrush x:Key="NovaButton" Color="{ThemeResource SystemColorButtonFaceColor}"/>
+        </ResourceDictionary>
+    </ResourceDictionary.ThemeDictionaries>
+    <FontFamily x:Key="NovaFont">Segoe UI Variable Text</FontFamily>
+    <BitmapImage x:Key="NovaLogo" UriSource="ms-appx:///Assets/Square150x150Logo.png"/>
+    <Style x:Key="NovaTitle" TargetType="TextBlock">
+        <Setter Property="CharacterSpacing" Value="-22"/>
+        <Setter Property="FontFamily" Value="{StaticResource NovaFont}" />
+        <Setter Property="Foreground" Value="{ThemeResource NovaText}" />
+        <Setter Property="FontSize" Value="36"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+    </Style>
+    <Style x:Key="NovaSubtitle" TargetType="TextBlock">
+        <Setter Property="Foreground" Value="{ThemeResource NovaMuted}"/>
+        <Setter Property="TextWrapping" Value="Wrap"/>
+    </Style>
+    <Style x:Key="NovaQuiet" TargetType="Button">
+        <Setter Property="Background" Value="{ThemeResource NovaButton}"/>
+        <Setter Property="Foreground" Value="{ThemeResource NovaText}"/>
+        <Setter Property="BorderBrush" Value="{ThemeResource NovaBorder}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="MinHeight" Value="38"/>
+        <Setter Property="Padding" Value="14,5"/>
+        <Setter Property="CornerRadius" Value="12"/>
+    </Style>
+    <Style x:Key="NovaPrimary" TargetType="Button" BasedOn="{StaticResource AccentButtonStyle}">
+        <Setter Property="MinHeight" Value="38"/>
+        <Setter Property="Padding" Value="14,5"/>
+        <Setter Property="CornerRadius" Value="12"/>
+        <Setter Property="Background" Value="{ThemeResource NovaAction}"/>
+        <Setter Property="BorderBrush" Value="{ThemeResource NovaAction}"/>
+        <Setter Property="Foreground" Value="{ThemeResource NovaActionText}"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+    </Style>
+    <Style TargetType="Button" BasedOn="{StaticResource NovaQuiet}"/>
+    <Style x:Key="NovaDangerButton" TargetType="Button" BasedOn="{StaticResource NovaQuiet}">
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="Foreground" Value="{ThemeResource NovaDanger}"/>
+        <Setter Property="BorderBrush" Value="{ThemeResource NovaDanger}"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+    </Style>
+    <Style x:Key="NovaCommand" TargetType="Button" BasedOn="{StaticResource NovaQuiet}">
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="BorderBrush" Value="Transparent"/>
+        <Setter Property="CornerRadius" Value="10"/>
+        <Setter Property="Padding" Value="12,5"/>
+    </Style>
+    <Style x:Key="NovaMetricButton" TargetType="Button" BasedOn="{StaticResource NovaQuiet}">
+        <Setter Property="Background" Value="{ThemeResource NovaSurface}"/>
+        <Setter Property="BorderBrush" Value="{ThemeResource NovaBorder}"/>
+        <Setter Property="CornerRadius" Value="14"/>
+        <Setter Property="Padding" Value="16"/>
+        <Setter Property="HorizontalAlignment" Value="Stretch"/>
+        <Setter Property="VerticalAlignment" Value="Stretch"/>
+        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+        <Setter Property="VerticalContentAlignment" Value="Top"/>
+    </Style>
+    <Style x:Key="NovaNavigation" TargetType="Button" BasedOn="{StaticResource NovaQuiet}">
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="BorderBrush" Value="Transparent"/>
+        <Setter Property="HorizontalAlignment" Value="Stretch"/>
+        <Setter Property="HorizontalContentAlignment" Value="Left"/>
+        <Setter Property="MinHeight" Value="43"/>
+        <Setter Property="CornerRadius" Value="12"/>
+    </Style>
+    <Style x:Key="NovaNavigationActive" TargetType="Button" BasedOn="{StaticResource NovaNavigation}">
+        <Setter Property="Background" Value="{ThemeResource NovaAccentWash}"/>
+        <Setter Property="BorderBrush" Value="{ThemeResource NovaBorder}"/>
+        <Setter Property="Foreground" Value="{ThemeResource NovaAccentText}"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+    </Style>
+    <Style x:Key="NovaIconTile" TargetType="Border">
+        <Setter Property="Width" Value="34"/>
+        <Setter Property="Height" Value="34"/>
+        <Setter Property="CornerRadius" Value="10"/>
+        <Setter Property="Background" Value="{ThemeResource NovaAccentWash}"/>
+        <Setter Property="BorderBrush" Value="{ThemeResource NovaBorder}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+    </Style>
+    <Style x:Key="NovaCard" TargetType="Border">
+        <Setter Property="Background" Value="{ThemeResource NovaSurface}"/>
+        <Setter Property="BorderBrush" Value="{ThemeResource NovaBorder}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="CornerRadius" Value="14"/>
+        <Setter Property="Padding" Value="16"/>
+    </Style>
+    <Style x:Key="NovaHeroCard" TargetType="Border" BasedOn="{StaticResource NovaCard}">
+        <Setter Property="Background" Value="{ThemeResource NovaFeature}"/>
+        <Setter Property="BorderBrush" Value="{ThemeResource NovaBorder}"/>
+        <Setter Property="CornerRadius" Value="16"/>
+        <Setter Property="Padding" Value="20"/>
+    </Style>
+    <Style x:Key="NovaInput" TargetType="TextBox">
+        <Setter Property="CornerRadius" Value="12"/>
+        <Setter Property="MinHeight" Value="40"/>
+        <Setter Property="Padding" Value="12,8"/>
+        <Setter Property="FontSize" Value="14"/>
+    </Style>
+    <Style TargetType="TextBox" BasedOn="{StaticResource NovaInput}"/>
+    <Style x:Key="NovaNoteField" TargetType="TextBox" BasedOn="{StaticResource NovaInput}">
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="BorderBrush" Value="Transparent"/>
+        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="CornerRadius" Value="0"/>
+        <Setter Property="Padding" Value="2,3"/>
+    </Style>
+    <Style x:Key="NovaStickyField" TargetType="TextBox" BasedOn="{StaticResource NovaNoteField}">
+        <Setter Property="Padding" Value="8,6"/>
+    </Style>
+    <Style TargetType="PasswordBox">
+        <Setter Property="CornerRadius" Value="12"/>
+        <Setter Property="MinHeight" Value="40"/>
+        <Setter Property="Padding" Value="12,8"/>
+        <Setter Property="FontSize" Value="14"/>
+    </Style>
+    <Style TargetType="HyperlinkButton">
+        <Setter Property="Foreground" Value="{ThemeResource NovaAccentText}"/>
+    </Style>
+    <Style TargetType="AutoSuggestBox">
+        <Setter Property="TextBoxStyle" Value="{StaticResource NovaInput}"/>
+    </Style>
+    <Style TargetType="ComboBox">
+        <Setter Property="CornerRadius" Value="12"/>
+        <Setter Property="MinHeight" Value="40"/>
+        <Setter Property="Padding" Value="12,7,34,7"/>
+        <Setter Property="FontSize" Value="14"/>
+        <Setter Property="IsTextSearchEnabled" Value="True"/>
+    </Style>
+    <Style x:Key="NovaCalendar" TargetType="CalendarView">
+        <Setter Property="Background" Value="{ThemeResource NovaOverlay}"/>
+        <Setter Property="Foreground" Value="{ThemeResource NovaText}"/>
+        <Setter Property="BorderBrush" Value="{ThemeResource NovaBorder}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="CornerRadius" Value="12"/>
+        <Setter Property="TodayBackground" Value="{ThemeResource NovaAccentWash}"/>
+        <Setter Property="TodayForeground" Value="{ThemeResource NovaAccentText}"/>
+        <Setter Property="TodaySelectedInnerBorderBrush" Value="{ThemeResource NovaAccent}"/>
+        <Setter Property="SelectedBorderBrush" Value="{ThemeResource NovaAccent}"/>
+        <Setter Property="SelectedHoverBorderBrush" Value="{ThemeResource NovaAccent}"/>
+        <Setter Property="SelectedForeground" Value="{ThemeResource NovaAccentText}"/>
+        <Setter Property="CalendarItemBackground" Value="{ThemeResource NovaOverlay}"/>
+        <Setter Property="CalendarItemForeground" Value="{ThemeResource NovaText}"/>
+        <Setter Property="CalendarItemHoverBackground" Value="{ThemeResource NovaAccentWash}"/>
+        <Setter Property="CalendarItemPressedBackground" Value="{ThemeResource NovaAccentWash}"/>
+        <Setter Property="OutOfScopeForeground" Value="{ThemeResource NovaMuted}"/>
+    </Style>
+    <Style TargetType="CalendarDatePicker">
+        <Setter Property="CalendarViewStyle" Value="{StaticResource NovaCalendar}"/>
+        <Setter Property="CornerRadius" Value="12"/>
+        <Setter Property="MinHeight" Value="40"/>
+        <Setter Property="Padding" Value="12,7"/>
+        <Setter Property="FontSize" Value="14"/>
+    </Style>
+    <Style TargetType="MenuFlyoutPresenter">
+        <Setter Property="CornerRadius" Value="12"/>
+        <Setter Property="Padding" Value="4"/>
+    </Style>
+    <Style TargetType="ContentDialog">
+        <Setter Property="CornerRadius" Value="16"/>
+        <Setter Property="PrimaryButtonStyle" Value="{StaticResource NovaPrimary}"/>
+        <Setter Property="SecondaryButtonStyle" Value="{StaticResource NovaQuiet}"/>
+        <Setter Property="CloseButtonStyle" Value="{StaticResource NovaQuiet}"/>
+    </Style>
+    <Style x:Key="NovaRowContainer" TargetType="ListViewItem">
+        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+        <Setter Property="Padding" Value="0"/>
+        <Setter Property="Margin" Value="0,0,0,7"/>
+        <Setter Property="CornerRadius" Value="12"/>
+    </Style>
+    <DataTemplate x:Key="NovaRow">
+        <Border Style="{StaticResource NovaCard}" Padding="15,13">
+            <Grid ColumnSpacing="14">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                <StackPanel Spacing="4">
+                    <TextBlock Text="{Binding Title}" TextTrimming="CharacterEllipsis" FontWeight="SemiBold" FontSize="15"/>
+                    <TextBlock Text="{Binding Detail}" Style="{StaticResource NovaSubtitle}" MaxLines="4" TextTrimming="CharacterEllipsis"/>
+                </StackPanel>
+                <TextBlock Grid.Column="1" Text="{Binding Tag}" Foreground="{ThemeResource NovaAccentText}"
+                           FontWeight="SemiBold" VerticalAlignment="Center" FontSize="12"/>
+            </Grid>
+        </Border>
+    </DataTemplate>
+    <DataTemplate x:Key="NovaBoardTask">
+        <Border Style="{StaticResource NovaCard}" CornerRadius="14" Padding="11,10">
+            <Grid RowSpacing="8">
+                <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                    <Ellipse Width="7" Height="7" Fill="{Binding PriorityColor}" AutomationProperties.AccessibilityView="Raw"/>
+                    <TextBlock Text="{Binding Priority}" Style="{StaticResource NovaSubtitle}" FontSize="11"/>
+                </StackPanel>
+                <TextBlock Grid.Row="1" Text="{Binding Title}" FontWeight="SemiBold" FontSize="14" TextWrapping="Wrap"
+                           MaxLines="3" TextTrimming="CharacterEllipsis"/>
+                <Grid Grid.Row="2" ColumnSpacing="6">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                    <StackPanel Spacing="4" VerticalAlignment="Center">
+                        <TextBlock Text="{Binding Due}" Style="{StaticResource NovaSubtitle}" FontSize="11" MaxLines="1" TextTrimming="CharacterEllipsis"/>
+                        <StackPanel Orientation="Horizontal" Spacing="4" ToolTipService.ToolTip="Completed subtasks">
+                            <FontIcon Glyph="&#xE9D5;" FontSize="10" Foreground="{ThemeResource NovaMuted}"/>
+                            <TextBlock Text="{Binding Checklist}" Style="{StaticResource NovaSubtitle}" FontSize="11"/>
+                        </StackPanel>
+                    </StackPanel>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Orientation="Horizontal" Spacing="3">
+                        <ItemsControl ItemsSource="{Binding People}">
+                            <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Orientation="Horizontal" Spacing="3"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate><DataTemplate>
+                                <PersonPicture DisplayName="{Binding Name}" ProfilePicture="{Binding Avatar}"
+                                               Width="23" Height="23" ToolTipService.ToolTip="{Binding Name}"/>
+                            </DataTemplate></ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <TextBlock Text="{Binding MorePeople}" Visibility="{Binding MorePeopleVisibility}" VerticalAlignment="Center"
+                                   Foreground="{ThemeResource NovaMuted}" FontSize="11"/>
+                    </StackPanel>
+                </Grid>
+            </Grid>
+        </Border>
+    </DataTemplate>
+    <DataTemplate x:Key="NovaListGroup">
+        <TextBlock Text="{Binding Name}" Foreground="{ThemeResource NovaMuted}" FontSize="13" FontWeight="SemiBold" Margin="4,9,4,8"/>
+    </DataTemplate>
+    <DataTemplate x:Key="NovaGanttRow">
+        <Border Style="{StaticResource NovaCard}" Padding="12">
+            <Grid ColumnSpacing="12">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="195"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                <StackPanel><TextBlock Text="{Binding Title}" TextTrimming="CharacterEllipsis"/><TextBlock Text="{Binding Dates}" Style="{StaticResource NovaSubtitle}" FontSize="11"/></StackPanel>
+                <controls:GanttTrack Grid.Column="1"/>
+            </Grid>
+        </Border>
+    </DataTemplate>
+</ResourceDictionary>

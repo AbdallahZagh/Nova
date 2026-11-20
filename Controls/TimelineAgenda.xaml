@@ -1,0 +1,32 @@
+<UserControl x:Class="NovaTaskflow.Controls.TimelineAgenda"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <ListView x:Name="Entries" SelectionMode="None" IsItemClickEnabled="True" ItemClick="OpenItem"
+              ItemContainerStyle="{StaticResource NovaRowContainer}" HorizontalContentAlignment="Stretch"
+              AutomationProperties.Name="Timeline agenda">
+        <ListView.GroupStyle>
+            <GroupStyle HeaderTemplate="{StaticResource NovaListGroup}"/>
+        </ListView.GroupStyle>
+        <ListView.ItemTemplate>
+            <DataTemplate>
+                <Border Style="{StaticResource NovaCard}" Padding="12,9" Margin="0,2,0,5">
+                    <Grid ColumnSpacing="10">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                        <Border Style="{StaticResource NovaIconTile}" VerticalAlignment="Center" Visibility="{Binding IconVisibility}">
+                            <FontIcon Glyph="{Binding Glyph}" Foreground="{Binding Tone}" FontSize="16"/>
+                        </Border>
+                        <StackPanel Grid.Column="1" Spacing="4" VerticalAlignment="Center">
+                            <TextBlock Text="{Binding Title}" FontWeight="SemiBold" MaxLines="2" TextWrapping="Wrap" TextTrimming="CharacterEllipsis"/>
+                            <TextBlock Text="{Binding Detail}" Style="{StaticResource NovaSubtitle}" Visibility="{Binding DetailVisibility}"
+                                       FontSize="12" MaxLines="1" TextTrimming="CharacterEllipsis"/>
+                        </StackPanel>
+                        <Border Grid.Column="2" Padding="7,4" CornerRadius="9" Background="{ThemeResource NovaButton}"
+                                VerticalAlignment="Center" Visibility="{Binding IconVisibility}">
+                            <TextBlock Text="{Binding Status}" FontSize="11" FontWeight="SemiBold" Foreground="{Binding Tone}"/>
+                        </Border>
+                    </Grid>
+                </Border>
+            </DataTemplate>
+        </ListView.ItemTemplate>
+    </ListView>
+</UserControl>

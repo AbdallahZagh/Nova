@@ -1,0 +1,50 @@
+<UserControl x:Class="NovaTaskflow.Controls.StickyPicker"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Grid Padding="15,13,15,12" RowSpacing="10">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+        <AutoSuggestBox x:Name="Query" PlaceholderText="Find a note" QueryIcon="Find"
+                        AutomationProperties.Name="Find a sticky note"/>
+        <Grid Grid.Row="1" ColumnSpacing="8">
+            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+            <ComboBox x:Name="Filter" HorizontalAlignment="Stretch" SelectedIndex="0" AutomationProperties.Name="Sticky filter">
+                <x:String>All notes</x:String><x:String>Open on desktop</x:String><x:String>Pinned</x:String>
+            </ComboBox>
+            <Button x:Name="VisibilityButton" Grid.Column="1" Content="Hide all" Style="{StaticResource NovaQuiet}"/>
+        </Grid>
+        <Grid Grid.Row="2">
+            <ListView x:Name="Results" SelectionMode="None" IsItemClickEnabled="True" HorizontalContentAlignment="Stretch">
+                <ListView.ItemContainerStyle>
+                    <Style TargetType="ListViewItem">
+                        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                        <Setter Property="Padding" Value="0"/>
+                        <Setter Property="Margin" Value="0,0,0,5"/>
+                    </Style>
+                </ListView.ItemContainerStyle>
+                <ListView.ItemTemplate>
+                    <DataTemplate>
+                        <Grid ColumnSpacing="10" MinHeight="51" Padding="11,6"
+                              CornerRadius="10" Background="{ThemeResource NovaButton}"
+                              BorderBrush="{ThemeResource NovaBorder}" BorderThickness="1">
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                            <Border Width="9" Height="9" CornerRadius="4.5" Background="{Binding Color}" VerticalAlignment="Center"/>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="3">
+                                <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                                <TextBlock Text="{Binding Detail}" Style="{StaticResource NovaSubtitle}" MaxLines="1" TextTrimming="CharacterEllipsis" FontSize="11"/>
+                            </StackPanel>
+                            <TextBlock Grid.Column="2" Text="{Binding Badge}" Foreground="{ThemeResource NovaAccentText}" VerticalAlignment="Center" FontSize="11"/>
+                        </Grid>
+                    </DataTemplate>
+                </ListView.ItemTemplate>
+            </ListView>
+            <TextBlock x:Name="EmptyState" Style="{StaticResource NovaSubtitle}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+        </Grid>
+        <Grid Grid.Row="3" ColumnSpacing="12" BorderThickness="0,1,0,0" BorderBrush="{ThemeResource NovaBorder}" Padding="0,10,0,0">
+            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+            <Button x:Name="NewButton" Content="New sticky" Style="{StaticResource NovaPrimary}" HorizontalAlignment="Stretch"/>
+            <TextBlock x:Name="OpenCount" Grid.Column="1" TextAlignment="Right" Style="{StaticResource NovaSubtitle}" VerticalAlignment="Center" FontSize="11"/>
+        </Grid>
+    </Grid>
+</UserControl>

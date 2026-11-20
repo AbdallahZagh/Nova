@@ -1,0 +1,49 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.19041.0</TargetPlatformMinVersion>
+    <RootNamespace>NovaTaskflow</RootNamespace>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets/Nova.ico</ApplicationIcon>
+    <Platforms>x64;ARM64</Platforms>
+    <Platform Condition="'$(Platform)' == 'AnyCPU'">x64</Platform>
+    <RuntimeIdentifier Condition="'$(Platform)' == 'ARM64'">win-arm64</RuntimeIdentifier>
+    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == ''">win-x64</RuntimeIdentifier>
+    <UseWinUI>true</UseWinUI>
+    <EnableMsixTooling>true</EnableMsixTooling>
+    <WindowsPackageType Condition="'$(PublishProfile)' != 'NovaMsix'">None</WindowsPackageType>
+    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <Version>1.6.10</Version>
+    <DefineConstants>$(DefineConstants);DISABLE_XAML_GENERATED_MAIN</DefineConstants>
+    <DefaultItemExcludes>$(DefaultItemExcludes);dist/**;AppPackages/**;TestResults/**</DefaultItemExcludes>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.8.260921001" />
+    <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.26100.4654" />
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+    <FrameworkReference Include="Microsoft.WindowsDesktop.App" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Remove="tests/**/*.cs" />
+    <Content Include="Assets/**/*" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <AssemblyMetadata Include="NovaWindowsPushAppId" Value="$(NovaWindowsPushAppId)" Condition="'$(NovaWindowsPushAppId)' != ''" />
+  </ItemGroup>
+  <Target Name="AddWindowsPushManifest" BeforeTargets="_CalculateInputsForGenerateCurrentProjectAppxManifest"
+          Condition="'$(NovaWindowsPushAppId)' != ''">
+    <PropertyGroup>
+      <_NovaPushManifest>$(IntermediateOutputPath)WindowsPush\Package.appxmanifest</_NovaPushManifest>
+      <_NovaPushId>$([System.Guid]::Parse('$(NovaWindowsPushAppId)').ToString('D'))</_NovaPushId>
+    </PropertyGroup>
+    <MakeDir Directories="$(IntermediateOutputPath)WindowsPush" />
+    <XslTransformation XslInputPath="Properties\WindowsPushManifest.xslt"
+                       XmlInputPaths="Package.appxmanifest" OutputPaths="$(_NovaPushManifest)"
+                       Parameters="&lt;Parameter Name='appId' Value='$(_NovaPushId)' /&gt;" />
+    <ItemGroup>
+      <AppxManifest Remove="@(AppxManifest)" />
+      <AppxManifest Include="$(_NovaPushManifest)" />
+    </ItemGroup>
+  </Target>
+</Project>

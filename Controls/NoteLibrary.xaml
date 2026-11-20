@@ -1,0 +1,76 @@
+<UserControl x:Class="NovaTaskflow.Controls.NoteLibrary"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Grid>
+        <GridView x:Name="Cards" IsItemClickEnabled="True" SelectionMode="None"
+                  HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch" ItemClick="OnItemClick">
+            <GridView.GroupStyle>
+                <GroupStyle HidesIfEmpty="True">
+                    <GroupStyle.HeaderTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding Title}" FontSize="17" FontWeight="SemiBold" Margin="0,4,0,10"/>
+                        </DataTemplate>
+                    </GroupStyle.HeaderTemplate>
+                </GroupStyle>
+            </GridView.GroupStyle>
+            <GridView.ItemsPanel>
+                <ItemsPanelTemplate><ItemsWrapGrid Orientation="Horizontal" ItemWidth="244" ItemHeight="205"/></ItemsPanelTemplate>
+            </GridView.ItemsPanel>
+            <GridView.ItemContainerStyle>
+                <Style TargetType="GridViewItem">
+                    <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                    <Setter Property="VerticalContentAlignment" Value="Stretch"/>
+                    <Setter Property="Padding" Value="0"/>
+                </Style>
+            </GridView.ItemContainerStyle>
+            <GridView.ItemTemplate>
+                <DataTemplate>
+                    <Border Margin="0,0,10,10" CornerRadius="17" Background="{Binding Surface}"
+                            BorderThickness="1" BorderBrush="{Binding Outline}">
+                        <Grid Padding="13,8,10,10" RowSpacing="7">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+                            <Grid ColumnSpacing="7">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                <TextBlock Text="{Binding Title}" FontSize="16" FontWeight="SemiBold"
+                                           TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
+                                <Button Grid.Column="1" Click="StickyClick" Style="{StaticResource NovaCommand}" MinWidth="28" MinHeight="29"
+                                        Padding="5" AutomationProperties.Name="Open as sticky" ToolTipService.ToolTip="Open as sticky">
+                                    <FontIcon Glyph="&#xE7F4;" FontSize="13"/>
+                                </Button>
+                                <Button Grid.Column="2" Click="OptionsClick" Style="{StaticResource NovaCommand}" MinWidth="29" MinHeight="29"
+                                        Padding="3" CornerRadius="7" AutomationProperties.Name="Note options" ToolTipService.ToolTip="Note options">
+                                    <FontIcon Glyph="&#xE712;" FontSize="14"/>
+                                </Button>
+                            </Grid>
+                            <StackPanel Grid.Row="1" Spacing="5">
+                                <TextBlock Text="{Binding Preview}" Style="{StaticResource NovaSubtitle}" MaxLines="2" TextTrimming="CharacterEllipsis"/>
+                                <ItemsControl ItemsSource="{Binding Checks}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <CheckBox IsChecked="{Binding Checked}" Click="ChecklistClicked"
+                                                      MinHeight="23" Padding="5,0,0,0" FontSize="12">
+                                                <TextBlock Text="{Binding Title}" TextTrimming="CharacterEllipsis" MaxLines="1"/>
+                                            </CheckBox>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                            <Grid Grid.Row="2" ColumnSpacing="7">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                <TextBlock Text="{Binding Project}" TextTrimming="CharacterEllipsis" Style="{StaticResource NovaSubtitle}" FontSize="11"/>
+                                <TextBlock Grid.Column="1" Text="{Binding Status}" Foreground="{ThemeResource NovaAccentText}"
+                                           FontSize="10" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
+                                    <TextBlock Text="{Binding ChecklistCount}" Style="{StaticResource NovaSubtitle}" FontSize="11"/>
+                                    <TextBlock Text="{Binding Edited}" Style="{StaticResource NovaSubtitle}" FontSize="11"/>
+                                </StackPanel>
+                            </Grid>
+                        </Grid>
+                    </Border>
+                </DataTemplate>
+            </GridView.ItemTemplate>
+        </GridView>
+    </Grid>
+</UserControl>

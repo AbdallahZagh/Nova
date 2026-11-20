@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Package xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+         xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+         xmlns:desktop="http://schemas.microsoft.com/appx/manifest/desktop/windows10"
+         xmlns:uap3="http://schemas.microsoft.com/appx/manifest/uap/windows10/3"
+         xmlns:com="http://schemas.microsoft.com/appx/manifest/com/windows10"
+         xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+         IgnorableNamespaces="uap uap3 desktop rescap com">
+  <Identity Name="NovaTaskflow" Publisher="CN=Nova Taskflow" Version="1.6.10.0" />
+  <Properties>
+    <DisplayName>Nova Taskflow</DisplayName>
+    <PublisherDisplayName>Nova Taskflow</PublisherDisplayName>
+    <Logo>Assets\StoreLogo.png</Logo>
+  </Properties>
+  <Dependencies>
+    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.19041.0" MaxVersionTested="10.0.26100.0"/>
+  </Dependencies>
+  <Resources><Resource Language="en-US"/></Resources>
+  <Applications>
+    <Application Id="NovaTaskflow" Executable="$targetnametoken$.exe" EntryPoint="$targetentrypoint$">
+      <uap:VisualElements DisplayName="Nova Taskflow" Description="Nova Taskflow"
+          BackgroundColor="transparent" Square44x44Logo="Assets\Square44x44Logo.png"
+          Square150x150Logo="Assets\Square150x150Logo.png"/>
+      <Extensions>
+        <uap:Extension Category="windows.protocol">
+          <uap:Protocol Name="nova-taskflow">
+            <uap:DisplayName>Nova Taskflow</uap:DisplayName>
+          </uap:Protocol>
+        </uap:Extension>
+        <uap3:Extension Category="windows.appExecutionAlias" Executable="NovaTaskflow.exe" EntryPoint="Windows.FullTrustApplication">
+          <uap3:AppExecutionAlias>
+            <desktop:ExecutionAlias Alias="NovaTaskflowNotifications.exe" />
+          </uap3:AppExecutionAlias>
+        </uap3:Extension>
+        <desktop:Extension Category="windows.startupTask" Executable="NovaTaskflow.exe" EntryPoint="Windows.FullTrustApplication">
+          <desktop:StartupTask TaskId="NovaTaskflowStartup" Enabled="true" DisplayName="Nova Taskflow"/>
+        </desktop:Extension>
+        <desktop:Extension Category="windows.toastNotificationActivation">
+          <desktop:ToastNotificationActivation ToastActivatorCLSID="296F6CB3-014D-45A8-8513-48BEC03376AE" />
+        </desktop:Extension>
+        <com:Extension Category="windows.comServer">
+          <com:ComServer>
+            <com:ExeServer Executable="NovaTaskflow.exe" DisplayName="Nova Taskflow" Arguments="----AppNotificationActivated:">
+              <com:Class Id="296F6CB3-014D-45A8-8513-48BEC03376AE" />
+            </com:ExeServer>
+          </com:ComServer>
+        </com:Extension>
+      </Extensions>
+    </Application>
+  </Applications>
+  <Capabilities><Capability Name="internetClient"/><rescap:Capability Name="runFullTrust"/></Capabilities>
+</Package>

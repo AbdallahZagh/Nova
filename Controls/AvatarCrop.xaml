@@ -1,0 +1,16 @@
+<UserControl x:Class="NovaTaskflow.Controls.AvatarCrop"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <StackPanel Spacing="13" MinWidth="275">
+        <Grid Width="248" Height="248" HorizontalAlignment="Center">
+            <Canvas x:Name="Preview" Width="248" Height="248">
+                <Canvas.Clip><RectangleGeometry Rect="0,0,248,248"/></Canvas.Clip>
+                <Image x:Name="Photo" Stretch="Fill"/>
+            </Canvas>
+            <Ellipse Stroke="White" Opacity="0.85" StrokeThickness="1" IsHitTestVisible="False"/>
+        </Grid>
+        <Slider x:Name="Zoom" Header="Zoom" Minimum="1" Maximum="4" Value="1" StepFrequency="0.05"/>
+        <Slider x:Name="Horizontal" Header="Horizontal position" Minimum="0" Maximum="100" Value="50"/>
+        <Slider x:Name="Vertical" Header="Vertical position" Minimum="0" Maximum="100" Value="50"/>
+    </StackPanel>
+</UserControl>

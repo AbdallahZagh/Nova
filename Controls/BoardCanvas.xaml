@@ -1,0 +1,12 @@
+<UserControl x:Class="NovaTaskflow.Controls.BoardCanvas"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <ScrollViewer x:Name="Viewport" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto"
+                  ZoomMode="Enabled" MinZoomFactor="0.16" MaxZoomFactor="4"
+                  HorizontalScrollMode="Enabled" VerticalScrollMode="Enabled">
+        <Grid>
+            <Canvas x:Name="Paper" Background="{ThemeResource NovaPaper}" Width="1600" Height="1000" IsTabStop="True"/>
+            <Canvas x:Name="PeerLayer" IsHitTestVisible="False"/>
+        </Grid>
+    </ScrollViewer>
+</UserControl>

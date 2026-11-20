@@ -1,0 +1,58 @@
+<UserControl
+    x:Class="NovaTaskflow.Controls.AuthView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Grid SizeChanged="LayoutChanged">
+        <Button x:Name="Theme" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="24" Style="{StaticResource NovaQuiet}"
+                AutomationProperties.Name="Theme">
+            <FontIcon x:Name="ThemeGlyph" Glyph="&#xE706;" FontSize="16"/>
+        </Button>
+        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" VerticalAlignment="Center">
+            <Border MaxWidth="830" Margin="28" HorizontalAlignment="Center" Padding="0" Style="{StaticResource NovaCard}" CornerRadius="26">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition x:Name="BrandColumn" Width="330"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <Border x:Name="BrandPanel" Background="{ThemeResource NovaFeature}" BorderBrush="{ThemeResource NovaBorder}"
+                            BorderThickness="0,0,1,0" CornerRadius="26,0,0,26">
+                        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="11" Padding="26">
+                            <Border Width="160" Height="160" CornerRadius="42" Background="{ThemeResource NovaPaper}"
+                                    BorderBrush="{ThemeResource NovaBorder}" BorderThickness="1">
+                                <Image Source="{StaticResource NovaLogo}" Width="139" Height="139"/>
+                            </Border>
+                            <TextBlock Text="Nova" FontSize="37" FontWeight="SemiBold" HorizontalAlignment="Center"
+                                       Foreground="{ThemeResource NovaText}"/>
+                            <TextBlock Text="TASKFLOW" CharacterSpacing="260" FontSize="11" FontWeight="SemiBold"
+                                       HorizontalAlignment="Center" Foreground="{ThemeResource NovaAccentText}"/>
+                        </StackPanel>
+                    </Border>
+                    <Border Grid.Column="1" Width="420" Padding="30">
+                <StackPanel Spacing="18">
+                    <StackPanel Spacing="6">
+                        <Image x:Name="CompactLogo" Source="{StaticResource NovaLogo}" Width="49" Height="49"
+                               HorizontalAlignment="Left" Visibility="Collapsed"/>
+                        <TextBlock Text="Sign in to Nova" Style="{StaticResource NovaTitle}"/>
+                    </StackPanel>
+                    <StackPanel x:Name="Fields" Spacing="12">
+                        <TextBox x:Name="Identifier" Header="Email or username" PlaceholderText="you@company.com or @username"/>
+                        <PasswordBox x:Name="Password" Header="Password" PasswordRevealMode="Peek"/>
+                        <HyperlinkButton x:Name="Forgot" Content="Forgot password?" Padding="0"/>
+                        <HyperlinkButton x:Name="Restore" Content="Reactivate your account" Padding="0"/>
+                    </StackPanel>
+                    <TextBlock x:Name="Error" Foreground="{ThemeResource NovaDanger}" TextWrapping="Wrap" Visibility="Collapsed"/>
+                    <StackPanel x:Name="Buttons" Spacing="10">
+                        <Button x:Name="Submit" Content="Sign in" Style="{StaticResource NovaPrimary}" HorizontalAlignment="Stretch"/>
+                        <Button x:Name="Demo" Content="Try demo" Style="{StaticResource NovaQuiet}" HorizontalAlignment="Stretch"/>
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="3">
+                            <TextBlock Text="Don’t have an account?" VerticalAlignment="Center" Foreground="{ThemeResource NovaMuted}"/>
+                            <HyperlinkButton x:Name="CreateAccount" Content="Create one"/>
+                        </StackPanel>
+                    </StackPanel>
+                </StackPanel>
+                    </Border>
+                </Grid>
+            </Border>
+        </ScrollViewer>
+    </Grid>
+</UserControl>

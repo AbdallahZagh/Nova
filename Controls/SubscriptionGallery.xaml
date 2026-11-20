@@ -1,0 +1,63 @@
+<UserControl x:Class="NovaTaskflow.Controls.SubscriptionGallery"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <GridView x:Name="Cards" IsItemClickEnabled="True" SelectionMode="None" ItemClick="OpenCard"
+              HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch">
+        <GridView.GroupStyle>
+            <GroupStyle HidesIfEmpty="True" HeaderTemplate="{StaticResource NovaListGroup}"/>
+        </GridView.GroupStyle>
+        <GridView.ItemsPanel>
+            <ItemsPanelTemplate><ItemsWrapGrid Orientation="Horizontal" ItemWidth="315" ItemHeight="253"/></ItemsPanelTemplate>
+        </GridView.ItemsPanel>
+        <GridView.ItemContainerStyle>
+            <Style TargetType="GridViewItem">
+                <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                <Setter Property="VerticalContentAlignment" Value="Stretch"/>
+                <Setter Property="Padding" Value="0"/>
+            </Style>
+        </GridView.ItemContainerStyle>
+        <GridView.ItemTemplate>
+            <DataTemplate>
+                <Border Style="{StaticResource NovaCard}" BorderBrush="{Binding Outline}" Margin="0,0,12,12" Padding="15">
+                    <Grid RowSpacing="10">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <Grid ColumnSpacing="9">
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                            <Border Style="{StaticResource NovaIconTile}" VerticalAlignment="Top">
+                                <TextBlock Text="{Binding Initials}" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                           FontWeight="SemiBold" FontSize="12" Foreground="{ThemeResource NovaAccentText}"/>
+                            </Border>
+                            <StackPanel Grid.Column="1" Spacing="3" VerticalAlignment="Center">
+                                <TextBlock Text="{Binding Name}" FontSize="16" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                                <TextBlock Text="{Binding Plan}" Visibility="{Binding PlanVisibility}" Style="{StaticResource NovaSubtitle}"
+                                           TextTrimming="CharacterEllipsis" MaxLines="1" FontSize="12"/>
+                            </StackPanel>
+                            <Border Grid.Column="2" Padding="8,4" Background="{ThemeResource NovaButton}" CornerRadius="9" VerticalAlignment="Top">
+                                <TextBlock Text="{Binding Status}" FontSize="11" FontWeight="SemiBold" Foreground="{Binding TimingBrush}"/>
+                            </Border>
+                        </Grid>
+                        <StackPanel Grid.Row="1" Spacing="2" VerticalAlignment="Center">
+                            <TextBlock Text="{Binding Price}" FontSize="27" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                            <TextBlock Text="{Binding Cycle}" Style="{StaticResource NovaSubtitle}" FontSize="12"/>
+                            <TextBlock Text="{Binding PreviousPrice}" Style="{StaticResource NovaSubtitle}" FontSize="11"
+                                       Visibility="{Binding PreviousPriceVisibility}" MaxLines="1" TextTrimming="CharacterEllipsis"/>
+                        </StackPanel>
+                        <StackPanel Grid.Row="2" Spacing="6">
+                            <Border Height="1" Background="{ThemeResource NovaBorder}"/>
+                            <TextBlock Text="{Binding Timing}" Foreground="{Binding TimingBrush}" FontWeight="SemiBold" FontSize="13"/>
+                            <TextBlock Text="{Binding Dates}" Style="{StaticResource NovaSubtitle}" FontSize="11" MaxLines="2"/>
+                        </StackPanel>
+                        <StackPanel Grid.Row="3" Orientation="Horizontal" Spacing="6" Visibility="{Binding ControlsVisibility}">
+                            <Button Content="Mark renewed" Visibility="{Binding RenewVisibility}" Click="RenewCard"
+                                    Style="{StaticResource NovaQuiet}" MinHeight="29" FontSize="12" Padding="9,3"/>
+                            <Button Content="{Binding StatusAction}" Click="ChangeCardStatus" Style="{StaticResource NovaQuiet}"
+                                    MinHeight="29" FontSize="12" Padding="9,3"/>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+            </DataTemplate>
+        </GridView.ItemTemplate>
+    </GridView>
+</UserControl>

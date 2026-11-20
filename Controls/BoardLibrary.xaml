@@ -1,0 +1,44 @@
+<UserControl x:Class="NovaTaskflow.Controls.BoardLibrary"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <GridView x:Name="Cards" IsItemClickEnabled="True" SelectionMode="None" ItemClick="OnItemClick"
+              HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch">
+        <GridView.ItemsPanel>
+            <ItemsPanelTemplate><ItemsWrapGrid Orientation="Horizontal" ItemWidth="252" ItemHeight="220"/></ItemsPanelTemplate>
+        </GridView.ItemsPanel>
+        <GridView.ItemContainerStyle>
+            <Style TargetType="GridViewItem">
+                <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                <Setter Property="VerticalContentAlignment" Value="Stretch"/>
+                <Setter Property="Padding" Value="0"/>
+            </Style>
+        </GridView.ItemContainerStyle>
+        <GridView.ItemTemplate>
+            <DataTemplate>
+                <Border Margin="0,0,10,10" Padding="0" Style="{StaticResource NovaCard}">
+                    <Grid>
+                        <Grid.RowDefinitions><RowDefinition Height="132"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+                        <Border Background="{ThemeResource NovaAccentWash}" CornerRadius="17,17,0,0">
+                            <Grid>
+                                <FontIcon Glyph="&#xE70F;" Foreground="{ThemeResource NovaAccentText}" FontSize="29"/>
+                                <Image Source="{Binding Preview}" Stretch="UniformToFill" AutomationProperties.AccessibilityView="Raw"/>
+                            </Grid>
+                        </Border>
+                        <Grid Grid.Row="1" Padding="12,8" ColumnSpacing="6">
+                            <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                            <StackPanel Spacing="4" VerticalAlignment="Center">
+                                <TextBlock Text="{Binding Title}" FontSize="16" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                                <TextBlock Text="{Binding Detail}" Style="{StaticResource NovaSubtitle}" MaxLines="2" FontSize="12"
+                                           TextTrimming="CharacterEllipsis"/>
+                            </StackPanel>
+                            <Button Grid.Column="1" Click="OptionsClick" Style="{StaticResource NovaQuiet}" Padding="6,3"
+                                    AutomationProperties.Name="Board options" ToolTipService.ToolTip="Board options">
+                                <FontIcon Glyph="&#xE712;" FontSize="14"/>
+                            </Button>
+                        </Grid>
+                    </Grid>
+                </Border>
+            </DataTemplate>
+        </GridView.ItemTemplate>
+    </GridView>
+</UserControl>
