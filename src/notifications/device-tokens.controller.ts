@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   HttpStatus,
@@ -22,6 +23,7 @@ import { ListNotificationsQueryDto } from './dto/list-notifications-query.dto';
 import { MarkNotificationsReadDto } from './dto/mark-notifications-read.dto';
 import { SaveDeviceTokenDto } from './dto/save-device-token.dto';
 import { NotificationsService } from './notifications.service';
+import { WindowsChannelDto } from './dto/windows-channel.dto';
 
 @ApiTags('Notifications')
 @ApiBearerAuth('access-token')
@@ -41,6 +43,34 @@ export class DeviceTokensController {
     @Body() dto: SaveDeviceTokenDto,
   ) {
     return this.notificationsService.saveDeviceToken(userId, dto);
+  }
+
+  @Get('windows')
+  windowsConfiguration() {
+    return this.notificationsService.windowsConfiguration();
+  }
+
+  @Post('windows')
+  @HttpCode(HttpStatus.OK)
+  @DenyDemo()
+  registerWindowsChannel(
+    @CurrentUser('id') userId: string,
+    @Body() dto: WindowsChannelDto,
+  ) {
+    return this.notificationsService.registerWindowsChannel(
+      userId,
+      dto.channel,
+      dto.previousChannel,
+    );
+  }
+
+  @Delete('windows')
+  @DenyDemo()
+  removeWindowsChannel(
+    @CurrentUser('id') userId: string,
+    @Body() dto: WindowsChannelDto,
+  ) {
+    return this.notificationsService.removeWindowsChannel(userId, dto.channel);
   }
 
   @Get('notifications')

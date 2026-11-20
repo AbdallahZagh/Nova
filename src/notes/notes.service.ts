@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -84,34 +85,52 @@ export class NotesService {
     return this.toResponse(await this.findOwned(userId, id));
   }
 
-  async create(userId: string, dto: WriteNoteDto) {
+  async create(userId: string, dto: WriteNoteDto, id?: string) {
+    if (id) {
+      const existing = await this.prisma.note.findUnique({ where: { id }, include: noteInclude });
+      if (existing) {
+        if (existing.userId !== userId) throw new ConflictException('The note ID is already in use.');
+        return this.toResponse(existing);
+      }
+    }
     const checklist = this.checklistOrEmpty(dto.checklist);
     const title = this.cleanTitle(dto.title);
-    const body = dto.body?.trim() ?? '';
+    const body = dto.body ?? '';
     if (noteIsEmpty({ title, body, checklist })) {
       throw new BadRequestException('Write a title, some text, or a checklist item.');
     }
     if (dto.projectId) await this.assertProjectAccess(userId, dto.projectId);
     const floating = Boolean(dto.floating);
-    if (floating) await this.capFloating(userId);
-    const created = await this.prisma.note.create({
-      data: {
-        userId,
-        title,
-        body,
-        checklist: checklist as unknown as Prisma.InputJsonValue,
-        color: dto.color ?? 'AMBER',
-        pinned: Boolean(dto.pinned),
-        floating,
-        posX: dto.posX ?? null,
-        posY: dto.posY ?? null,
-        width: dto.width ?? null,
-        height: dto.height ?? null,
-        projectId: dto.projectId ?? null,
-      },
-      include: noteInclude,
-    });
-    const note = this.toResponse(created as NoteRow);
+    let created: NoteRow;
+    try {
+      created = await this.prisma.note.create({
+        data: {
+          ...(id ? { id } : {}),
+          userId,
+          title,
+          body,
+          checklist,
+          color: dto.color ?? 'AMBER',
+          pinned: Boolean(dto.pinned),
+          floating,
+          posX: dto.posX ?? null,
+          posY: dto.posY ?? null,
+          width: dto.width ?? null,
+          height: dto.height ?? null,
+          projectId: dto.projectId ?? null,
+        },
+        include: noteInclude,
+      });
+    } catch (error) {
+      if (!id || !(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== 'P2002') {
+        throw error;
+      }
+      const existing = await this.prisma.note.findUnique({ where: { id }, include: noteInclude });
+      if (!existing || existing.userId !== userId) throw new ConflictException('The note ID is already in use.');
+      return this.toResponse(existing);
+    }
+    if (floating) await this.capFloating(userId, created.id);
+    const note = this.toResponse(created);
     this.realtime.publish(userId, { kind: 'saved', note });
     return note;
   }
@@ -123,7 +142,7 @@ export class NotesService {
         ? this.readChecklist(existing.checklist)
         : this.checklistOrThrow(dto.checklist);
     const title = dto.title === undefined ? existing.title : this.cleanTitle(dto.title);
-    const body = dto.body === undefined ? existing.body : dto.body.trim();
+    const body = dto.body === undefined ? existing.body : (dto.body ?? '');
     if (noteIsEmpty({ title, body, checklist })) {
       throw new BadRequestException('Write a title, some text, or a checklist item.');
     }
@@ -132,9 +151,9 @@ export class NotesService {
     const updated = await this.prisma.note.update({
       where: { id: existing.id },
       data: {
-        title,
-        body,
-        checklist: checklist as unknown as Prisma.InputJsonValue,
+        ...(dto.title !== undefined ? { title } : {}),
+        ...(dto.body !== undefined ? { body } : {}),
+        ...(dto.checklist !== undefined ? { checklist } : {}),
         ...(dto.color !== undefined ? { color: dto.color } : {}),
         ...(dto.pinned !== undefined ? { pinned: dto.pinned } : {}),
         ...(dto.floating !== undefined ? { floating: dto.floating } : {}),
@@ -215,8 +234,7 @@ export class NotesService {
   }
 
   private cleanTitle(value: string | null | undefined) {
-    const trimmed = value?.trim() ?? '';
-    return trimmed ? trimmed.slice(0, 160) : null;
+    return value?.trim() ? value : null;
   }
 
   private toResponse(row: NoteRow) {

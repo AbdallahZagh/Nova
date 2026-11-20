@@ -7,6 +7,7 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Put,
   Query,
   UseGuards,
 } from '@nestjs/common';
@@ -50,6 +51,16 @@ export class NotesController {
   @ApiOperation({ summary: 'Create a note' })
   create(@CurrentUser('id') userId: string, @Body() dto: WriteNoteDto) {
     return this.notes.create(userId, dto);
+  }
+
+  @Put(':id')
+  @ApiOperation({ summary: 'Create a note once with a client-supplied ID' })
+  createOnce(
+    @CurrentUser('id') userId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: WriteNoteDto,
+  ) {
+    return this.notes.create(userId, dto, id);
   }
 
   @Patch(':id')

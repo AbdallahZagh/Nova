@@ -838,7 +838,7 @@ model Note {
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   projectId String?
   project   Project?  @relation(fields: [projectId], references: [id], onDelete: SetNull)
-  title     String?   @db.VarChar(160)
+  title     String?   @db.Text
   body      String    @default("")
   checklist Json      @default("[]")
   color     NoteColor @default(SLATE)

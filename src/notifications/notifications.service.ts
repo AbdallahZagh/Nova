@@ -1,9 +1,21 @@
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  OnModuleInit,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { cert, getApps, initializeApp } from 'firebase-admin/app';
 import { getMessaging } from 'firebase-admin/messaging';
 import { PrismaService } from '../prisma/prisma.service';
 import { SystemSettingsService } from '../system/system-settings.service';
 import { SaveDeviceTokenDto } from './dto/save-device-token.dto';
+import {
+  windowsChannel,
+  WindowsPushService,
+  WNS_PLATFORM,
+  WNS_TOKEN_PREFIX,
+} from './windows-push.service';
 
 const INVALID_FCM_TOKEN_CODES = new Set([
   'messaging/invalid-registration-token',
@@ -18,6 +30,7 @@ export class NotificationsService implements OnModuleInit {
   constructor(
     private readonly prisma: PrismaService,
     private readonly settings: SystemSettingsService,
+    private readonly windowsPush: WindowsPushService,
   ) {}
 
   onModuleInit() {
@@ -26,6 +39,9 @@ export class NotificationsService implements OnModuleInit {
 
   async saveDeviceToken(userId: string, dto: SaveDeviceTokenDto) {
     const token = dto.token.trim();
+    if (token.startsWith(WNS_TOKEN_PREFIX) || dto.platform === WNS_PLATFORM) {
+      throw new BadRequestException('Use the Windows channel endpoint.');
+    }
 
     const deviceToken = await (this.prisma as any).userDeviceToken.upsert({
       where: { token },
@@ -46,6 +62,68 @@ export class NotificationsService implements OnModuleInit {
       message: 'Device token saved successfully',
       data: deviceToken,
     };
+  }
+
+  windowsConfiguration() {
+    return this.windowsPush.publicConfiguration();
+  }
+
+  async registerWindowsChannel(
+    userId: string,
+    channel: string,
+    previousChannel?: string,
+  ) {
+    if (!this.windowsConfiguration().enabled)
+      throw new ServiceUnavailableException('Windows push is unavailable.');
+    const uri = windowsChannel(channel);
+    const previous = previousChannel ? windowsChannel(previousChannel) : null;
+    if (!uri || (previousChannel && !previous))
+      throw new BadRequestException('Invalid Windows notification channel.');
+    const token = WNS_TOKEN_PREFIX + uri.href;
+    const devices = this.prisma.userDeviceToken;
+    const updates = [
+      devices.upsert({
+        where: { token },
+        update: {
+          userId,
+          platform: WNS_PLATFORM,
+          isActive: true,
+          lastSeenAt: new Date(),
+        },
+        create: { userId, token, platform: WNS_PLATFORM },
+      }),
+    ];
+    if (previous && previous.href !== uri.href) {
+      await this.prisma.$transaction([
+        ...updates,
+        devices.updateMany({
+          where: {
+            userId,
+            platform: WNS_PLATFORM,
+            token: WNS_TOKEN_PREFIX + previous.href,
+          },
+          data: { isActive: false },
+        }),
+      ]);
+    } else {
+      await updates[0];
+    }
+    return { registered: true };
+  }
+
+  async removeWindowsChannel(userId: string, channel: string) {
+    const uri = windowsChannel(channel);
+    if (!uri)
+      throw new BadRequestException('Invalid Windows notification channel.');
+    await this.prisma.userDeviceToken.updateMany({
+      where: {
+        userId,
+        platform: WNS_PLATFORM,
+        token: WNS_TOKEN_PREFIX + uri.href,
+      },
+      data: { isActive: false },
+    });
+    return { removed: true };
   }
 
   async listNotifications(userId: string, page = 1, limit = 20) {
@@ -135,7 +213,7 @@ export class NotificationsService implements OnModuleInit {
       }
     } catch (error) {
       this.logger.error(
-        `FCM push failed for user ${userId}: ${
+        `Device push failed for user ${userId}: ${
           error instanceof Error ? error.message : String(error)
         }`,
       );
@@ -363,7 +441,11 @@ export class NotificationsService implements OnModuleInit {
       type,
       title,
       body,
-      { ...metadata, projectId, url: metadata?.url ?? `/projects/${projectId}` },
+      {
+        ...metadata,
+        projectId,
+        url: metadata?.url ?? `/projects/${projectId}`,
+      },
     );
   }
 
@@ -391,17 +473,11 @@ export class NotificationsService implements OnModuleInit {
       ...project.members.map((member: any) => member.userId),
     ].filter((userId) => !excluded.has(userId));
 
-    await this.notifyUsers(
-      userIds,
-      type,
-      title,
-      body,
-      {
-        ...metadata,
-        projectId,
-        url: metadata?.url ?? `/projects/${projectId}`,
-      },
-    );
+    await this.notifyUsers(userIds, type, title, body, {
+      ...metadata,
+      projectId,
+      url: metadata?.url ?? `/projects/${projectId}`,
+    });
   }
 
   async notifyTaskAssigned(userId: string, taskId: string, taskTitle: string) {
@@ -414,7 +490,11 @@ export class NotificationsService implements OnModuleInit {
     );
   }
 
-  async notifyTaskUnassigned(userId: string, taskId: string, taskTitle: string) {
+  async notifyTaskUnassigned(
+    userId: string,
+    taskId: string,
+    taskTitle: string,
+  ) {
     await this.createNotification(
       userId,
       'TASK_UNASSIGNED',
@@ -591,14 +671,65 @@ export class NotificationsService implements OnModuleInit {
     body: string,
     metadata?: any,
   ) {
-    if (!this.firebaseReady) return;
+    const windowsReady = this.windowsConfiguration().enabled;
+    if (!this.firebaseReady && !windowsReady) return;
 
     const deviceTokens = await (this.prisma as any).userDeviceToken.findMany({
       where: { userId, isActive: true },
-      select: { token: true },
+      select: { token: true, platform: true },
     });
-    const tokens = deviceTokens.map((deviceToken: any) => deviceToken.token);
+    const tokens = deviceTokens
+      .filter(
+        (device: { platform: string | null }) =>
+          device.platform !== WNS_PLATFORM,
+      )
+      .map((device: { token: string }) => device.token);
+    const windowsTokens: string[] = deviceTokens
+      .filter(
+        (device: { platform: string | null }) =>
+          device.platform === WNS_PLATFORM,
+      )
+      .map((device: { token: string }) => device.token);
+    await Promise.all([
+      this.firebaseReady
+        ? this.sendFirebase(tokens, title, body, metadata)
+        : Promise.resolve(),
+      windowsReady
+        ? this.sendWindows(windowsTokens, userId)
+        : Promise.resolve(),
+    ]);
+  }
 
+  private async sendWindows(tokens: string[], userId: string) {
+    const expired: string[] = [];
+    const results = await Promise.allSettled(
+      tokens.map(async (token) => {
+        if (
+          !token.startsWith(WNS_TOKEN_PREFIX) ||
+          (await this.windowsPush.deliver(
+            token.slice(WNS_TOKEN_PREFIX.length),
+          )) === 'expired'
+        )
+          expired.push(token);
+      }),
+    );
+    if (results.some((result) => result.status === 'rejected'))
+      this.logger.warn(
+        'Some Windows push requests failed. Inbox delivery remains available.',
+      );
+    if (expired.length)
+      await this.prisma.userDeviceToken.updateMany({
+        where: { userId, platform: WNS_PLATFORM, token: { in: expired } },
+        data: { isActive: false },
+      });
+  }
+
+  private async sendFirebase(
+    tokens: string[],
+    title: string,
+    body: string,
+    metadata?: any,
+  ) {
     if (!tokens.length) return;
 
     const response = await getMessaging().sendEachForMulticast({

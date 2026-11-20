@@ -2,6 +2,7 @@ import 'dotenv/config';
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { json } from 'express';
 import { mcpAuthRouter } from '@modelcontextprotocol/sdk/server/auth/router.js';
 import { AppModule } from './app.module';
 import { NovaOAuthProvider } from './oauth/oauth.provider';
@@ -9,6 +10,11 @@ import { mcpIssuerUrl, mcpResourceUrl } from './oauth/oauth.urls';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  // Notes use text columns. Allow larger note documents without raising the global parser limit.
+  const parseNoteJson = json({ limit: '16mb' });
+  // Keep Nest's default parser registered for all other routes.
+  app.use('/api/notes', ((request, response, next) =>
+    parseNoteJson(request, response, next)) satisfies ReturnType<typeof json>);
   const issuer = mcpIssuerUrl();
   app.use(
     mcpAuthRouter({

@@ -59,6 +59,10 @@ $ npm run test:cov
 
 ## Deployment
 
+### Windows push
+
+Set `NOVA_WNS_TENANT_ID`, `NOVA_WNS_APP_ID`, `NOVA_WNS_OBJECT_ID` (the object ID from the managed app), and `NOVA_WNS_CLIENT_SECRET` in the API host. The Windows MSIX must map its package family to that Microsoft Entra app and use the same application ID for COM activation. Keep the client secret on the server. This configuration publishes an authenticated channel registration endpoint and lets Microsoft wake the Windows app to check its inbox. Existing Firebase devices and the desktop scheduled fallback use their existing delivery paths.
+
 When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
 
 If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:

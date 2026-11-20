@@ -4,6 +4,7 @@ import type { RealtimeChannel } from '@supabase/supabase-js';
 
 export type NoteLiveMessage =
   | { kind: 'saved'; note: Record<string, unknown> }
+  | { kind: 'refresh'; id: string }
   | { kind: 'deleted'; id: string };
 
 @Injectable()
@@ -25,9 +26,13 @@ export class NotesRealtime {
 
   publish(userId: string, message: NoteLiveMessage) {
     if (!this.client) return;
+    const payload: NoteLiveMessage = message.kind === 'saved' &&
+      typeof message.note.id === 'string' && Buffer.byteLength(JSON.stringify(message)) > 64 * 1024
+      ? { kind: 'refresh', id: message.note.id }
+      : message;
     void this.channelFor(userId)
       .then((channel) =>
-        channel?.send({ type: 'broadcast', event: 'note', payload: message }),
+        channel?.send({ type: 'broadcast', event: 'note', payload }),
       )
       .catch((error: unknown) => {
         this.logger.warn(

@@ -10,7 +10,6 @@ export const NOTE_COLORS = [
 export type NoteColorName = (typeof NOTE_COLORS)[number];
 
 export const MAX_FLOATING_NOTES = 6;
-export const MAX_CHECKLIST_ITEMS = 100;
 
 export type ChecklistItem = {
   id: string;
@@ -27,11 +26,11 @@ export function normalizeChecklist(value: unknown): ChecklistItem[] {
     throw new Error('Checklist must be a list.');
   }
   const items: ChecklistItem[] = [];
-  for (const entry of value.slice(0, MAX_CHECKLIST_ITEMS)) {
+  for (const entry of value) {
     if (!entry || typeof entry !== 'object') continue;
     const raw = entry as { id?: unknown; text?: unknown; done?: unknown };
-    const text = typeof raw.text === 'string' ? raw.text.trim().slice(0, 240) : '';
-    if (!text) continue;
+    const text = typeof raw.text === 'string' ? raw.text : '';
+    if (!text.trim()) continue;
     const id =
       typeof raw.id === 'string' && raw.id.trim()
         ? raw.id.trim().slice(0, 80)

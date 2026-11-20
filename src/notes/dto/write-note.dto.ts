@@ -8,7 +8,6 @@ import {
   IsString,
   IsUUID,
   Max,
-  MaxLength,
   Min,
   ValidateIf,
 } from 'class-validator';
@@ -20,18 +19,16 @@ function emptyToNull({ value }: { value: unknown }) {
 }
 
 export class WriteNoteDto {
-  @ApiPropertyOptional({ maxLength: 160 })
+  @ApiPropertyOptional()
   @IsOptional()
   @Transform(emptyToNull)
   @ValidateIf((_, value) => value !== null)
   @IsString()
-  @MaxLength(160)
   title?: string | null;
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
-  @MaxLength(20000)
   body?: string;
 
   @ApiPropertyOptional({ enum: NOTE_COLORS })

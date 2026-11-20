@@ -9,9 +9,18 @@ describe('note logic', () => {
         { text: 'Next', done: false },
       ]),
     ).toEqual([
-      { id: 'a', text: 'Ship it', done: true },
+      { id: 'a', text: '  Ship it  ', done: true },
       { id: 'item-2', text: 'Next', done: false },
     ]);
+  });
+
+  it('preserves long checklist items and lists', () => {
+    const items = Array.from({ length: 110 }, (_, i) => ({
+      id: `item-${i}`,
+      text: 'Review this item '.repeat(30) + '\n',
+      done: false,
+    }));
+    expect(normalizeChecklist(items)).toEqual(items);
   });
 
   it('rejects a checklist that is not a list', () => {
