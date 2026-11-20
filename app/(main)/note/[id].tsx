@@ -169,7 +169,7 @@ function NoteEditor({
     try {
       await flush();
       await createNoteApi({
-        title: saved.title ? `${saved.title} (copy)`.slice(0, 160) : null,
+        title: saved.title ? `${saved.title} (copy)` : null,
         body: fields.body,
         checklist: fields.checklist.filter((item) => item.text.trim()),
         color: fields.color,
@@ -283,7 +283,6 @@ function NoteEditor({
           onChangeText={(title) => set({ title })}
           placeholder="Title"
           placeholderTextColor={palette.muted}
-          maxLength={160}
           multiline
           blurOnSubmit
           autoFocus={!note}
