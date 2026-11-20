@@ -48,12 +48,12 @@ export function Header({
         <button
           type="button"
           onClick={requestNewSticky}
-          aria-label="New sticky note"
-          title="New sticky note. Drag it anywhere; it is saved in Notes."
+          aria-label="Stickies"
+          title="Open your notes as stickies. Ctrl+Alt+S"
           className="flex h-10 items-center justify-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 text-sm font-semibold text-amber-500 transition hover:bg-amber-500/20 light:text-amber-700"
         >
           <StickyNote className="size-4" />
-          <span className="hidden lg:inline">New sticky</span>
+          <span className="hidden lg:inline">Stickies</span>
         </button>
 
         <button

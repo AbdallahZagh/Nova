@@ -9,6 +9,8 @@ import {
   ChevronUp,
   ExternalLink,
   GripVertical,
+  Plus,
+  StickyNote,
   Trash2,
   X,
 } from "lucide-react";
@@ -19,13 +21,14 @@ import { NEW_STICKY_EVENT, useNotesChanges } from "@/components/notes/notes-sync
 import { useNoteDraft } from "@/components/notes/useNoteDraft";
 import { DeleteConfirmModal } from "@/components/ui/DeleteConfirmModal";
 import { useToast } from "@/components/ui/Toast";
-import { listNotesApi } from "@/lib/api/notes";
+import { listNotesApi, updateNoteApi } from "@/lib/api/notes";
 import { cn } from "@/lib/cn";
 import {
   newChecklistItem,
   NOTE_STICKY_WIDTH,
   NOTE_SURFACE,
   noteTitle,
+  sortNotes,
   type Note,
 } from "@/lib/notes";
 
@@ -73,6 +76,9 @@ export function FloatingStickyDock() {
   const { toast } = useToast();
   const pathname = usePathname();
   const [entries, setEntries] = useState<Entry[]>([]);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [menuNotes, setMenuNotes] = useState<Note[]>([]);
+  const [menuLoading, setMenuLoading] = useState(false);
   const [zIndexes, setZIndexes] = useState<Record<string, number>>({});
   const zCounter = useRef(0);
   const draftCounter = useRef(0);
@@ -114,34 +120,35 @@ export function FloatingStickyDock() {
   }, [toEntry]);
 
   useEffect(() => {
-    const onNewSticky = () => {
-      if (entriesRef.current.length >= MAX_STICKIES) {
-        toast({
-          variant: "error",
-          title: `${MAX_STICKIES} stickies are already on screen`,
-          message: "Put one away first. It stays in your Notes page.",
-        });
-        return;
-      }
-      draftCounter.current += 1;
-      const key = `draft-${draftCounter.current}`;
-      const spot = cascade(entriesRef.current.length);
-      zCounter.current += 1;
-      setZIndexes((current) => ({ ...current, [key]: zCounter.current }));
-      setEntries((current) => [
-        ...current,
-        {
-          key,
-          noteId: null,
-          note: null,
-          x: Math.max(EDGE, Math.round(window.innerWidth / 2 - NOTE_STICKY_WIDTH / 2) + (spot.y - 92)),
-          y: spot.y + 24,
-        },
-      ]);
+    const onKey = (event: KeyboardEvent) => {
+      if (event.repeat || !event.ctrlKey || !event.altKey || event.shiftKey) return;
+      if (event.key.toLowerCase() !== "s") return;
+      event.preventDefault();
+      setMenuOpen((open) => {
+        if (open) return false;
+        setMenuLoading(true);
+        listNotesApi()
+          .then((items) => setMenuNotes(sortNotes(items)))
+          .catch(() => setMenuNotes([]))
+          .finally(() => setMenuLoading(false));
+        return true;
+      });
     };
+    const onNewSticky = () => {
+      setMenuOpen(true);
+      setMenuLoading(true);
+      listNotesApi()
+        .then((items) => setMenuNotes(sortNotes(items)))
+        .catch(() => setMenuNotes([]))
+        .finally(() => setMenuLoading(false));
+    };
+    window.addEventListener("keydown", onKey);
     window.addEventListener(NEW_STICKY_EVENT, onNewSticky);
-    return () => window.removeEventListener(NEW_STICKY_EVENT, onNewSticky);
-  }, [toast]);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener(NEW_STICKY_EVENT, onNewSticky);
+    };
+  }, []);
 
   // Keep in step with the Notes page: pin a note on screen there and it shows up here.
   useNotesChanges((change) => {
@@ -151,15 +158,19 @@ export function FloatingStickyDock() {
       return;
     }
     const { note } = change;
-    if (!note.floating) {
+    const onScreen = entriesRef.current.some((entry) => entry.noteId === note.id);
+    if (!note.floating && !onScreen) {
       knownIds.current.delete(note.id);
       setEntries((current) => current.filter((entry) => entry.noteId !== note.id));
       return;
     }
-    if (knownIds.current.has(note.id)) {
-      // Keep the stored copy fresh so a sticky that reappears shows the latest text.
+    if (knownIds.current.has(note.id) || onScreen) {
       setEntries((current) =>
-        current.map((entry) => (entry.noteId === note.id ? { ...entry, note } : entry)),
+        current.map((entry) =>
+          entry.noteId === note.id
+            ? { ...entry, note: note.floating ? note : { ...note, floating: true } }
+            : entry,
+        ),
       );
       return;
     }
@@ -172,6 +183,61 @@ export function FloatingStickyDock() {
     const next = zCounter.current;
     setZIndexes((current) => ({ ...current, [key]: next }));
   }, []);
+
+  const createSticky = useCallback(() => {
+    if (entriesRef.current.length >= MAX_STICKIES) {
+      toast({
+        variant: "error",
+        title: `${MAX_STICKIES} stickies are already on screen`,
+        message: "Put one away first. It stays in your Notes page.",
+      });
+      return;
+    }
+    draftCounter.current += 1;
+    const key = `draft-${draftCounter.current}`;
+    const spot = cascade(entriesRef.current.length);
+    zCounter.current += 1;
+    setZIndexes((current) => ({ ...current, [key]: zCounter.current }));
+    setEntries((current) => [
+      ...current,
+      {
+        key,
+        noteId: null,
+        note: null,
+        x: Math.max(EDGE, Math.round(window.innerWidth / 2 - NOTE_STICKY_WIDTH / 2) + (spot.y - 92)),
+        y: spot.y + 24,
+      },
+    ]);
+    setMenuOpen(false);
+  }, [toast]);
+
+  const openStickyNote = useCallback(
+    (note: Note) => {
+      const existing = entriesRef.current.find((entry) => entry.noteId === note.id);
+      if (existing) {
+        bringToFront(existing.key);
+        setMenuOpen(false);
+        return;
+      }
+      if (entriesRef.current.length >= MAX_STICKIES) {
+        toast({
+          variant: "error",
+          title: `${MAX_STICKIES} stickies are already on screen`,
+          message: "Put one away first. It stays in your Notes page.",
+        });
+        return;
+      }
+      knownIds.current.add(note.id);
+      zCounter.current += 1;
+      setZIndexes((current) => ({ ...current, [note.id]: zCounter.current }));
+      setEntries((current) => [...current, toEntry({ ...note, floating: true }, current.length)]);
+      setMenuOpen(false);
+      if (!note.floating) {
+        void updateNoteApi(note.id, { floating: true }).catch(() => undefined);
+      }
+    },
+    [bringToFront, toEntry, toast],
+  );
 
   const markCreated = useCallback((key: string, noteId: string) => {
     knownIds.current.add(noteId);
@@ -193,10 +259,21 @@ export function FloatingStickyDock() {
     (entry) => !(entry.noteId && pathname === `/notes/${entry.noteId}`),
   );
 
-  if (!mounted || visible.length === 0) return null;
+  if (!mounted) return null;
+  if (!menuOpen && visible.length === 0) return null;
 
   return createPortal(
     <div className="pointer-events-none fixed inset-0" style={{ zIndex: BASE_Z }}>
+      {menuOpen ? (
+        <StickyMenu
+          notes={menuNotes}
+          loading={menuLoading}
+          openIds={visible.map((entry) => entry.noteId).filter((id): id is string => Boolean(id))}
+          onOpen={openStickyNote}
+          onCreate={createSticky}
+          onClose={() => setMenuOpen(false)}
+        />
+      ) : null}
       {visible.map((entry) => (
         <Sticky
           key={entry.key}
@@ -209,6 +286,92 @@ export function FloatingStickyDock() {
       ))}
     </div>,
     document.body,
+  );
+}
+
+function StickyMenu({
+  notes,
+  loading,
+  openIds,
+  onOpen,
+  onCreate,
+  onClose,
+}: {
+  notes: Note[];
+  loading: boolean;
+  openIds: string[];
+  onOpen: (note: Note) => void;
+  onCreate: () => void;
+  onClose: () => void;
+}) {
+  const open = new Set(openIds);
+  return (
+    <section
+      className="pointer-events-auto absolute right-6 top-[4.5rem] flex max-h-[min(32rem,calc(100vh-6rem))] w-80 flex-col overflow-hidden rounded-2xl border border-amber-500/30 bg-[#3a2c12] text-[#e8e3e0] shadow-2xl shadow-black/40 light:border-amber-600/30 light:bg-[#fdeeb8] light:text-[#1c1208]"
+      tabIndex={-1}
+      aria-label="Sticky notes"
+      onKeyDown={(event) => {
+        if (event.key === "Escape") onClose();
+      }}
+    >
+      <div className="flex items-center gap-2 border-b border-black/10 px-3 py-2.5">
+        <StickyNote className="size-4 shrink-0" />
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold">Stickies</p>
+          <p className="text-[11px] opacity-60">Ctrl+Alt+S</p>
+        </div>
+        <button
+          type="button"
+          aria-label="Close stickies"
+          onClick={onClose}
+          className="rounded-lg p-1 opacity-60 transition hover:bg-black/10 hover:opacity-100"
+        >
+          <X className="size-4" />
+        </button>
+      </div>
+      <div className="min-h-0 flex-1 overflow-y-auto p-2">
+        {loading ? (
+          <p className="px-2 py-6 text-center text-sm opacity-60">Loading your notes…</p>
+        ) : notes.length === 0 ? (
+          <p className="px-2 py-6 text-center text-sm opacity-60">No notes yet. Create one below.</p>
+        ) : (
+          <ul className="space-y-1">
+            {notes.map((note) => {
+              const onScreen = open.has(note.id);
+              return (
+                <li key={note.id}>
+                  <button
+                    type="button"
+                    onClick={() => onOpen(note)}
+                    className="flex w-full items-start gap-2 rounded-xl px-2 py-2 text-left transition hover:bg-black/10"
+                  >
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-semibold">
+                        {noteTitle(note)}
+                      </span>
+                      <span className="block truncate text-[11px] opacity-60">
+                        {note.project?.name ?? "Personal"}
+                        {onScreen ? " · On screen" : ""}
+                      </span>
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
+      <div className="border-t border-black/10 p-2">
+        <button
+          type="button"
+          onClick={onCreate}
+          className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#e66a17] px-3 py-2 text-sm font-semibold text-white transition hover:opacity-90"
+        >
+          <Plus className="size-4" />
+          New note
+        </button>
+      </div>
+    </section>
   );
 }
 
@@ -398,7 +561,6 @@ function Sticky({
               value={fields.title}
               onChange={(event) => set({ title: event.target.value })}
               placeholder="Title"
-              maxLength={160}
               className="w-full bg-transparent text-sm font-semibold text-primary outline-none placeholder:text-primary/35"
             />
             <AutoTextarea

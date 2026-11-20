@@ -204,7 +204,6 @@ export function NotePage({ note, defaultProjectId, projects }: NotePageProps) {
               autoFocus={!note}
               onChange={(event) => set({ title: event.target.value })}
               placeholder="Untitled"
-              maxLength={160}
               aria-label="Title"
               className="w-full bg-transparent text-3xl font-bold tracking-tight text-primary outline-none placeholder:text-primary/25 md:text-4xl"
             />

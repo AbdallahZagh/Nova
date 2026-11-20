@@ -96,6 +96,7 @@ export function useNoteDraft({ note, defaults, onCreated }: Options) {
   });
   const idRef = useRef<string | null>(note?.id ?? null);
   const pendingRef = useRef<NoteWrite>({});
+  const savingRef = useRef(false);
   const timerRef = useRef<number | null>(null);
   const queueRef = useRef<Promise<void>>(Promise.resolve());
   const deletedRef = useRef(false);
@@ -106,6 +107,7 @@ export function useNoteDraft({ note, defaults, onCreated }: Options) {
     const patch = pendingRef.current;
     if (Object.keys(patch).length === 0) return;
     pendingRef.current = {};
+    savingRef.current = true;
     try {
       let result: Note;
       if (!idRef.current) {
@@ -143,6 +145,8 @@ export function useNoteDraft({ note, defaults, onCreated }: Options) {
         failedRef.current = true;
         toast({ variant: "error", title: "Could not save note", message });
       }
+    } finally {
+      savingRef.current = false;
     }
   }, [toast]);
 
@@ -169,7 +173,7 @@ export function useNoteDraft({ note, defaults, onCreated }: Options) {
   useNotesChanges((change) => {
     if (deletedRef.current || change.kind !== "saved") return;
     if (change.note.id !== idRef.current) return;
-    if (Object.keys(pendingRef.current).length > 0) return;
+    if (savingRef.current || Object.keys(pendingRef.current).length > 0) return;
     if (!isNewerNote(change.note.updatedAt, savedRef.current?.updatedAt)) return;
     const remote = change.note;
     savedRef.current = remote;

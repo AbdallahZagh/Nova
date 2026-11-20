@@ -45,7 +45,7 @@ export function useNoteActions() {
     async (note: Note) => {
       try {
         const copy = await createNoteApi({
-          title: note.title ? `${note.title} (copy)`.slice(0, 160) : null,
+          title: note.title ? `${note.title} (copy)` : null,
           body: note.body,
           checklist: note.checklist.map((item) => ({ ...item, id: crypto.randomUUID() })),
           color: note.color,

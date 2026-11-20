@@ -157,7 +157,7 @@ function NotesPage() {
         <div className="flex items-center gap-2">
           <Button type="button" variant="secondary" className="inline-flex items-center" onClick={openSticky}>
             <StickyNote className="mr-2 size-4" />
-            New sticky
+            Stickies
           </Button>
           <Button type="button" variant="accent" className="inline-flex items-center" onClick={openNew}>
             <Plus className="mr-2 size-4" />
@@ -376,7 +376,7 @@ function EmptyState({
               </Button>
               <Button type="button" variant="secondary" className="inline-flex items-center" onClick={onSticky}>
                 <StickyNote className="mr-2 size-4" />
-                New sticky
+                Stickies
               </Button>
             </>
           )}

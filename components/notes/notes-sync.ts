@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { getSupabaseRealtimeClient } from "@/lib/supabase/client";
+import { getNoteApi } from "@/lib/api/notes";
 import type { Note } from "@/lib/notes";
 
 export const NOTES_CHANGED_EVENT = "nova:notes-changed";
@@ -30,15 +31,31 @@ export function useNotesRealtime(userId?: string | null) {
     if (!userId) return;
     const supabase = getSupabaseRealtimeClient();
     if (!supabase) return;
+    const refreshing = new Map<string, symbol>();
     const channel = supabase
       .channel(`notes:${userId}`)
       .on("broadcast", { event: "note" }, ({ payload }) => {
-        const message = payload as NotesChange | undefined;
+        const message = payload as NotesChange | { kind: "refresh"; id: string } | undefined;
+        if (message?.kind === "refresh" && typeof message.id === "string") {
+          const id = message.id;
+          const request = Symbol();
+          refreshing.set(id, request);
+          void getNoteApi(encodeURIComponent(id)).then((note) => {
+            if (refreshing.get(id) === request) emitNotesChange({ kind: "saved", note });
+          }).catch(() => {}).finally(() => {
+            if (refreshing.get(id) === request) refreshing.delete(id);
+          });
+          return;
+        }
         if (!message || (message.kind !== "saved" && message.kind !== "deleted")) return;
+        const id = message.kind === "deleted" ? message.id : message.note?.id;
+        if (typeof id !== "string") return;
+        refreshing.delete(id);
         emitNotesChange(message);
       })
       .subscribe();
     return () => {
+      refreshing.clear();
       void supabase.removeChannel(channel);
     };
   }, [userId]);
